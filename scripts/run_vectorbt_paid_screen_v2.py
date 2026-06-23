@@ -81,14 +81,25 @@ def _load_units(path: Path) -> List[Dict[str, Any]]:
     return units
 
 
+def _load_ready_gate_payload(path: Path) -> Dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"ready gate file is unreadable: {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"ready gate file must contain a JSON object: {path}")
+    return payload
+
+
 def _load_ready_gate(path: Path) -> bool:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("errors"):
+    payload = _load_ready_gate_payload(path)
+    errors = payload.get("errors")
+    if errors != []:
         return False
-    if not payload.get("ready_for_full_run"):
+    if payload.get("ready_for_full_run") is not True:
         return False
-    tail = str(payload.get("lookahead_pytest_tail") or "").strip()
-    return bool(tail)
+    tail = payload.get("lookahead_pytest_tail")
+    return isinstance(tail, str) and bool(tail.strip())
 
 
 def _assert_hashes_match_ready_gate(
@@ -97,10 +108,22 @@ def _assert_hashes_match_ready_gate(
     events_csv_hash: str,
     lake_manifest_hash: str,
 ) -> None:
-    payload = json.loads(gate_path.read_text(encoding="utf-8"))
-    pilot = payload.get("pilot_hashes") or {}
-    expected_events = str(pilot.get("events_csv_hash") or "").strip()
-    expected_lake = str(pilot.get("lake_manifest_hash") or "").strip()
+    payload = _load_ready_gate_payload(gate_path)
+    if "pilot_hashes" not in payload:
+        raise ValueError(f"ready gate pilot_hashes missing: {gate_path}")
+    pilot = payload["pilot_hashes"]
+    if not isinstance(pilot, dict):
+        raise ValueError(f"ready gate pilot_hashes must be a JSON object: {gate_path}")
+    if "events_csv_hash" not in pilot or "lake_manifest_hash" not in pilot:
+        raise ValueError(f"ready gate pilot_hashes missing events/lake hashes: {gate_path}")
+    raw_expected_events = pilot.get("events_csv_hash")
+    raw_expected_lake = pilot.get("lake_manifest_hash")
+    if not isinstance(raw_expected_events, str) or not isinstance(raw_expected_lake, str):
+        raise ValueError(f"ready gate pilot_hashes events/lake hashes must be strings: {gate_path}")
+    expected_events = raw_expected_events.strip()
+    expected_lake = raw_expected_lake.strip()
+    if not expected_events or not expected_lake:
+        raise ValueError(f"ready gate pilot_hashes missing events/lake hashes: {gate_path}")
     if expected_events and events_csv_hash != expected_events:
         raise ValueError(
             f"events_csv_hash {events_csv_hash} != ready gate {expected_events}"
@@ -1160,7 +1183,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     units_path = args.units_jsonl if args.units_jsonl.is_absolute() else repo_root / args.units_jsonl
     out_dir = args.out if args.out.is_absolute() else repo_root / args.out
 
-    units_raw = _load_units(units_path)
+    try:
+        units_raw = _load_units(units_path)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        print(f"ERROR: unable to load units jsonl {units_path}: {exc}", file=sys.stderr)
+        return 1
     if not units_raw:
         print("ERROR: empty units jsonl", file=sys.stderr)
         return 1
@@ -1179,7 +1206,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         else:
             gate_path = (args.ready_gate_file if args.ready_gate_file.is_absolute()
                          else repo_root / args.ready_gate_file)
-            if not _load_ready_gate(gate_path):
+            try:
+                ready_gate_ok = _load_ready_gate(gate_path)
+            except ValueError as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            if not ready_gate_ok:
                 print("ERROR: ready gate file reports ready_for_full_run=false", file=sys.stderr)
                 return 2
 
@@ -1189,12 +1221,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Parse rows into typed units
     units: List[PaidScreenUnit] = []
     for row in units_raw:
+        if not isinstance(row, dict):
+            print(f"ERROR: invalid unit row expected JSON object: {row}", file=sys.stderr)
+            return 1
         try:
             units.append(PaidScreenUnit.from_jsonl_row(row))
         except KeyError as exc:
             print(f"ERROR: malformed unit row missing field {exc}: {row}", file=sys.stderr)
             return 1
-        except ValueError as exc:
+        except (ValueError, TypeError) as exc:
             print(f"ERROR: invalid unit row {exc}: {row}", file=sys.stderr)
             return 1
 

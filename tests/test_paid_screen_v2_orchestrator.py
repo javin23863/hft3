@@ -1001,6 +1001,351 @@ class TestV2RunHashResolution:
         assert "not_a_context_set" in captured.err
         assert "Traceback" not in captured.err
 
+    def test_main_rejects_invalid_research_clock_unit_row_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": "u1",
+                    "model_id": "HYP_5",
+                    "hyp_id": 5,
+                    "symbol": "MES.v.0",
+                    "event_id": "CPI_2024_09_11_TIGHT",
+                    "event_type": "CPI",
+                    "research_clock": "not_a_clock",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--dry-run",
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "ERROR: invalid unit row" in captured.err
+        assert "research_clock_invalid:not_a_clock" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_reports_malformed_units_jsonl_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text("{not-json}\n", encoding="utf-8")
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--dry-run",
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "ERROR: unable to load units jsonl" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_reports_invalid_utf8_units_jsonl_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_bytes(b"\xff\xfe\x00\n")
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--dry-run",
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "ERROR: unable to load units jsonl" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_rejects_non_object_unit_row_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text(json.dumps(["not", "object"]) + "\n", encoding="utf-8")
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--dry-run",
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "ERROR: invalid unit row expected JSON object" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_rejects_non_iterable_declared_context_sets_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": "u1",
+                    "model_id": "HYP_5",
+                    "hyp_id": 5,
+                    "symbol": "MES.v.0",
+                    "event_id": "CPI_2024_09_11_TIGHT",
+                    "event_type": "CPI",
+                    "declared_context_sets": 7,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--dry-run",
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "ERROR: invalid unit row" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_reports_malformed_ready_gate_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": "u1",
+                    "model_id": "HYP_5",
+                    "hyp_id": 5,
+                    "symbol": "MES.v.0",
+                    "event_id": "CPI_2024_09_11_TIGHT",
+                    "event_type": "CPI",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        gate_path = repo / "gate.json"
+        gate_path.write_text("{not-json}\n", encoding="utf-8")
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--workers",
+                "2",
+                "--ready-gate-file",
+                str(gate_path),
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 2
+        assert "ERROR: ready gate file is unreadable" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_ready_gate_requires_json_object(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text("[]\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="ready gate file must contain a JSON object"):
+            v2._load_ready_gate(gate_path)
+
+    def test_ready_gate_requires_literal_true(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "errors": [],
+                    "ready_for_full_run": "false",
+                    "lookahead_pytest_tail": "1 passed",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert v2._load_ready_gate(gate_path) is False
+
+    def test_ready_gate_requires_empty_errors_list(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "errors": {},
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert v2._load_ready_gate(gate_path) is False
+
+    def test_ready_gate_requires_string_pytest_tail(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "errors": [],
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": {"bad": "tail"},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert v2._load_ready_gate(gate_path) is False
+
+    def test_ready_gate_hash_path_requires_json_object(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text("[]\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="ready gate file must contain a JSON object"):
+            v2._assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash="events",
+                lake_manifest_hash="lake",
+            )
+
+    def test_ready_gate_hash_path_requires_pilot_hash_object(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                    "pilot_hashes": "bad",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="ready gate pilot_hashes must be a JSON object"):
+            v2._assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash="events",
+                lake_manifest_hash="lake",
+            )
+
+    def test_ready_gate_hash_path_requires_pilot_hashes(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="ready gate pilot_hashes missing"):
+            v2._assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash="events",
+                lake_manifest_hash="lake",
+            )
+
+    def test_ready_gate_hash_path_requires_events_and_lake_hashes(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                    "pilot_hashes": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="ready gate pilot_hashes missing events/lake hashes"):
+            v2._assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash="events",
+                lake_manifest_hash="lake",
+            )
+
+    def test_ready_gate_hash_path_requires_string_hashes(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                    "pilot_hashes": {
+                        "events_csv_hash": 123,
+                        "lake_manifest_hash": "lake",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="ready gate pilot_hashes events/lake hashes must be strings"):
+            v2._assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash="123",
+                lake_manifest_hash="lake",
+            )
+
     def test_resolve_run_hashes_from_explicit_and_files(self, tmp_path):
         v2 = _load_v2_module()
         repo = tmp_path / "repo"
@@ -1539,8 +1884,13 @@ class TestOrchestratorMainExit:
         gate_path = repo / "gate.json"
         gate_path.write_text(
             json.dumps({
+                "errors": [],
                 "ready_for_full_run": True,
                 "lookahead_pytest_tail": "1 passed in 0.01s",
+                "pilot_hashes": {
+                    "events_csv_hash": "events_csv_hash",
+                    "lake_manifest_hash": "explicit_lake_hash",
+                },
             }),
             encoding="utf-8",
         )
@@ -1557,6 +1907,8 @@ class TestOrchestratorMainExit:
                 str(repo),
                 "--events-csv",
                 str(events_csv),
+                "--events-csv-hash",
+                "events_csv_hash",
                 "--lake-manifest-hash",
                 "explicit_lake_hash",
                 "--workers",

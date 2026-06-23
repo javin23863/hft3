@@ -63,7 +63,10 @@ def _display_name_for_slug(slug: str) -> str:
 
 
 def _hypothesis_model_id(hyp_id: int) -> str:
-    return get_slug_for_hyp_id(hyp_id)
+    try:
+        return get_slug_for_hyp_id(hyp_id)
+    except KeyError as exc:
+        raise ValueError(f"stage_a_survivors.json: unknown hyp_id {hyp_id}") from exc
 
 
 def _format_thesis(
@@ -87,32 +90,64 @@ def _parse_stage_a_allowed_cells(
     payload: Dict[str, Any],
 ) -> Set[tuple[int, str]]:
     """Mirror run_event_universe stage-A allowed (hyp_id, event_type) cells."""
-    survivors = payload.get("survivors") or []
-    pass_through = payload.get("pass_through") or []
-    tested_cells = payload.get("tested_cells") or []
-    tested_etypes: Set[str] = {
-        str(tc["event_type"]).strip()
-        for tc in tested_cells
-        if isinstance(tc, dict) and tc.get("event_type")
-    }
+    if not isinstance(payload, dict):
+        raise ValueError("stage_a_survivors.json: expected JSON object")
+    required_fields = ("survivors", "pass_through", "tested_cells")
+    missing_fields = [field for field in required_fields if field not in payload]
+    if missing_fields:
+        missing = ", ".join(missing_fields)
+        raise ValueError(f"stage_a_survivors.json: missing required top-level fields: {missing}")
+    survivors = payload["survivors"]
+    pass_through = payload["pass_through"]
+    tested_cells = payload["tested_cells"]
+    if not isinstance(survivors, list):
+        raise ValueError("stage_a_survivors.json: survivors must be a list")
+    if not isinstance(pass_through, list):
+        raise ValueError("stage_a_survivors.json: pass_through must be a list")
+    if not isinstance(tested_cells, list):
+        raise ValueError("stage_a_survivors.json: tested_cells must be a list")
+    def parse_hyp_id(value: Any, *, context: str) -> int:
+        if isinstance(value, bool):
+            raise ValueError(f"stage_a_survivors.json: invalid {context} hyp_id")
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.strip().isdigit():
+            return int(value.strip())
+        raise ValueError(f"stage_a_survivors.json: invalid {context} hyp_id")
+
+    tested_etypes: Set[str] = set()
+    for tc in tested_cells:
+        if not isinstance(tc, dict):
+            raise ValueError("stage_a_survivors.json: tested_cells rows must be objects")
+        if "hyp_id" not in tc or "event_type" not in tc:
+            raise ValueError("stage_a_survivors.json: tested_cells rows require hyp_id and event_type")
+        hyp_id = parse_hyp_id(tc["hyp_id"], context="tested_cell")
+        _hypothesis_model_id(hyp_id)
+        event_type = str(tc["event_type"]).strip()
+        if not event_type:
+            raise ValueError("stage_a_survivors.json: tested_cells rows require hyp_id and event_type")
+        tested_etypes.add(event_type)
     allowed: Set[tuple[int, str]] = set()
 
     for row in survivors:
         if not isinstance(row, dict):
-            continue
-        if "hyp_id" in row and "event_type" in row:
-            allowed.add((int(row["hyp_id"]), str(row["event_type"]).strip()))
+            raise ValueError("stage_a_survivors.json: survivor rows must be objects")
+        if "hyp_id" not in row or "event_type" not in row:
+            raise ValueError("stage_a_survivors.json: survivor rows require hyp_id and event_type")
+        hyp_id = parse_hyp_id(row["hyp_id"], context="survivor")
+        _hypothesis_model_id(hyp_id)
+        event_type = str(row["event_type"]).strip()
+        if not event_type:
+            raise ValueError("stage_a_survivors.json: survivor rows require hyp_id and event_type")
+        allowed.add((hyp_id, event_type))
 
     for pt in pass_through:
-        pt_id: Optional[int] = None
-        if isinstance(pt, int):
-            pt_id = pt
-        elif isinstance(pt, str) and pt.strip().isdigit():
-            pt_id = int(pt.strip())
+        if isinstance(pt, (int, str)) and not isinstance(pt, bool):
+            pt_id = parse_hyp_id(pt, context="pass_through")
         elif isinstance(pt, dict) and pt.get("hyp_id") is not None:
-            pt_id = int(pt["hyp_id"])
-        if pt_id is None:
-            continue
+            pt_id = parse_hyp_id(pt["hyp_id"], context="pass_through")
+        else:
+            raise ValueError("stage_a_survivors.json: invalid pass_through entry")
         for etype in tested_etypes:
             allowed.add((pt_id, etype))
 
@@ -348,7 +383,10 @@ def _filter_events_to_runnable_npz(
     repo_root: Path,
 ) -> List[Dict[str, Any]]:
     """Drop event-symbol rows with no runnable NPZ before model expansion."""
-    keys, manifest_authority_seen = _runnable_npz_key_state(repo_root)
+    try:
+        keys, manifest_authority_seen = _runnable_npz_key_state(repo_root)
+    except RuntimeError as exc:
+        raise RuntimeError(f"runnable NPZ event filter failed: {exc}") from exc
     if keys or manifest_authority_seen:
         return [
             row
@@ -562,9 +600,14 @@ def _manifest_paths(root: Path) -> List[Path]:
     if env_path:
         path = Path(env_path)
         if _manifest_path_matches_lake(path, root):
-            paths.append(path)
-            if path.suffix == ".parquet":
-                return paths
+            suffix = path.suffix.lower()
+            if suffix not in {".json", ".parquet"}:
+                raise RuntimeError(f"HFT3_MANIFEST_PATH unsupported manifest suffix: {path}")
+            if suffix == ".json" and not path.is_file():
+                raise RuntimeError(f"runnable NPZ JSON manifest file is missing: {path}")
+            if suffix == ".parquet" and not path.is_file():
+                raise RuntimeError(f"runnable NPZ parquet manifest file is missing: {path}")
+            return [path]
         else:
             raise RuntimeError(
                 "HFT3_MANIFEST_PATH rejected: manifest must live under "
@@ -585,19 +628,25 @@ def _read_manifest_parquet_records(path: Path) -> List[Dict[str, Any]]:
         raise RuntimeError(
             f"pandas is required to read runnable NPZ parquet manifest: {path}"
         ) from exc
-    df = pd.read_parquet(path)
+    try:
+        df = pd.read_parquet(path)
+    except Exception as exc:
+        raise RuntimeError(f"runnable NPZ parquet manifest is unreadable: {path}: {exc}") from exc
     return [dict(row) for row in df.to_dict("records")]
 
 
 def _read_manifest_json_records(path: Path) -> tuple[List[Dict[str, Any]], bool]:
     if not path.is_file():
         return [], False
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"runnable NPZ JSON manifest is unreadable: {path}: {exc}") from exc
     if isinstance(payload, list):
         return [rec for rec in payload if isinstance(rec, dict)], True
     if isinstance(payload, dict) and isinstance(payload.get("files"), list):
         return [{"npz_path": name} for name in payload["files"]], True
-    return [], False
+    return [], True
 
 
 def _resolve_npz_path(root: Path, repo_root: Path, raw_path: str) -> Path:
@@ -728,7 +777,10 @@ def _filter_runnable_npz_units(
     repo_root: Path,
 ) -> List[Dict[str, Any]]:
     """Keep only units whose event_id+symbol resolve to an NPZ under HFT3_NPZ_ROOT."""
-    keys, manifest_authority_seen = _runnable_npz_key_state(repo_root)
+    try:
+        keys, manifest_authority_seen = _runnable_npz_key_state(repo_root)
+    except RuntimeError as exc:
+        raise RuntimeError(f"runnable NPZ unit filter failed: {exc}") from exc
     if keys or manifest_authority_seen:
         return [
             unit
@@ -878,23 +930,27 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     if args.from_stage_a_survivors:
-        units = _units_from_stage_a_survivors(
-            args.from_stage_a_survivors,
-            args.events_csv,
-            symbols=symbols,
-            event_types=event_types,
-            thesis_template=args.thesis_template,
-            max_units=args.max_units,
-            window_name=args.window_name,
-            start_date=split_start,
-            end_date=split_end,
-            research_split=split_label,
-            research_clock=research_clock,
-            context_set_id=context_set_id,
-            declared_context_sets=declared_context_sets,
-            ablation_group_id=args.ablation_group_id,
-            negative_control_policy=negative_control_policy,
-        )
+        try:
+            units = _units_from_stage_a_survivors(
+                args.from_stage_a_survivors,
+                args.events_csv,
+                symbols=symbols,
+                event_types=event_types,
+                thesis_template=args.thesis_template,
+                max_units=args.max_units,
+                window_name=args.window_name,
+                start_date=split_start,
+                end_date=split_end,
+                research_split=split_label,
+                research_clock=research_clock,
+                context_set_id=context_set_id,
+                declared_context_sets=declared_context_sets,
+                ablation_group_id=args.ablation_group_id,
+                negative_control_policy=negative_control_policy,
+            )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
     elif args.all_active_models or args.model_ids:
         model_id_list: Optional[List[str]] = None
         if args.model_ids:
