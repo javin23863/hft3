@@ -873,7 +873,7 @@ class TestV2RunHashResolution:
         )
         assert rc == 0
         out = capsys.readouterr().out
-        assert "after_resume=1" in out
+        assert "after_resume=1 resume_check=no_run" in out
 
     def test_main_dry_run_resume_reports_filtered_count(self, tmp_path, capsys):
         v2 = _load_v2_module()

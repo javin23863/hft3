@@ -332,12 +332,15 @@ def _print_dry_run_plan(
     units_raw_count: int,
     units: list[PaidScreenUnit],
     grouping_ctx: WorkerContext,
+    resume_check: str = "",
 ) -> None:
     groups = group_units_by_batch_key(units, grouping_ctx)
     after_resume = str(len(units))
+    resume_check_token = f"resume_check={resume_check} " if resume_check else ""
     print(
         f"DRY_RUN units={units_raw_count} "
         f"after_resume={after_resume} "
+        f"{resume_check_token}"
         f"batches={len(groups)} "
         f"workers={args.workers} "
         f"scope={args.vectorbt_scope} "
@@ -1251,6 +1254,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             units_raw_count=len(units_raw),
             units=units,
             grouping_ctx=dry_run_ctx,
+            resume_check="no_run",
         )
         return 0
 

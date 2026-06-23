@@ -1569,7 +1569,7 @@ def test_require_runnable_npz_unrecognized_manifest_json_blocks_glob_fallback(
     monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
     monkeypatch.delenv("HFT3_MANIFEST_PATH", raising=False)
 
-    with pytest.raises(RuntimeError, match="manifest authority yielded no valid keys"):
+    with pytest.raises(RuntimeError, match="unrecognized schema"):
         generator._filter_runnable_npz_units(
             [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
             REPO,
@@ -1831,6 +1831,10 @@ def test_vast_full_script_requires_declaration_before_workers() -> None:
     assert "ERROR: Full-run declaration missing" in script
     assert "ERROR: Declaration expected_work_units=" in script
     assert "ERROR: Declaration mismatch:" in script
+    assert 'STALL_MINUTES="${VBT_STALL_MINUTES:-30}"' in script
+    assert '"stall_minutes": int(stall_minutes)' in script
+    assert 'expect_int("stall_minutes", int(stall_minutes))' in script
+    assert 'expect_int("stall_minutes", 30)' not in script
     assert "VBT_WRITE_DECLARATION_TEMPLATE" in script
     assert "Wrote declaration template:" in script
     assert "to regenerate the declaration template" in script

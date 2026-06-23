@@ -35,6 +35,7 @@ UNIT_SOURCE="${VBT_UNIT_SOURCE:-stage_a_survivors}"
 STAGE_A_SURVIVORS="${VBT_STAGE_A_SURVIVORS:-research_cards/stage_a_full/stage_a_survivors.json}"
 DECL_FILE="${VBT_FULL_RUN_DECLARATION:-runtime/reports/vbt_full_run_declaration.json}"
 TMUX_SESSION="${VBT_TMUX_SESSION:-vbt_full}"
+STALL_MINUTES="${VBT_STALL_MINUTES:-30}"
 
 NPROC="$(nproc)"
 if [[ -n "${VBT_WORKERS:-}" ]]; then
@@ -131,20 +132,20 @@ fi
 GIT_HEAD="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 
 if [[ "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "1" || "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "true" ]]; then
-  python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" <<'PY'
+  python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" "$STALL_MINUTES" <<'PY'
 import json
 import os
 import sys
 from pathlib import Path
 
-decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash = sys.argv[1:9]
+decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash, stall_minutes = sys.argv[1:10]
 payload = {
     "host_vcpu": int(host_vcpu),
     "reserved_vcpu": 26,
     "workers_requested": int(workers),
     "expected_work_units": int(unit_count),
     "units_source": units_source,
-    "stall_minutes": 30,
+    "stall_minutes": int(stall_minutes),
     "abort_on_failed_units": True,
     "git_head": git_head,
     "events_csv_hash": events_hash,
@@ -182,11 +183,11 @@ if [[ "$DECL_EXPECTED" != "$UNIT_COUNT" ]]; then
   exit 1
 fi
 
-python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" <<'PY'
+python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" "$STALL_MINUTES" <<'PY'
 import json
 import sys
 
-decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash = sys.argv[1:9]
+decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash, stall_minutes = sys.argv[1:10]
 payload = json.load(open(decl_path, encoding="utf-8"))
 errors = []
 
@@ -208,7 +209,7 @@ expect_int("expected_work_units", int(unit_count))
 expect_int("host_vcpu", int(host_vcpu))
 expect_int("reserved_vcpu", 26)
 expect_int("workers_requested", int(workers))
-expect_int("stall_minutes", 30)
+expect_int("stall_minutes", int(stall_minutes))
 expect_str("units_source", units_source)
 expect_str("git_head", git_head)
 expect_str("events_csv_hash", events_hash)

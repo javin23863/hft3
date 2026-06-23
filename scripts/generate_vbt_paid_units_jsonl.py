@@ -643,7 +643,10 @@ def _read_manifest_json_records(path: Path) -> tuple[List[Dict[str, Any]], bool]
         return [rec for rec in payload if isinstance(rec, dict)], True
     if isinstance(payload, dict) and isinstance(payload.get("files"), list):
         return [{"npz_path": name} for name in payload["files"]], True
-    return [], True
+    raise RuntimeError(
+        "runnable NPZ JSON manifest has unrecognized schema: "
+        f"{path}; expected a top-level list of records or a dict with files=[]"
+    )
 
 
 def _resolve_npz_path(root: Path, repo_root: Path, raw_path: str) -> Path:
