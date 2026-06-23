@@ -61,6 +61,16 @@ BACKFILL_INTAKE_FLAGS = {
     "raw_downloads_are_runnable_coverage": False,
     "completion_requires_catalog_or_data_doctor_evidence": True,
 }
+DATA_SCOPE_SECTIONS = (
+    "cme_mbo",
+    "vix_vvix",
+    "vix_options",
+    "cme_options",
+    "macro",
+    "cross_asset",
+    "continuous_session",
+    "latency_authority",
+)
 
 
 @dataclass(frozen=True)
@@ -766,6 +776,362 @@ def build_report(
     }
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _source_file(path: Path | str | None) -> dict[str, Any]:
+    value = Path(path) if path else Path("")
+    return {"path": str(value), "exists": value.is_file()}
+
+
+def _bounded_file_summary(root: Path, patterns: tuple[str, ...], *, limit: int = 1000) -> dict[str, Any]:
+    if not root.is_dir():
+        return {"path": str(root), "exists": False, "file_count": 0, "truncated": False, "sample_paths": []}
+    seen: set[Path] = set()
+    samples: list[str] = []
+    for pattern in patterns:
+        for path in root.glob(pattern):
+            if not path.is_file() or path in seen:
+                continue
+            seen.add(path)
+            if len(samples) < 10:
+                samples.append(str(path.relative_to(root)))
+            if len(seen) >= limit:
+                return {
+                    "path": str(root),
+                    "exists": True,
+                    "file_count": len(seen),
+                    "truncated": True,
+                    "sample_paths": samples,
+                }
+    return {
+        "path": str(root),
+        "exists": True,
+        "file_count": len(seen),
+        "truncated": False,
+        "sample_paths": samples,
+    }
+
+
+def _lake_root_candidates(repo_root: Path, data_root: Path) -> list[Path]:
+    candidates = [data_root, Path("C:/hft3-lake")]
+    npz_root = os.environ.get("HFT3_NPZ_ROOT")
+    if npz_root:
+        candidates.insert(1, Path(npz_root).expanduser().resolve().parent)
+    source_root = repo_root.parent / "hft3" / "data"
+    if source_root != data_root:
+        candidates.append(source_root)
+    out: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path).lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(path)
+    return out
+
+
+def _feature_root_candidates(lake_roots: list[Path]) -> list[Path]:
+    candidates = [root / "features" for root in lake_roots]
+    feature_root = os.environ.get("HFT3_FEATURE_ROOT")
+    if feature_root:
+        candidates.insert(0, Path(feature_root).expanduser().resolve())
+    out: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path).lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(path)
+    return out
+
+
+def _total_file_count(summaries: list[dict[str, Any]]) -> int:
+    return sum(_coerce_int(summary.get("file_count")) for summary in summaries)
+
+
+def _missing_line(label: str, value: Any) -> str | None:
+    if value in (None, "", 0, "0", "unknown"):
+        return None
+    return f"{label}={value}"
+
+
+def build_data_scope_manifest(report: dict[str, Any]) -> dict[str, Any]:
+    repo_root = Path(str(report.get("repo_root") or _REPO_ROOT))
+    data_root = Path(str(report.get("data_root_used") or repo_root / "data"))
+    lake_roots = _lake_root_candidates(repo_root, data_root)
+    feature_roots = _feature_root_candidates(lake_roots)
+
+    q001 = _as_dict(report.get("q001_cme_data_inventory"))
+    futures = _as_dict(q001.get("futures"))
+    active = _as_dict(futures.get("active_npz_manifest"))
+    pilot = _as_dict(futures.get("mbo_pilot_basket"))
+    options = _as_dict(q001.get("options"))
+    options_lane = _as_dict(options.get("options_lane"))
+    fixing = _as_dict(options_lane.get("fixing_mbo"))
+    expiry = _as_dict(options_lane.get("expiry_coverage"))
+    events = _as_dict(q001.get("event_catalog"))
+    sources = _as_dict(q001.get("sources"))
+    sidecar = _as_dict(report.get("missing_data_backfill_sidecar"))
+
+    sensor_sources = [_bounded_file_summary(root / "sensors", ("**/*.parquet", "**/*.npz", "**/*.json")) for root in lake_roots]
+    vix_option_sources = [
+        *[_bounded_file_summary(root / "VIX.OPT", ("**/*",)) for root in feature_roots],
+        *[_bounded_file_summary(root / "vix_options", ("**/*",)) for root in lake_roots],
+    ]
+    latency_paths = [
+        repo_root / "runtime" / "latency_reports" / "latency_summary.json",
+        repo_root / "runtime" / "latency_reports" / "live_placement_capability.json",
+        repo_root / "runtime" / "latency_reports" / "order_ack_distribution.json",
+        repo_root / "reports" / "latency_baselines" / "current_baseline.json",
+        repo_root / "reports" / "latency_baselines" / "live_r01_chicago_baseline.json",
+    ]
+    latency_sources = [_source_file(path) for path in latency_paths]
+    latency_existing = [source for source in latency_sources if source["exists"]]
+
+    cme_mbo_missing = []
+    if active.get("status") != "OK":
+        cme_mbo_missing.append(f"active_npz_manifest_status={active.get('status', 'UNKNOWN')}")
+    for item in (
+        _missing_line("missing_npz_files", active.get("missing_npz_files")),
+        _missing_line("mbo_missing_or_unavailable_slots", pilot.get("missing_or_unavailable_slots")),
+    ):
+        if item:
+            cme_mbo_missing.append(item)
+    if pilot.get("status") and pilot.get("status") not in {"completed", "completed_with_gaps"}:
+        cme_mbo_missing.append(f"mbo_pilot_status={pilot.get('status')}")
+    if active.get("status") == "OK" and not pilot.get("missing_or_unavailable_slots"):
+        cme_mbo_missing = ["none_observed_by_inventory"]
+    cme_mbo_status = "blocked"
+    if q001.get("status") in {"INVENTORIED", "INVENTORIED_WITH_WARNINGS"} and active.get("status") == "OK":
+        cme_mbo_status = (
+            "available_with_dependency_scoped_gaps"
+            if pilot.get("missing_or_unavailable_slots")
+            else "available"
+        )
+    elif active.get("status") in {"MISSING", "MALFORMED", "MALFORMED_JSON", "FAIL_SCHEMA_OR_PATH_VALIDATION"}:
+        cme_mbo_status = "unavailable_or_invalid"
+
+    sensor_count = _total_file_count(sensor_sources)
+    vix_options_count = _total_file_count(vix_option_sources)
+    strict_gaps = expiry.get("strict_mbo_gap_count")
+    study_gaps = expiry.get("gap_count")
+    options_status = str(options.get("data_doctor_status") or "UNKNOWN")
+    cme_options_status = "unavailable_not_consumed"
+    if _coerce_int(strict_gaps) or options_status in {"WARN", "FAIL"}:
+        cme_options_status = "sidelined_missing_data"
+    elif options_status == "OK":
+        cme_options_status = "partial_not_consumed"
+    macro_status = "available_not_consumed_as_context" if events.get("status") == "OK" else "unavailable_or_uncertain"
+    cross_asset_symbol_count = len(active.get("symbols") or {})
+    cross_asset_status = "partial_not_consumed" if cross_asset_symbol_count >= 2 else "unavailable_not_consumed"
+
+    sections = {
+        "cme_mbo": {
+            "status": cme_mbo_status,
+            "sources": {
+                "active_npz_manifest": active.get("path") or sources.get("active_npz_manifest"),
+                "mbo_pilot_manifest": pilot.get("path") or sources.get("mbo_pilot_manifest"),
+                "events_csv": sources.get("events_csv") or events.get("path"),
+            },
+            "availability_summary": {
+                "official_coverage_status": report.get("official_coverage_status"),
+                "active_manifest_status": active.get("status", "UNKNOWN"),
+                "active_manifest_records": active.get("record_count", 0),
+                "date_min": active.get("date_min", ""),
+                "date_max": active.get("date_max", ""),
+                "mbo_pilot_present_slots": pilot.get("present_runnable_npz_slots", 0),
+                "mbo_pilot_expected_slots": pilot.get("expected_event_symbol_slots", 0),
+                "mbo_pilot_coverage_pct": pilot.get("coverage_pct"),
+            },
+            "missing_or_sidelined": cme_mbo_missing,
+            "model_treatment": "Runnable rows may proceed as available-data research; missing MBO slots stay explicit skips or rejections and are not promotion evidence.",
+            "dependency_scope": "Blocks only affected event-symbol cells and strict models requiring those exact MBO windows.",
+        },
+        "vix_vvix": {
+            "status": "partial_not_consumed" if sensor_count else "unavailable_not_consumed",
+            "sources": {
+                "sensor_roots": sensor_sources,
+                "feature_code": "packages/features_engine/src/features/vix_features.py",
+                "feature_status_manifest": "docs/project/FEATURE_FAMILY_STATUS_MANIFEST.yaml",
+            },
+            "availability_summary": {
+                "sensor_file_count_observed": sensor_count,
+                "pit_feature_lake_certified_by_q001": False,
+                "vectorbt_consumed": False,
+            },
+            "missing_or_sidelined": [
+                "not_consumed_by_phase1_data_scope_manifest",
+                "PIT VIX/VVIX feature rows are not certified by Q001 inventory",
+                "missing VIX/VVIX inputs remain unknown and must never be zero-filled",
+            ],
+            "model_treatment": "Not consumed in Phase 1; target_plus_vix_vvix cells require PIT sensor provenance before use.",
+            "dependency_scope": "Blocks only VIX/VVIX context claims; target-only and non-volatility context rows continue.",
+        },
+        "vix_options": {
+            "status": "partial_not_consumed" if vix_options_count else "unavailable_not_consumed",
+            "sources": {
+                "vix_option_roots": vix_option_sources,
+                "feature_status_manifest": "docs/project/FEATURE_FAMILY_STATUS_MANIFEST.yaml",
+                "backfill_sidecar": sidecar.get("path"),
+            },
+            "availability_summary": {
+                "local_file_count_observed": vix_options_count,
+                "strike_expiry_depth": "partial_or_unmeasured",
+                "vectorbt_consumed": False,
+            },
+            "missing_or_sidelined": [
+                "not_consumed_by_phase1_data_scope_manifest",
+                "limited strike/expiry depth unless a PIT option-chain feature manifest proves otherwise",
+            ],
+            "model_treatment": "Do not claim target_plus_vix_options coverage until PIT option-chain provenance and model consumption are proven.",
+            "dependency_scope": "Blocks VIX-options context claims only; target-only, CME MBO, and unrelated context rows continue.",
+        },
+        "cme_options": {
+            "status": cme_options_status,
+            "sources": {
+                "data_doctor_report": sources.get("data_doctor_report"),
+                "options_lane": "packages/options_lane/",
+                "backfill_sidecar": sidecar.get("path"),
+            },
+            "availability_summary": {
+                "data_doctor_status": options.get("data_doctor_status", "UNKNOWN"),
+                "strict_quote_dates": fixing.get("dates_covered", 0),
+                "study_file_dates": fixing.get("study_dates_covered", 0),
+                "trade_only_dates": fixing.get("trade_only_dates", 0),
+                "study_gap_count": study_gaps,
+                "strict_quote_gap_count": strict_gaps,
+                "strict_quote_stale_gap_count": expiry.get("strict_mbo_stale_gap_count"),
+            },
+            "missing_or_sidelined": [
+                item
+                for item in (
+                    _missing_line("study_gap_count", study_gaps),
+                    _missing_line("strict_quote_gap_count", strict_gaps),
+                    _missing_line("strict_quote_stale_gap_count", expiry.get("strict_mbo_stale_gap_count")),
+                    "strict quote reconstruction and strict options context remain sidelined until quote proof exists",
+                )
+                if item
+            ],
+            "model_treatment": "Study rows can remain descriptive where explicitly labeled; strict CME options context is not consumed for futures promotion.",
+            "dependency_scope": "Blocks strict options quote reconstruction, strict options features, options replay, and options promotion only.",
+        },
+        "macro": {
+            "status": macro_status,
+            "sources": {
+                "events_csv": sources.get("events_csv") or events.get("path"),
+                "macro_context_code": "packages/replay/context_assembly.py",
+            },
+            "availability_summary": {
+                "event_catalog_status": events.get("status", "UNKNOWN"),
+                "observed_symbol_count": len(events.get("symbols") or []),
+                "expected_canonical_symbols": events.get("expected_canonical_symbols", []),
+                "context_uplift_consumed": False,
+            },
+            "missing_or_sidelined": [
+                "macro_context_uplift_not_consumed_by_phase1_data_scope_manifest",
+                "ambiguous release/tradable timestamps must be sidelined before VBT",
+            ],
+            "model_treatment": "Scheduled-event target rows may use the event catalog; macro-context uplift needs separate PIT feature records and ablation.",
+            "dependency_scope": "Blocks only macro-context rows for affected release/event combinations, not target-only scheduled-event rows.",
+        },
+        "cross_asset": {
+            "status": cross_asset_status,
+            "sources": {
+                "active_npz_manifest": active.get("path") or sources.get("active_npz_manifest"),
+                "cross_asset_code": [
+                    "packages/replay/market_data_adapter.py",
+                    "packages/replay/replay_session.py",
+                ],
+            },
+            "availability_summary": {
+                "active_manifest_status": active.get("status", "UNKNOWN"),
+                "symbol_count": cross_asset_symbol_count,
+                "symbols": sorted((active.get("symbols") or {}).keys()),
+                "date_min": active.get("date_min", ""),
+                "date_max": active.get("date_max", ""),
+                "vectorbt_consumed": False,
+            },
+            "missing_or_sidelined": [
+                "not_consumed_by_phase1_data_scope_manifest",
+                "multi-symbol PIT alignment proof is required before target_plus_cross_asset claims",
+            ],
+            "model_treatment": "Available multi-symbol MBO is candidate context only; no cross-asset uplift is counted until PIT alignment and consumption are proven.",
+            "dependency_scope": "Blocks cross-asset context claims for affected symbols/windows only; single-symbol target-only rows continue.",
+        },
+        "continuous_session": {
+            "status": "sidelined_scope_not_consumed",
+            "sources": {
+                "research_clock": "continuous_intraday",
+                "context_code": "packages/replay/context_assembly.py",
+                "feature_status_manifest": "docs/project/FEATURE_FAMILY_STATUS_MANIFEST.yaml",
+            },
+            "availability_summary": {
+                "scheduled_event_scope_default": True,
+                "continuous_clock_consumed": False,
+                "continuous_intraday_pit_proof": "not_measured",
+            },
+            "missing_or_sidelined": [
+                "continuous_intraday_clock_out_of_scope_for_scheduled_screen",
+                "full-session aggregates before session end are forbidden",
+            ],
+            "model_treatment": "Sidelined for scheduled-event Phase 1; enable only under a continuous_intraday clock with trailing/PIT session state.",
+            "dependency_scope": "Blocks continuous-intraday and continuous/session context claims only.",
+        },
+        "latency_authority": {
+            "status": "measured_not_consumed" if latency_existing else "unavailable_not_consumed",
+            "sources": {
+                "latency_files": latency_sources,
+                "latency_architecture": "docs/workbench/LATENCY_ARCHITECTURE.md",
+                "latency_ontology": "docs/vault/HFTBACKTEST_LATENCY_ONTOLOGY.md",
+            },
+            "availability_summary": {
+                "measured_authority_files_observed": len(latency_existing),
+                "existing_files": [source["path"] for source in latency_existing],
+                "latency_as_vectorbt_feature_consumed": False,
+            },
+            "missing_or_sidelined": [
+                "latency_state_not_consumed_by_phase1_data_scope_manifest",
+                "production-realistic execution claims require measured CHI404/Rithmic authority",
+            ],
+            "model_treatment": "Latency may later parameterize HBT/replay with measured or explicitly synthetic authority; it is not a consumed VBT context feature here.",
+            "dependency_scope": "Blocks latency-as-feature uplift and production-realism claims, not read-only target-only research.",
+        },
+    }
+
+    return {
+        "schema_version": 1,
+        "manifest_type": "data_scope_manifest",
+        "phase": "phase_1_data_scope_inventory",
+        "generated_at_utc": report.get("generated_at_utc"),
+        "read_only": True,
+        "network_access": "not_used",
+        "paid_download_commands": [],
+        "source_report": {
+            "repo_root": report.get("repo_root"),
+            "data_root_used": report.get("data_root_used"),
+            "source_root": report.get("source_root"),
+            "sync_requested": report.get("sync_requested"),
+            "dry_run": report.get("dry_run"),
+            "verify_q001_hashes": report.get("verify_q001_hashes"),
+            "q001_status": q001.get("status"),
+        },
+        "section_order": list(DATA_SCOPE_SECTIONS),
+        "sections": sections,
+    }
+
+
+def write_data_scope_manifest(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest = build_data_scope_manifest(report)
+    json_path = output_dir / "data_scope_manifest.json"
+    md_path = output_dir / "data_scope_manifest.md"
+    json_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    md_path.write_text(_markdown_data_scope_manifest(manifest), encoding="utf-8")
+    return json_path, md_path
+
+
 def write_reports(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / "paid_data_inventory.json"
@@ -925,6 +1291,33 @@ def _markdown_report(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _markdown_data_scope_manifest(manifest: dict[str, Any]) -> str:
+    lines = [
+        "# Data Scope Manifest",
+        "",
+        f"Generated UTC: {manifest.get('generated_at_utc')}",
+        f"Phase: `{manifest.get('phase')}`",
+        f"Read only: `{manifest.get('read_only')}`",
+        f"Network access: `{manifest.get('network_access')}`",
+        "",
+        "| Section | Status | Dependency scope |",
+        "|---|---|---|",
+    ]
+    sections = _as_dict(manifest.get("sections"))
+    for name in manifest.get("section_order") or DATA_SCOPE_SECTIONS:
+        section = _as_dict(sections.get(name))
+        lines.append(f"| {name} | {section.get('status', 'UNKNOWN')} | {section.get('dependency_scope', '')} |")
+    for name in manifest.get("section_order") or DATA_SCOPE_SECTIONS:
+        section = _as_dict(sections.get(name))
+        lines.extend(["", f"## {name}", "", f"Status: `{section.get('status', 'UNKNOWN')}`", ""])
+        lines.append(f"Model treatment: {section.get('model_treatment', '')}")
+        lines.append("")
+        lines.append("Missing or sidelined:")
+        for item in section.get("missing_or_sidelined") or []:
+            lines.append(f"- {item}")
+    return "\n".join(lines) + "\n"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -932,6 +1325,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("runtime") / "data_audits")
     parser.add_argument("--sync", action="store_true", help="Copy paid files into the repo data root without deleting sources.")
     parser.add_argument("--dry-run", action="store_true", help="Report intended copy actions without copying.")
+    parser.add_argument(
+        "--data-scope-manifest",
+        action="store_true",
+        help="Also write Phase 1 data_scope_manifest.json/md from the inventory report.",
+    )
+    parser.add_argument(
+        "--data-scope-manifest-only",
+        action="store_true",
+        help="Write only the read-only Phase 1 data_scope_manifest.json/md; forces no sync.",
+    )
     parser.add_argument(
         "--verify-q001-hashes",
         action="store_true",
@@ -945,20 +1348,29 @@ def main() -> int:
     repo_root = args.repo_root.resolve()
     source_root = args.source_root.resolve()
     output_dir = args.output_dir if args.output_dir.is_absolute() else repo_root / args.output_dir
-    if not source_root.is_dir():
+    if args.data_scope_manifest_only and args.sync:
+        raise SystemExit("--data-scope-manifest-only cannot be combined with --sync")
+    if args.data_scope_manifest and args.sync:
+        raise SystemExit("--data-scope-manifest cannot be combined with --sync")
+    if not source_root.is_dir() and not args.data_scope_manifest_only:
         raise SystemExit(f"source root not found: {source_root}")
     report = build_report(
         repo_root=repo_root,
         source_root=source_root,
-        sync=args.sync,
-        dry_run=args.dry_run,
+        sync=False if args.data_scope_manifest_only else args.sync,
+        dry_run=True if args.data_scope_manifest_only else args.dry_run,
         verify_q001_hashes=args.verify_q001_hashes,
     )
-    json_path, md_path = write_reports(report, output_dir)
-    print(f"wrote {json_path}")
-    print(f"wrote {md_path}")
-    print(f"official_coverage_status={report['official_coverage_status']}")
-    print(f"synced_files={len(report['synced_files'])}")
+    if not args.data_scope_manifest_only:
+        json_path, md_path = write_reports(report, output_dir)
+        print(f"wrote {json_path}")
+        print(f"wrote {md_path}")
+        print(f"official_coverage_status={report['official_coverage_status']}")
+        print(f"synced_files={len(report['synced_files'])}")
+    if args.data_scope_manifest or args.data_scope_manifest_only:
+        manifest_json_path, manifest_md_path = write_data_scope_manifest(report, output_dir)
+        print(f"wrote {manifest_json_path}")
+        print(f"wrote {manifest_md_path}")
     return 0
 
 

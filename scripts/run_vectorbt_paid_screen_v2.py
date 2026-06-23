@@ -123,11 +123,41 @@ def _result_to_dict(result: UnitScreeningResult) -> Dict[str, Any]:
         "promoted_ids": result.promoted_ids,
         "rejected_ids": result.rejected_ids,
     }
+    row.update(_artifact_feature_plane_metadata(result.screening_artifact_path))
     return row
 
 
 def _unit_artifact_relpath(unit_id: str) -> str:
     return f"units/{unit_id}/screening_artifact.json"
+
+
+def _artifact_feature_plane_metadata(path: Optional[str]) -> Dict[str, Any]:
+    if not path:
+        return {}
+    artifact_path = Path(path)
+    if not artifact_path.is_file():
+        return {}
+    try:
+        payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    keys = (
+        "research_clock",
+        "allowed_context_set_id_or_null",
+        "declared_context_sets",
+        "feature_plane_status",
+        "feature_usage_manifest_hash",
+        "model_feature_usage_status",
+        "context_ablation_status",
+        "continuous_clock_status",
+        "cross_asset_alignment_status",
+        "vix_sensor_status",
+        "vix_options_status",
+        "cme_options_context_status",
+        "latency_feature_status",
+        "data_scope_skip_manifest_hash",
+    )
+    return {key: payload[key] for key in keys if key in payload}
 
 
 def _worker_scratch_root(repo_root: Path, out_dir: Path) -> Path:
@@ -210,7 +240,7 @@ def _resume_cached_unit_result(out_dir: Path, unit_id: str) -> Dict[str, Any]:
             rejected_ids = list(payload.get("rejected_ids") or [])
         except Exception:
             pass
-    return {
+    row = {
         "unit_id": unit_id,
         "status": "OK_CACHED",
         "screening_artifact_path": str(artifact_path),
@@ -221,6 +251,8 @@ def _resume_cached_unit_result(out_dir: Path, unit_id: str) -> Dict[str, Any]:
         "promoted_ids": promoted_ids,
         "rejected_ids": rejected_ids,
     }
+    row.update(_artifact_feature_plane_metadata(str(artifact_path)))
+    return row
 
 
 def _count_work_units(all_results: List[UnitScreeningResult]) -> Tuple[int, int, int]:
@@ -249,6 +281,35 @@ def _resolve_run_hashes(
         repo_root=repo_root,
     )
     return events_csv_hash, lake_manifest_hash
+
+
+def _print_dry_run_plan(
+    *,
+    args: argparse.Namespace,
+    out_dir: Path,
+    units_raw_count: int,
+    units: list[PaidScreenUnit],
+    grouping_ctx: WorkerContext,
+) -> None:
+    groups = group_units_by_batch_key(units, grouping_ctx)
+    print(
+        f"DRY_RUN units={units_raw_count} "
+        f"after_resume={len(units)} "
+        f"batches={len(groups)} "
+        f"workers={args.workers} "
+        f"scope={args.vectorbt_scope} "
+        f"out={out_dir}"
+    )
+    for unit in units[:20]:
+        print(json.dumps({
+            "unit_id": unit.unit_id,
+            "model_id": unit.model_id,
+            "symbol": unit.symbol,
+            "event_id": unit.event_id,
+            "event_type": unit.event_type,
+        }))
+    if len(units) > 20:
+        print(f"... and {len(units) - 20} more")
 
 
 def _write_run_manifest(
@@ -1079,6 +1140,27 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"ERROR: malformed unit row missing field {exc}: {row}", file=sys.stderr)
             return 1
 
+    if args.dry_run:
+        try:
+            derive_run_research_split(units_raw)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        dry_run_ctx = _grouping_context(
+            repo_root,
+            args.events_csv_hash or "dry_run_events_csv_hash_not_resolved",
+            args.lake_manifest_hash or "dry_run_lake_manifest_hash_not_resolved",
+            git_commit=resolve_git_commit(str(repo_root)),
+        )
+        _print_dry_run_plan(
+            args=args,
+            out_dir=out_dir,
+            units_raw_count=len(units_raw),
+            units=units,
+            grouping_ctx=dry_run_ctx,
+        )
+        return 0
+
     # Hashes and research split must be resolved before resume (BLUEPRINT §8).
     try:
         events_csv_hash, lake_manifest_hash = _resolve_run_hashes(args, repo_root)
@@ -1156,27 +1238,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         print(f"[bootstrap] manifest written ({len(units)} units pending grouping)",
               flush=True)
-
-    # Dry run: print plan and exit
-    if args.dry_run:
-        groups = group_units_by_batch_key(units, grouping_ctx)
-        print(f"DRY_RUN units={len(units_raw)} "
-              f"after_resume={len(units)} "
-              f"batches={len(groups)} "
-              f"workers={args.workers} "
-              f"scope={args.vectorbt_scope} "
-              f"out={out_dir}")
-        for unit in units[:20]:
-            print(json.dumps({
-                "unit_id": unit.unit_id,
-                "model_id": unit.model_id,
-                "symbol": unit.symbol,
-                "event_id": unit.event_id,
-                "event_type": unit.event_type,
-            }))
-        if len(units) > 20:
-            print(f"... and {len(units) - 20} more")
-        return 0
 
     # Group units into compatible batches (full BatchingKey)
     groups = group_units_by_batch_key(units, grouping_ctx)

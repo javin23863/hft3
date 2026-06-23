@@ -44,22 +44,26 @@ flowchart LR
   LP --> R["Reviewer (Karpathy + math)"]
   R --> V[Verify]
   V -->|fail| P
-  V -->|pass| PR[PR GrepLoop]
-  PR --> GPO[GraphPost]
+  V -->|pass| PD["Plan Drift Review"]
+  PD --> RS["Review Surface (PR/MR/CL)"]
+  RS --> PR[PR GrepLoop]
+  PR --> GPO["GraphPost (when active)"]
   GPO --> D[Done]
 ```
 
-### Spec -> GraphPre -> Plan -> Code -> Local Preflight -> Review -> Verify -> PR GrepLoop -> GraphPost
+### Spec -> GraphPre when active -> Plan -> Code -> Local Preflight -> Review -> Verify -> Plan Drift -> Review Surface -> PR GrepLoop -> GraphPost when active
 
 1. **Spec** — Read relevant spec (BLUEPRINT, PDF prompts, issue). State invariants (data lanes, PASS gates).
-2. **GraphPre** — `graphify query` or fresh `graphify-out/GRAPH_REPORT.md` before edits ([GRAPHIFY_WORKFLOW.md](GRAPHIFY_WORKFLOW.md)).
+2. **GraphPre** — only when graph gates are active: `graphify query` or fresh `graphify-out/GRAPH_REPORT.md` before edits ([GRAPHIFY_WORKFLOW.md](GRAPHIFY_WORKFLOW.md)). While `waived-by-owner-2026-06-16` is active, use VaultGate + targeted reads and do not claim graph freshness.
 3. **Plan** — Orchestrator decomposes; spawn investigators in parallel if needed.
 4. **Code** — Builder for surgical edits; main/feature agent for larger scope; shell for commands.
 5. **Local preflight** — Run the mandatory local preflight loop in [docs/ai/GREPLOOP.md](ai/GREPLOOP.md): search changed scope for forbidden legacy terms, old fields, missing required terms/citation rows, and whitespace errors; patch actionable hits; max three local iterations.
 6. **Review** — Dual-pass reviewer on diff. Both passes must be green before test commands can be used as merge evidence.
 7. **Verify** — Run bounded `pytest`/build commands (and CHI404 validate when infra). No merge narrative without green commands.
-8. **PR GrepLoop** — If a PR/MR/CL exists and an external PR AI review connector is installed, run the PR loop. Codex GitHub review is requested by `.github/workflows/codex_pr_review.yml` when enabled.
-9. **GraphPost** — `graphify update .` or `scripts/graphify_rebuild.ps1` after code changes (AST-only, no Google API). Optional semantic PDF pass: `scripts/graphify_semantic_local.ps1` (local Ollama).
+8. **Plan Drift** — Compare the executed diff/artifacts/receipts against the approved plan before creating or updating the review surface.
+9. **Review Surface** — After Plan Drift passes, create or reuse a branch plus PR/MR/CL review surface before external PR AI. No review surface means blocked with `merge-ready: no` unless the owner explicitly records `pr-ai-review: waived-by-user` plus `review-surface: none(waived-by-user: <reason>)`.
+10. **PR GrepLoop** — Run the installed external PR AI review loop on the current-head review surface. Fix actionable feedback, rerun local gates, push, and repeat until clean or bounded stop.
+11. **GraphPost** — only when graph gates are active: `graphify update .` or `scripts/graphify_rebuild.ps1` after code changes (AST-only, no Google API). While owner-waived, report the waiver instead of running graphify.
 
 ## Dual-pass review
 
@@ -109,6 +113,7 @@ Orchestrator entry: `infrastructure/chi404/run_chi404_tuning.sh` (validate step 
 | **Dishonest merge-ready** | Claiming done while reviewer said no, tests skipped without documented blockers, or C++ parity gate not run. |
 | **Skipped local preflight** | Letting stale field names, old vocabulary, or missing citation rows survive into reviewer/test cycles. |
 | **Codex-only review** | Treating local agent self-review as equivalent to grep evidence, dual-pass reviewer, tests, or external PR AI review evidence. |
+| **No review surface** | Reporting `unavailable(no-pr)` as if GrepLoop ran; create/reuse a PR/MR/CL surface, report blocked with `merge-ready: no`, or record an explicit owner waiver. |
 | **Oversized review surface** | Sending >1000 changed lines or unrelated subsystems through one review when the work can be split; external AI reviewers and humans need one coherent surface. |
 | **Subset pytest as scope-green** | Targeted file pass while the scope test directory or gate script for the touched path fails. |
 | **Verify todo theater** | Marking verify todos `completed` when pytest or gate scripts were waived, not run, or failed. |

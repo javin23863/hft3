@@ -21,6 +21,6 @@ Edit only what the task requires. Match repo conventions. Every changed line tra
 
 ## Goal-Driven Execution
 
-Define verifiable success criteria before coding. Transform "fix X" into "reproduce X, then make checks pass." Loop Spec → Plan → Code → Verify until criteria met or blocked.
+Define verifiable success criteria before coding. Transform "fix X" into "reproduce X, then make checks pass." Use Spec → Plan → Code → Verify as the inner implementation loop, then continue through the full repo gates in the standing workflow.
 
 Weak criteria require clarification. Strong criteria enable independent verification.

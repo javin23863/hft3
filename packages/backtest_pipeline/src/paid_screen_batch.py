@@ -183,7 +183,8 @@ def build_batching_key(unit: PaidScreenUnit, ctx: WorkerContext,
         bar_construction_id="ohlcv_1m_from_npz_or_supplied_array",
         feature_set_id=unit.feature_set_id,
         feature_set_hash=feature_set_hash,
-        research_clock="scheduled_event",
+        research_clock=unit.research_clock,
+        context_set_id=unit.context_set_id,
         split_scheme_id=split_scheme_id_for_research_split(unit.research_split),
         fees_model_id="cme_fees_v1",
         slippage_model_id="slip_v1",
@@ -448,17 +449,23 @@ def _build_candidate_model(unit: PaidScreenUnit, model_entry: dict, repo_root: P
             "event_type": unit.event_type,
             "hyp_id": model_entry.get("hyp_id"),
             "feature_set_id": unit.feature_set_id,
+            "research_clock": unit.research_clock,
+            "context_set_id": unit.context_set_id,
+            "allowed_context_set_id": unit.context_set_id,
+            "declared_context_sets": list(unit.declared_context_sets),
+            "ablation_group_id": unit.ablation_group_id,
+            "negative_control_policy": unit.negative_control_policy,
         },
         target_symbol=target_symbol,
         target_event_id=unit.event_id,
-        research_clock="scheduled_event",
+        research_clock=unit.research_clock,
     )
     return attach_feature_recipe_to_candidate(
         base,
         parsed=parsed,
         target_event_id=unit.event_id,
         target_symbol=target_symbol,
-        research_clock="scheduled_event",
+        research_clock=unit.research_clock,
     )
 
 
@@ -592,6 +599,10 @@ def _write_screening_artifact(
         filter_result.data_manifest_hash = ohlcv_hash
     filter_result.lake_manifest_hash = context.lake_manifest_hash
     filter_result.events_csv_hash_or_not_applicable = context.events_csv_hash
+    filter_result.research_clock = unit.research_clock
+    filter_result.target_event_type_or_null = unit.event_type or None
+    filter_result.allowed_context_set_id_or_null = unit.context_set_id
+    filter_result.declared_context_sets = list(unit.declared_context_sets)
 
     # Build the canonical artifact dict — this calls validate_screening_artifact
     # internally and computes the correct screening_artifact_hash.

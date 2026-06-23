@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from backtest_pipeline.src.paid_screen_types import PaidScreenUnit
+from backtest_pipeline.src.research_clock import ResearchClockError, validate_research_clock
 
 DEFAULT_RESEARCH_SPLIT = "discovery_confirmation"
 
@@ -382,6 +383,70 @@ def _row_unit_identity(row: Mapping[str, Any]) -> tuple[str, str, str] | None:
     return None
 
 
+def _canonical_clock(value: Any) -> str:
+    try:
+        return validate_research_clock(str(value))
+    except (ResearchClockError, TypeError):
+        return ""
+
+
+def _row_context_set(row: Mapping[str, Any]) -> str:
+    meta = row.get("base_candidate_metadata")
+    if not isinstance(meta, Mapping):
+        meta = {}
+    return str(
+        row.get("context_set_id")
+        or row.get("allowed_context_set_id")
+        or row.get("allowed_context_set_id_or_null")
+        or meta.get("context_set_id")
+        or meta.get("allowed_context_set_id")
+        or meta.get("allowed_context_set_id_or_null")
+        or ""
+    ).strip()
+
+
+def _context_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
+
+
+def _artifact_unit_context_matches(payload: Mapping[str, Any], unit: PaidScreenUnit) -> bool:
+    expected_clock = _canonical_clock(unit.research_clock)
+    artifact_clock = _canonical_clock(payload.get("research_clock"))
+    if artifact_clock and expected_clock and artifact_clock != expected_clock:
+        return False
+    if not artifact_clock and expected_clock != "scheduled_event":
+        return False
+
+    expected_context = str(unit.context_set_id or "target_only").strip()
+    artifact_context = str(
+        payload.get("allowed_context_set_id_or_null")
+        or payload.get("context_set_id")
+        or payload.get("allowed_context_set_id")
+        or ""
+    ).strip()
+    if not artifact_context:
+        for row in _candidate_rows(payload):
+            artifact_context = _row_context_set(row)
+            if artifact_context:
+                break
+    if artifact_context and artifact_context != expected_context:
+        return False
+    if not artifact_context and expected_context != "target_only":
+        return False
+
+    artifact_declared = _context_list(payload.get("declared_context_sets"))
+    expected_declared = list(unit.declared_context_sets)
+    if artifact_declared and artifact_declared != expected_declared:
+        return False
+    if not artifact_declared and expected_context != "target_only":
+        return False
+    return True
+
+
 def artifact_unit_identity_matches(payload: Mapping[str, Any], unit: PaidScreenUnit) -> bool:
     """Return True when artifact candidate rows match the unit identity."""
     identities = [
@@ -424,6 +489,8 @@ def artifact_matches_resume_unit(
     if hashes["lake_manifest_hash"] != lake_manifest_hash:
         return False
     if not artifact_unit_identity_matches(payload, unit):
+        return False
+    if not _artifact_unit_context_matches(payload, unit):
         return False
     if unit.research_split and unit.research_split != research_split:
         return False

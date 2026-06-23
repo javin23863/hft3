@@ -84,5 +84,5 @@ On failure the rebuild script runs bounded `cluster-only --no-viz` as a diagnost
 
 ## Related
 
-- [AGENTS.md](../AGENTS.md) — Spec → GraphPre → Plan → Code → Verify → GraphPost
+- [AGENTS.md](../AGENTS.md) — Spec → GraphPre → Plan → Code → Local Preflight → Review → Verify → Plan Drift Review → Review Surface Gate → PR GrepLoop → GraphPost
 - [AGENTIC_ENGINEERING.md](AGENTIC_ENGINEERING.md) — workflow diagram

@@ -13,13 +13,18 @@ merge-ready:     yes | no
 scope-green:     yes | no | not-run
 scope:           <touched path prefix or lane name>
 verify-run:      <full command> → exit <code>; <summary tail> | WAIVED (user: …) | not-run
+plan-drift:      pass | fail | not-run
 data-mode:       fixture | production | live | mixed | n/a
+pr-ai-review:    run | unavailable(no-pr|no-connector|not-authenticated) | waived-by-user
+review-surface:  <PR/MR/CL URL or id>; head=<sha>; split-needed yes|no | none(blocked: <reason>) | none(waived-by-user: <reason>)
 known-gaps:      <list> | none | unverified (verify waived)
 ```
 
 **Rules:**
 
-- `merge-ready: yes` requires `scope-green: yes`, verify-run showing **exit 0**, reviewer merge-ready, and graph rebuilt when code changed.
+- `merge-ready: yes` requires `scope-green: yes`, verify-run showing **exit 0**, `plan-drift: pass`, reviewer merge-ready, and either graph rebuilt when graph gates are active or `graph-gate: waived-by-owner` reported while the temporary waiver is active.
+- For PR AI, `merge-ready: yes` requires either `pr-ai-review: run` with a current-head PR/MR/CL review surface using `head=<sha>`, or `pr-ai-review: waived-by-user` with `review-surface: none(waived-by-user: <reason>)`.
+- `unavailable(no-pr|no-connector|not-authenticated)` means the workflow is blocked; it is not a normal successful GrepLoop state.
 - `known-gaps: none` requires **scope-green: yes** and **no open items** in any lane addendum below.
 - User waived verify → `known-gaps: unverified (verify waived)` (never `none` or `none declared`).
 
@@ -30,7 +35,10 @@ merge-ready:     no
 scope-green:     no (5 failed / 39 in tests/test_crypto_lane/)
 scope:           packages/crypto_lane/
 verify-run:      python -m pytest tests/test_crypto_lane/ -q → exit 1; FAILED test_smoke_all_candidates.py
+plan-drift:      fail
 data-mode:       fixture
+pr-ai-review:    unavailable(no-pr)
+review-surface:  none(blocked: tests failed before PR surface)
 known-gaps:      θ convention audit — see packages/crypto_lane/docs/VALIDATION_HONESTY.md
 ```
 
@@ -41,7 +49,10 @@ merge-ready:     no
 scope-green:     not-run
 scope:           workbench/src/run/campaign_runner.py
 verify-run:      WAIVED (user: code-only pass)
+plan-drift:      not-run
 data-mode:       n/a
+pr-ai-review:    unavailable(no-pr)
+review-surface:  none(blocked: user waived verify before PR surface)
 known-gaps:      unverified (verify waived)
 ```
 
@@ -70,7 +81,7 @@ Run the **full scope** below for the area touched. One-file / targeted pytest is
 | `rithmic_gateway/` | `python -m pytest tests/test_rithmic_topology_guards.py tests/test_execution_interface_parity.py -q` |
 | `infrastructure/chi404/`, CHI404 scripts | `python -m pytest tests/test_chi404_canonical_guardrails.py tests/test_chi404_baseline_spec.py tests/test_chi404_memory_upgrade.py -q` **and** `validate_pass_criteria.py` on real log dir when claiming PASS |
 | C++ feature hot path | build `hft_feature_golden` + `python -m pytest tests/test_cpp_feature_golden.py -q` |
-| `graphify-out/` + code graph tooling | `graphify update .` or `scripts/graphify_rebuild.ps1` (exit 0) |
+| `graphify-out/` + code graph tooling | when graph gates are active: `graphify update .` or `scripts/graphify_rebuild.ps1` (exit 0); while owner-waived: report `graph-gate: waived-by-owner` |
 | Repo-wide / ambiguous | `python -m pytest -q` or `scripts/run_agent_verify.ps1` (paste summary) |
 
 When multiple scopes change, each must be scope-green or listed as failed/waived.

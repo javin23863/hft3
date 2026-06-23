@@ -142,7 +142,7 @@ Canonical path for production verify and new `main`-based work per [AGENTS.md](.
 | Item | Value |
 |------|--------|
 | **Only deploy path** | `scripts/vast_deploy_and_verify.ps1` → must print `DEPLOY_CONTRACT_PASS` |
-| **Review stack before commit** | `cavecrew-reviewer` → `python scripts/run_ontology_gate.py` → `python scripts/run_plan_drift_review.py --completed-phase <id>` → pytest |
+| **Review stack before commit** | `cavecrew-reviewer` → `python scripts/run_ontology_gate.py` → pytest → `python scripts/run_plan_drift_review.py --completed-phase <id>` |
 | **Retired launch scripts** | `runtime/vast_*.sh` → `runtime/_deprecated_vast_incident_20260619/` |
 | **NPZ filter** | `VBT_REQUIRE_RUNNABLE_NPZ=1` (default) + `--require-runnable-npz` on unit generator |
 | **Abort policy** | `abort_on_failed_units: true` in declaration + `--abort-on-failed-units` on v2 orchestrator |

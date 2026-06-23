@@ -234,7 +234,7 @@ Do **not** use Google/Gemini for routine rebuilds. Full workflow: [GRAPHIFY_WORK
 ## 11. Agent and review workflow
 
 ```
-Spec ΓåÆ GraphPre ΓåÆ Plan ΓåÆ Code ΓåÆ Review (Karpathy + math) ΓåÆ Verify ΓåÆ GraphPost
+Spec -> GraphPre -> Plan -> Code -> Local Preflight -> Review (Karpathy + math) -> Verify -> Plan Drift Review -> Review Surface Gate -> PR GrepLoop -> GraphPost
 ```
 
 | Doc | Purpose |

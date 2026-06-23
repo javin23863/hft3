@@ -342,6 +342,108 @@ class TestArtifactProvenanceStamping:
             **provenance,
         )
 
+    def test_candidate_and_artifact_carry_unit_context_metadata(self, tmp_path):
+        ctx = make_context(
+            repo_root=str(tmp_path),
+            events_csv_hash="ctx_events_hash_abc",
+            lake_manifest_hash="ctx_lake_hash_xyz",
+        )
+        unit = make_unit(
+            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+            research_clock="context_feature_uplift",
+            context_set_id="target_plus_cross_asset",
+            declared_context_sets=("target_only", "target_plus_cross_asset"),
+        )
+        ohlcv_hash = "deadbeef" * 4
+        filter_result = _valid_filter_result(unit)
+        artifact_path = tmp_path / "scratch" / unit.unit_id / "screening_artifact.json"
+
+        model_entry = {"model_id": unit.model_id, "hyp_id": unit.hyp_id}
+        parsed = build_structured_parsed_hypothesis(unit, model_entry)
+        candidate = _build_candidate_model(unit, model_entry, tmp_path, parsed)
+
+        assert candidate.research_clock == "context_feature_uplift"
+        assert candidate.metadata["context_set_id"] == "target_plus_cross_asset"
+        assert candidate.metadata["declared_context_sets"] == ["target_only", "target_plus_cross_asset"]
+
+        _write_screening_artifact(
+            str(artifact_path),
+            filter_result,
+            unit,
+            model_entry,
+            ctx,
+            ohlcv_hash,
+            RunProfiler(),
+            candidate=candidate,
+        )
+
+        payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+        validate_screening_artifact(payload)
+        assert payload["research_clock"] == "context_feature_uplift"
+        assert payload["allowed_context_set_id_or_null"] == "target_plus_cross_asset"
+        assert payload["declared_context_sets"] == ["target_only", "target_plus_cross_asset"]
+        assert payload["context_ablation_status"] == "not_measured"
+        assert artifact_matches_resume_unit(
+            payload,
+            unit,
+            events_csv_hash="ctx_events_hash_abc",
+            lake_manifest_hash="ctx_lake_hash_xyz",
+            research_split=DEFAULT_RESEARCH_SPLIT,
+            screening_scope="pilot",
+            **resolve_resume_provenance(str(tmp_path), unit, git_commit=ctx.git_commit),
+        )
+
+    def test_resume_rejects_artifact_from_different_context(self, tmp_path):
+        ctx = make_context(
+            repo_root=str(tmp_path),
+            events_csv_hash="ctx_events_hash_abc",
+            lake_manifest_hash="ctx_lake_hash_xyz",
+        )
+        baseline = make_unit(model_id="SPREAD_BLOWOUT_RECOMPRESSION")
+        context_unit = make_unit(
+            model_id=baseline.model_id,
+            hyp_id=baseline.hyp_id,
+            symbol=baseline.symbol,
+            event_id=baseline.event_id,
+            event_type=baseline.event_type,
+            research_clock="context_feature_uplift",
+            context_set_id="target_plus_cross_asset",
+            declared_context_sets=("target_only", "target_plus_cross_asset"),
+        )
+        artifact_path = tmp_path / "scratch" / baseline.unit_id / "screening_artifact.json"
+        model_entry = {"model_id": baseline.model_id, "hyp_id": baseline.hyp_id}
+        parsed = build_structured_parsed_hypothesis(baseline, model_entry)
+        candidate = _build_candidate_model(baseline, model_entry, tmp_path, parsed)
+        _write_screening_artifact(
+            str(artifact_path),
+            _valid_filter_result(baseline),
+            baseline,
+            model_entry,
+            ctx,
+            "deadbeef" * 4,
+            RunProfiler(),
+            candidate=candidate,
+        )
+
+        payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+        assert artifact_matches_resume_unit(
+            payload,
+            baseline,
+            events_csv_hash="ctx_events_hash_abc",
+            lake_manifest_hash="ctx_lake_hash_xyz",
+            research_split=DEFAULT_RESEARCH_SPLIT,
+            screening_scope="pilot",
+            **resolve_resume_provenance(str(tmp_path), baseline, git_commit=ctx.git_commit),
+        )
+        assert not artifact_matches_resume_unit(
+            payload,
+            context_unit,
+            events_csv_hash="ctx_events_hash_abc",
+            lake_manifest_hash="ctx_lake_hash_xyz",
+            research_split=DEFAULT_RESEARCH_SPLIT,
+            screening_scope="pilot",
+        )
+
     def test_screen_paid_batch_artifact_resume_accepts_context_hashes(self, monkeypatch, tmp_path):
         import numpy as np
         from types import SimpleNamespace
@@ -410,6 +512,13 @@ class TestGroupUnitsByBatchKey:
         ctx = make_context()
         u1 = make_unit(unit_id="u1", feature_set_id="fs_a")
         u2 = make_unit(unit_id="u2", feature_set_id="fs_b")
+        groups = group_units_by_batch_key([u1, u2], ctx)
+        assert len(groups) == 2
+
+    def test_different_context_set_splits_groups(self):
+        ctx = make_context()
+        u1 = make_unit(unit_id="u1", context_set_id="target_only")
+        u2 = make_unit(unit_id="u2", context_set_id="target_plus_cross_asset")
         groups = group_units_by_batch_key([u1, u2], ctx)
         assert len(groups) == 2
 

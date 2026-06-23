@@ -7,8 +7,9 @@ alwaysApply: true
 
 Charter: [docs/VALIDATION_HONESTY.md](../../docs/VALIDATION_HONESTY.md) · [AGENTS.md](../../AGENTS.md) · [scripts/check_handoff_status.py](../../scripts/check_handoff_status.py)
 
-- Every handoff includes the status block (`merge-ready`, `scope-green`, `scope`, `verify-run` with **exit code + output tail**, `data-mode`, `known-gaps`).
+- Every handoff includes the status block (`merge-ready`, `scope-green`, `scope`, `verify-run` with **exit code + output tail**, `plan-drift`, `data-mode`, `pr-ai-review`, `review-surface`, `known-gaps`).
 - **Scope-green** = full scope table command passes — not targeted file subsets.
 - User **"don't test"** → `verify-run: WAIVED (user)`, `known-gaps: unverified (verify waived)`, **`merge-ready: no`**; todos stay **pending**.
+- `merge-ready: yes` requires `plan-drift: pass` plus `pr-ai-review: run` on a current-head PR/MR/CL review surface, or `pr-ai-review: waived-by-user` plus `review-surface: none(waived-by-user: <reason>)`; `unavailable(no-pr)` is blocked, not success.
 - `known-gaps: none` only when scope-green **and** no open lane addendum items.
-- Reviewer: flag 🔴 on fake PASS, missing verify tail, or merge-ready without scope-green.
+- Reviewer: flag 🔴 on fake PASS, missing verify tail, missing plan-drift, missing PR AI/review-surface status, or merge-ready without scope-green.

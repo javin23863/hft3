@@ -6,10 +6,22 @@ import hashlib
 import json
 import os
 import re
+import sys
 from datetime import date
 from pathlib import Path
 
-from scripts.paid_data_inventory import DEFAULT_CME_SYMBOLS, build_q001_cme_data_inventory, build_report, write_reports
+import pytest
+
+from scripts.paid_data_inventory import (
+    DATA_SCOPE_SECTIONS,
+    DEFAULT_CME_SYMBOLS,
+    build_data_scope_manifest,
+    build_q001_cme_data_inventory,
+    build_report,
+    main as paid_data_inventory_main,
+    write_data_scope_manifest,
+    write_reports,
+)
 
 
 def _manifest_row(path, event_id, symbol, event_count=1):
@@ -69,6 +81,78 @@ def _valid_backfill_sidecar_payload(**overrides):
     }
     payload.update(overrides)
     return payload
+
+
+def _build_data_scope_report(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    source = tmp_path / "paid" / "data"
+    npz_root = repo / "data" / "npz"
+    npz_root.mkdir(parents=True)
+    source.mkdir(parents=True)
+    (repo / "packages" / "data_system" / "config").mkdir(parents=True)
+    (repo / "runtime").mkdir(parents=True)
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+    monkeypatch.delenv("HFT3_FEATURE_ROOT", raising=False)
+
+    (npz_root / "manifest.json").write_text(
+        json.dumps(
+            [
+                _manifest_row(npz_root / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz", "CPI_2024_09_11_TIGHT", "MES.v.0", 10),
+                _manifest_row(npz_root / "ES.v.0_CPI_2024_09_11_TIGHT_mbo.npz", "CPI_2024_09_11_TIGHT", "ES.v.0", 20),
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (repo / "packages" / "data_system" / "config" / "events.csv").write_text(
+        "event_id,event_type,symbols\n"
+        'CPI_2024_09_11_TIGHT,CPI,"MES.v.0,ES.v.0"\n',
+        encoding="utf-8",
+    )
+    (repo / "packages" / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "mbo_pilot",
+                "status": "completed_with_gaps",
+                "databento_request": {
+                    "dataset": "GLBX.MDP3",
+                    "schema": "mbo",
+                    "stype_in": "continuous",
+                    "range_start_utc": "2024-01-01T00:00:00+00:00",
+                    "range_end_utc": "2024-01-02T00:00:00+00:00",
+                },
+                "coverage": {
+                    "expected_event_symbol_slots": 3,
+                    "present_runnable_npz_slots": 2,
+                    "missing_or_unavailable_slots": 1,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (repo / "runtime" / "data_doctor_report.json").write_text(
+        json.dumps(
+            {
+                "run_utc": "2026-06-23T00:00:00+00:00",
+                "failed": 0,
+                "warned": 1,
+                "checks": [{"name": "options-fixing-mbo-coverage", "status": "WARN"}],
+                "options_lane": {
+                    "fixing_mbo": {
+                        "dates_covered": 3,
+                        "study_dates_covered": 5,
+                        "trade_only_dates": 2,
+                    },
+                    "expiry_coverage": {
+                        "gap_count": 1,
+                        "strict_mbo_gap_count": 4,
+                        "strict_mbo_stale_gap_count": 2,
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return build_report(repo_root=repo, source_root=source, sync=False, dry_run=True, verify_q001_hashes=True)
 
 
 _Q001_RE = re.compile(r"\bQ001\b", flags=re.IGNORECASE)
@@ -244,6 +328,87 @@ def test_paid_data_inventory_writes_runtime_reports(tmp_path):
 
     assert json.loads(json_path.read_text(encoding="utf-8"))["official_coverage_status"] == "NO_RUNNABLE_CME_NPZ"
     assert "Raw DBN/MBP10 files are downloaded backlog" in md_path.read_text(encoding="utf-8")
+
+
+def test_data_scope_manifest_has_all_phase1_sections(tmp_path, monkeypatch):
+    report = _build_data_scope_report(tmp_path, monkeypatch)
+    manifest = build_data_scope_manifest(report)
+
+    assert manifest["manifest_type"] == "data_scope_manifest"
+    assert manifest["phase"] == "phase_1_data_scope_inventory"
+    assert manifest["read_only"] is True
+    assert manifest["network_access"] == "not_used"
+    assert manifest["paid_download_commands"] == []
+    assert manifest["section_order"] == list(DATA_SCOPE_SECTIONS)
+    assert set(manifest["sections"]) == set(DATA_SCOPE_SECTIONS)
+
+    for section_name, section in manifest["sections"].items():
+        assert section_name in DATA_SCOPE_SECTIONS
+        assert set(section) >= {
+            "status",
+            "sources",
+            "availability_summary",
+            "missing_or_sidelined",
+            "model_treatment",
+            "dependency_scope",
+        }
+
+
+def test_data_scope_manifest_marks_context_unavailable_or_not_consumed(tmp_path, monkeypatch):
+    report = _build_data_scope_report(tmp_path, monkeypatch)
+    sections = build_data_scope_manifest(report)["sections"]
+
+    assert sections["cme_mbo"]["status"] == "available_with_dependency_scoped_gaps"
+    assert "mbo_missing_or_unavailable_slots=1" in sections["cme_mbo"]["missing_or_sidelined"]
+    assert sections["cme_options"]["status"] == "sidelined_missing_data"
+    assert "strict_quote_gap_count=4" in sections["cme_options"]["missing_or_sidelined"]
+    assert sections["continuous_session"]["status"] == "sidelined_scope_not_consumed"
+    assert sections["latency_authority"]["status"] == "unavailable_not_consumed"
+
+    not_consumed_sections = ["vix_vvix", "vix_options", "cross_asset", "macro", "latency_authority"]
+    for name in not_consumed_sections:
+        treatment = sections[name]["model_treatment"].lower()
+        missing = " ".join(sections[name]["missing_or_sidelined"]).lower()
+        status = sections[name]["status"]
+        assert "not consumed" in treatment or "not_consumed" in status or "not_consumed" in missing
+
+
+def test_write_data_scope_manifest_writes_runtime_json_and_markdown(tmp_path, monkeypatch):
+    report = _build_data_scope_report(tmp_path, monkeypatch)
+    output_dir = tmp_path / "runtime" / "data_audits"
+
+    json_path, md_path = write_data_scope_manifest(report, output_dir)
+
+    assert json_path == output_dir / "data_scope_manifest.json"
+    assert md_path == output_dir / "data_scope_manifest.md"
+    manifest = json.loads(json_path.read_text(encoding="utf-8"))
+    markdown = md_path.read_text(encoding="utf-8")
+    assert set(manifest["sections"]) == set(DATA_SCOPE_SECTIONS)
+    assert "## latency_authority" in markdown
+    assert "sidelined_scope_not_consumed" in markdown
+
+
+def test_cli_rejects_data_scope_manifest_with_sync(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "paid_data_inventory.py",
+            "--repo-root",
+            str(tmp_path / "repo"),
+            "--source-root",
+            str(tmp_path / "source"),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--sync",
+            "--data-scope-manifest",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        paid_data_inventory_main()
+
+    assert "--data-scope-manifest cannot be combined with --sync" in str(exc.value)
 
 
 def test_paid_data_inventory_reports_missing_data_backfill_sidecar(tmp_path):

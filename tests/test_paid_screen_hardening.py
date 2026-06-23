@@ -658,6 +658,7 @@ class TestBatchingKeyMismatch:
             feature_set_id="fs_v1",
             feature_set_hash="fsh",
             research_clock="scheduled_event",
+            context_set_id="target_only",
             split_scheme_id="wf_2018_2024",
             fees_model_id="cme_fees_v1",
             slippage_model_id="slip_v1",

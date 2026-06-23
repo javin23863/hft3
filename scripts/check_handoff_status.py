@@ -12,7 +12,10 @@ _REQUIRED_KEYS = (
     "scope-green",
     "scope",
     "verify-run",
+    "plan-drift",
     "data-mode",
+    "pr-ai-review",
+    "review-surface",
     "known-gaps",
 )
 
@@ -21,9 +24,33 @@ _FORBIDDEN_WHEN_NOT_GREEN = (
     re.compile(r"\ball todos complete\b", re.I),
     re.compile(r"\bshipped per plan\b", re.I),
 )
+_VALID_PR_AI = {
+    "run",
+    "unavailable(no-pr)",
+    "unavailable(no-connector)",
+    "unavailable(not-authenticated)",
+    "waived-by-user",
+}
+_REVIEW_SURFACE_ID = re.compile(
+    r"\b(?:pr|mr|cl)\s*(?:#|!|:)?\s*\d+\b"
+    r"|https?://\S+/(?:pull|pulls|merge_requests|-/merge_requests|reviews|changes)/\d+",
+    re.I,
+)
+_REVIEW_SURFACE_HEAD = re.compile(
+    r"\bhead=[0-9a-f]{7,40}\b",
+    re.I,
+)
 
 _WAIVED = re.compile(r"WAIVED\s*\(\s*user", re.I)
 _EXIT_OK = re.compile(r"(?:→|exit\s+code\s*:?)\s*0\b|exit\s+0\b", re.I)
+
+
+def _has_current_review_surface(value: str) -> bool:
+    return bool(_REVIEW_SURFACE_ID.search(value) and _REVIEW_SURFACE_HEAD.search(value))
+
+
+def _has_waived_review_surface(value: str) -> bool:
+    return bool(re.fullmatch(r"none\(waived-by-user:\s*\S.*\)", value.strip(), re.I))
 
 
 def parse_status_block(text: str) -> dict[str, str]:
@@ -50,10 +77,32 @@ def validate_status_block(text: str, *, strict_merge: bool = True) -> list[str]:
     merge = block["merge-ready"].lower()
     scope = block["scope-green"].lower()
     verify = block["verify-run"]
+    plan_drift = block["plan-drift"].lower()
+    pr_ai = block["pr-ai-review"].lower()
+    review_surface = block["review-surface"].lower()
     gaps = block["known-gaps"].lower()
 
     if merge not in {"yes", "no"}:
         errors.append(f"merge-ready must be yes|no, got {block['merge-ready']!r}")
+
+    if plan_drift not in {"pass", "fail", "not-run"}:
+        errors.append(
+            "plan-drift must be pass, fail, or not-run"
+        )
+
+    if pr_ai not in _VALID_PR_AI:
+        errors.append(
+            "pr-ai-review must be run, unavailable(no-pr|no-connector|not-authenticated), "
+            "or waived-by-user"
+        )
+    if pr_ai == "run" and not _has_current_review_surface(review_surface):
+        errors.append(
+            "pr-ai-review: run requires a PR/MR/CL review surface id or URL plus head=<sha>"
+        )
+    if pr_ai == "waived-by-user" and not _has_waived_review_surface(review_surface):
+        errors.append(
+            "pr-ai-review: waived-by-user requires review-surface: none(waived-by-user: <reason>)"
+        )
 
     waived = bool(_WAIVED.search(verify))
     scope_yes = scope.startswith("yes")
@@ -69,6 +118,14 @@ def validate_status_block(text: str, *, strict_merge: bool = True) -> list[str]:
             errors.append("merge-ready: yes requires verify-run with exit 0, not WAIVED")
         elif not _EXIT_OK.search(verify):
             errors.append("merge-ready: yes requires verify-run to show exit 0 / passed")
+        if plan_drift != "pass":
+            errors.append("merge-ready: yes requires plan-drift: pass")
+        if pr_ai not in {"run", "waived-by-user"}:
+            errors.append("merge-ready: yes requires PR AI run evidence or explicit owner waiver")
+        if pr_ai == "run" and not _has_current_review_surface(review_surface):
+            errors.append("merge-ready: yes requires a current-head PR/MR/CL review surface")
+        if pr_ai == "waived-by-user" and not _has_waived_review_surface(review_surface):
+            errors.append("merge-ready: yes with PR AI waiver requires explicit review-surface waiver")
 
     if gaps in {"none", "none declared", "none."} and not scope_yes:
         errors.append(

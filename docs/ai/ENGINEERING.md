@@ -23,18 +23,20 @@ Canonical coding style for all human and AI contributors. [AGENTS.md](../../AGEN
 ## 4. Goal-driven execution
 
 - Prefer "write a failing test, then make it pass" over "make it work."
-- Loop Spec → Plan → Code → Verify until criteria met or blocked.
+- Use Spec → Plan → Code → Verify as the inner implementation loop, then continue through the full mandatory agent workflow below.
 - Do not claim done without test output evidence.
 
 ## Agent workflow (mandatory)
 
 ```
-Spec -> Plan -> Delegate -> Code -> Local Preflight -> Review -> Verify -> PR GrepLoop
+Spec -> Plan -> Delegate -> Code -> Local Preflight -> Review -> Verify -> Plan Drift -> Review Surface -> PR GrepLoop
 ```
 
 - **GraphPre/GraphPost:** `waived-by-owner-2026-06-16`; do not run graphify commands until the owner lifts the temporary waiver.
 - **Local preflight:** mandatory bounded task-specific `rg` loop after every repo edit; Codex self-review is not enough; see [GREPLOOP.md](GREPLOOP.md).
-- **PR GrepLoop:** external PR AI review loop (e.g. Greptile, ChatGPT/Codex Connector, GitHub Copilot PR review). A local `rg` pass is not GrepLoop.
+- **Plan Drift:** after verify, compare the executed work against the approved plan before Review Surface Gate.
+- **Review Surface:** after Plan Drift Review passes, create or reuse a PR/MR/CL surface before external PR AI; no surface means blocked with `merge-ready: no` unless the owner explicitly records `pr-ai-review: waived-by-user` plus `review-surface: none(waived-by-user: <reason>)`.
+- **PR GrepLoop:** external PR AI review loop (e.g. Greptile, ChatGPT/Codex Connector, GitHub Copilot PR review) on the current review surface. A local `rg` pass is not GrepLoop.
 - **AI coding delegate:** when token pressure is high, use [CODING_DELEGATE.md](CODING_DELEGATE.md) to draft code from exact supplied context only; Codex still reviews, applies, verifies, and runs PR GrepLoop.
 - **Review:** dual-pass per [REVIEWER_CHARTER.md](../REVIEWER_CHARTER.md).
 - **Verify:** bounded pytest + domain gates — [SHELL_EXECUTION.md](SHELL_EXECUTION.md) (timeouts mandatory).

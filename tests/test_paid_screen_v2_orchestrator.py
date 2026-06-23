@@ -27,12 +27,53 @@ _VALID_UNIT_ARTIFACT = _REPO / "research_cards" / "pipeline_runs" / "paid_batch_
 
 def _copy_valid_unit_artifact(dest: Path, *, repo_root: Path, unit: "PaidScreenUnit") -> None:
     from backtest_pipeline.src.paid_screen_batch import resolve_resume_provenance
+    from backtest_pipeline.src.promotion_gate import RejectedCandidate
+    from backtest_pipeline.src.vectorbt_adapter import FilterResult
     from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
-    payload.update(resolve_resume_provenance(str(repo_root), unit))
+    provenance = resolve_resume_provenance(str(repo_root), unit)
+    if _VALID_UNIT_ARTIFACT.is_file():
+        payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+    else:
+        rejected = RejectedCandidate(
+            candidate_id="fixture_reject",
+            hypothesis_id=unit.model_id,
+            reject_reason="vectorbt_unavailable_fail_closed",
+            metric_values={
+                "symbol": unit.symbol,
+                "base_candidate_id": f"{unit.model_id}|{unit.symbol}|{unit.event_id}|{unit.hyp_id or 0}",
+                "base_candidate_metadata": {
+                    "event_id": unit.event_id,
+                    "symbol": unit.symbol,
+                    "context_set_id": unit.context_set_id,
+                    "allowed_context_set_id": unit.context_set_id,
+                    "declared_context_sets": list(unit.declared_context_sets),
+                },
+            },
+        )
+        payload = FilterResult(
+            backend="vectorbt_unavailable",
+            run_id="paid_batch_ok_fixture",
+            code_commit=provenance["code_commit"],
+            screening_scope="pilot",
+            research_clock=unit.research_clock,
+            target_event_type_or_null=unit.event_type,
+            allowed_context_set_id_or_null=unit.context_set_id,
+            declared_context_sets=list(unit.declared_context_sets),
+            parameter_space_id="ps_fixture",
+            parameter_space_hash="ps_hash_fixture",
+            max_trials=1,
+            max_total_trials=1,
+            max_models=1,
+            max_symbols=1,
+            max_feature_sets=1,
+            rejected=[rejected],
+        ).to_dict()
+        payload["research_split"] = unit.research_split or "discovery_confirmation"
+    payload.update(provenance)
     payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
+    validate_screening_artifact(payload)
     dest.write_text(json.dumps(payload), encoding="utf-8")
 
 
@@ -316,16 +357,58 @@ class TestV2ManifestRelpaths:
         row = v2._result_to_dict(result)
         assert row["screening_artifact_relpath"] == "units/u42/screening_artifact.json"
 
+    def test_fresh_result_row_includes_feature_plane_metadata(self, tmp_path):
+        v2 = _load_v2_module()
+        artifact = tmp_path / "screening_artifact.json"
+        artifact.write_text(
+            json.dumps(
+                {
+                    "research_clock": "context_feature_uplift",
+                    "allowed_context_set_id_or_null": "target_plus_cross_asset",
+                    "declared_context_sets": ["target_only", "target_plus_cross_asset"],
+                    "feature_plane_status": "scheduled_event_only",
+                    "feature_usage_manifest_hash": "feature_hash",
+                    "context_ablation_status": "not_measured",
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = UnitScreeningResult(
+            unit_id="u42",
+            status="OK",
+            screening_artifact_path=str(artifact),
+        )
+        row = v2._result_to_dict(result)
+        assert row["research_clock"] == "context_feature_uplift"
+        assert row["allowed_context_set_id_or_null"] == "target_plus_cross_asset"
+        assert row["declared_context_sets"] == ["target_only", "target_plus_cross_asset"]
+        assert row["feature_usage_manifest_hash"] == "feature_hash"
+
     def test_resume_cached_row_includes_screening_artifact_relpath(self, tmp_path):
         v2 = _load_v2_module()
         unit_dir = tmp_path / "units" / "u9"
         unit_dir.mkdir(parents=True)
         (unit_dir / "screening_artifact.json").write_text(
-            json.dumps({"promoted_ids": [], "rejected_ids": []}),
+            json.dumps(
+                {
+                    "promoted_ids": [],
+                    "rejected_ids": [],
+                    "research_clock": "context_feature_uplift",
+                    "allowed_context_set_id_or_null": "target_plus_cross_asset",
+                    "declared_context_sets": ["target_only", "target_plus_cross_asset"],
+                    "feature_plane_status": "scheduled_event_only",
+                    "feature_usage_manifest_hash": "feature_hash",
+                    "context_ablation_status": "not_measured",
+                }
+            ),
             encoding="utf-8",
         )
         row = v2._resume_cached_unit_result(tmp_path, "u9")
         assert row["screening_artifact_relpath"] == "units/u9/screening_artifact.json"
+        assert row["research_clock"] == "context_feature_uplift"
+        assert row["allowed_context_set_id_or_null"] == "target_plus_cross_asset"
+        assert row["declared_context_sets"] == ["target_only", "target_plus_cross_asset"]
+        assert row["feature_usage_manifest_hash"] == "feature_hash"
 
     def test_aggregate_promoted_ids_accepts_v2_manifest_rows(self, tmp_path):
         run_id = "paid_v2_aggregate"
@@ -742,7 +825,7 @@ class TestResumeArtifactContextValidation:
 
 
 class TestV2RunHashResolution:
-    def test_main_fails_closed_without_hash_sources(self, tmp_path):
+    def test_main_dry_run_without_hash_sources(self, tmp_path):
         v2 = _load_v2_module()
         repo = tmp_path / "repo"
         repo.mkdir()
@@ -772,6 +855,39 @@ class TestV2RunHashResolution:
                 "--repo-root",
                 str(repo),
                 "--dry-run",
+            ],
+        )
+        assert rc == 0
+
+    def test_main_fails_closed_without_hash_sources(self, tmp_path):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": "u1",
+                    "model_id": "HYP_5",
+                    "hyp_id": 5,
+                    "symbol": "MES.v.0",
+                    "event_id": "CPI_2024_09_11_TIGHT",
+                    "event_type": "CPI",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
             ],
         )
         assert rc == 1
