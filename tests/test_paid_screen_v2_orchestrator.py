@@ -909,6 +909,46 @@ class TestV2RunHashResolution:
         )
         assert rc == 1
 
+    def test_main_rejects_invalid_context_set_unit_row_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": "u1",
+                    "model_id": "HYP_5",
+                    "hyp_id": 5,
+                    "symbol": "MES.v.0",
+                    "event_id": "CPI_2024_09_11_TIGHT",
+                    "event_type": "CPI",
+                    "context_set_id": "not_a_context_set",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--dry-run",
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "ERROR: invalid unit row" in captured.err
+        assert "context_set_id_invalid:not_a_context_set" in captured.err
+        assert "not_a_context_set" in captured.err
+        assert "Traceback" not in captured.err
+
     def test_resolve_run_hashes_from_explicit_and_files(self, tmp_path):
         v2 = _load_v2_module()
         repo = tmp_path / "repo"

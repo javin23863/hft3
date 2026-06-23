@@ -1140,6 +1140,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         except KeyError as exc:
             print(f"ERROR: malformed unit row missing field {exc}: {row}", file=sys.stderr)
             return 1
+        except ValueError as exc:
+            print(f"ERROR: invalid unit row {exc}: {row}", file=sys.stderr)
+            return 1
 
     if args.dry_run:
         try:
