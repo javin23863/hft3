@@ -12,6 +12,7 @@ Verifies:
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import tempfile
 from pathlib import Path
@@ -1961,6 +1962,129 @@ class TestFilterCandidates:
             "minimum_sample_size",
         ]
         assert "plateau_score" not in surface
+
+    def test_fallback_pilot_artifact_records_hashes_and_recipe_handoff(
+        self, monkeypatch, tmp_path
+    ):
+        import sys
+        from types import SimpleNamespace
+
+        from backtest_pipeline.src import vectorbt_adapter
+
+        class FakePortfolio:
+            def stats(self):
+                return _complete_vbt_stats(total_trades=10, expectancy=0.01)
+
+        fake_vectorbt = SimpleNamespace(
+            Portfolio=SimpleNamespace(from_signals=lambda *_, **__: FakePortfolio())
+        )
+        monkeypatch.setitem(sys.modules, "vectorbt", fake_vectorbt)
+        monkeypatch.setattr(vectorbt_adapter, "_has_vectorbt", True)
+        monkeypatch.setattr(vectorbt_adapter, "_vectorbt_version", "1.0.0")
+        monkeypatch.setattr(vectorbt_adapter, "_rust_engine_available", False)
+
+        events_csv = tmp_path / "packages" / "data_system" / "config" / "events.csv"
+        events_csv.parent.mkdir(parents=True)
+        events_csv.write_text("event_id,event_type\nSYNTHETIC,CPI\n", encoding="utf-8")
+        lake_manifest = tmp_path / "data" / "manifest.parquet"
+        lake_manifest.parent.mkdir(parents=True)
+        lake_manifest.write_bytes(b"manifest-bytes-for-hash")
+
+        close = 100.0 + np.arange(80, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+        candidate = _mock_candidate("HYP_5", 0.15)
+        candidate.feature_recipe_hash = "recipe_hash_abc"
+        candidate.metadata["feature_recipe_hash"] = "recipe_hash_abc"
+
+        result = filter_candidates(
+            candidates=[candidate],
+            parsed=None,
+            event_id="SYNTHETIC",
+            repo_root=tmp_path,
+            gates=PromotionGate(),
+            param_grid={
+                "signal_threshold": [0.15],
+                "holding_period_bars": [15],
+                "stop_loss_pct": [None],
+                "take_profit_pct": [None],
+            },
+            data_loader=lambda *_: ohlcv,
+            signal_computer=lambda *_: (
+                np.r_[0.0, 1.0, np.zeros(len(ohlcv) - 2)],
+                np.r_[np.zeros(len(ohlcv) - 1), -1.0],
+            ),
+        )
+
+        artifact = result.to_dict()
+        validate_screening_artifact(artifact)
+        assert artifact["bar_construction_id"] == "ohlcv_1m_from_npz_or_supplied_array"
+        assert artifact["events_csv_hash_or_not_applicable"] == hashlib.sha256(
+            events_csv.read_bytes()
+        ).hexdigest()[:32]
+        assert artifact["lake_manifest_hash"] == hashlib.sha256(
+            lake_manifest.read_bytes()
+        ).hexdigest()[:32]
+        assert artifact["feature_recipe_hash"] == "recipe_hash_abc"
+        assert artifact["hftbacktest_handoff_status"] == "recipe_hash_handoff_ready"
+
+    def test_fallback_pilot_does_not_claim_handoff_when_gate_rejects_all(
+        self, monkeypatch, tmp_path
+    ):
+        import sys
+        from types import SimpleNamespace
+
+        from backtest_pipeline.src import vectorbt_adapter
+
+        class FakePortfolio:
+            def stats(self):
+                return _complete_vbt_stats(total_trades=10, expectancy=0.01)
+
+        fake_vectorbt = SimpleNamespace(
+            Portfolio=SimpleNamespace(from_signals=lambda *_, **__: FakePortfolio())
+        )
+        monkeypatch.setitem(sys.modules, "vectorbt", fake_vectorbt)
+        monkeypatch.setattr(vectorbt_adapter, "_has_vectorbt", True)
+        monkeypatch.setattr(vectorbt_adapter, "_vectorbt_version", "1.0.0")
+        monkeypatch.setattr(vectorbt_adapter, "_rust_engine_available", False)
+
+        events_csv = tmp_path / "packages" / "data_system" / "config" / "events.csv"
+        events_csv.parent.mkdir(parents=True)
+        events_csv.write_text("event_id,event_type\nSYNTHETIC,CPI\n", encoding="utf-8")
+        lake_manifest = tmp_path / "data" / "manifest.parquet"
+        lake_manifest.parent.mkdir(parents=True)
+        lake_manifest.write_bytes(b"manifest-bytes-for-hash")
+
+        close = 100.0 + np.arange(80, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+        candidate = _mock_candidate("HYP_5", 0.15)
+        candidate.feature_recipe_hash = "recipe_hash_abc"
+        candidate.metadata["feature_recipe_hash"] = "recipe_hash_abc"
+
+        result = filter_candidates(
+            candidates=[candidate],
+            parsed=None,
+            event_id="SYNTHETIC",
+            repo_root=tmp_path,
+            gates=PromotionGate(min_trades=999),
+            param_grid={
+                "signal_threshold": [0.15],
+                "holding_period_bars": [15],
+                "stop_loss_pct": [None],
+                "take_profit_pct": [None],
+            },
+            data_loader=lambda *_: ohlcv,
+            signal_computer=lambda *_: (
+                np.r_[0.0, 1.0, np.zeros(len(ohlcv) - 2)],
+                np.r_[np.zeros(len(ohlcv) - 1), -1.0],
+            ),
+        )
+
+        artifact = result.to_dict()
+        validate_screening_artifact(artifact)
+        assert artifact["promoted_count"] == 0
+        assert artifact["rejected_count"] == 1
+        assert artifact["feature_recipe_hash"] == "recipe_hash_abc"
+        assert "hftbacktest_handoff_status" not in artifact
 
     def test_vbt2_pilot_default_gate_passes_on_official_stats_only(self, monkeypatch, tmp_path):
         import sys

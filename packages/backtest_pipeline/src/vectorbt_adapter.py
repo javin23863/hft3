@@ -2920,6 +2920,73 @@ def _resolve_research_clock(candidates: List[CandidateModel]) -> str:
     return RESEARCH_CLOCK_SCHEDULED_EVENT
 
 
+def _candidate_feature_recipe_hash(candidate: CandidateModel) -> str:
+    metadata = candidate.metadata or {}
+    return str(
+        getattr(candidate, "feature_recipe_hash", None)
+        or metadata.get("feature_recipe_hash")
+        or ""
+    ).strip()
+
+
+def _promoted_feature_recipe_hash(candidate: PromotedCandidate) -> str:
+    metrics = candidate.vectorbt_results or {}
+    metadata = metrics.get("base_candidate_metadata")
+    return str(
+        metrics.get("feature_recipe_hash")
+        or (metadata.get("feature_recipe_hash") if isinstance(metadata, Mapping) else "")
+        or ""
+    ).strip()
+
+
+def _is_pilot_handoff_scope(screening_scope: str) -> bool:
+    return _normalise_screening_scope(screening_scope) in {"pilot", "pilot_scope"}
+
+
+def _apply_filter_result_provenance_metadata(
+    result: FilterResult,
+    candidates: List[CandidateModel],
+    *,
+    screening_scope: str,
+    repo_root: Path,
+) -> None:
+    from backtest_pipeline.src.paid_screen_profiling import (
+        resolve_events_csv_hash,
+        resolve_lake_manifest_hash,
+    )
+
+    try:
+        result.lake_manifest_hash = resolve_lake_manifest_hash(
+            explicit_hash=None,
+            repo_root=repo_root,
+        )
+    except (OSError, ValueError):
+        pass
+    try:
+        result.events_csv_hash_or_not_applicable = resolve_events_csv_hash(
+            explicit_hash=None,
+            events_csv=None,
+            repo_root=repo_root,
+        )
+    except (OSError, ValueError):
+        pass
+    promoted_recipe_hash = ""
+    for prom in result.promoted:
+        promoted_recipe_hash = _promoted_feature_recipe_hash(prom)
+        if promoted_recipe_hash:
+            break
+    if promoted_recipe_hash:
+        result.feature_recipe_hash = promoted_recipe_hash
+    elif not result.feature_recipe_hash:
+        for cand in candidates:
+            recipe_hash = _candidate_feature_recipe_hash(cand)
+            if recipe_hash:
+                result.feature_recipe_hash = recipe_hash
+                break
+    if _is_pilot_handoff_scope(screening_scope) and promoted_recipe_hash:
+        result.hftbacktest_handoff_status = "recipe_hash_handoff_ready"
+
+
 def _apply_fs_v1_screen_metadata(
     result: FilterResult,
     ctx: Any,
@@ -2989,38 +3056,6 @@ def _apply_fs_v1_screen_metadata(
         "fs_v1_row_loop_visible_index_j_with_ts[j]<=ts[i]-feature_latency_ns;"
         " signals shifted one executable bar before VectorBT portfolio simulation"
     )
-    from backtest_pipeline.src.paid_screen_profiling import (
-        resolve_events_csv_hash,
-        resolve_lake_manifest_hash,
-    )
-
-    try:
-        result.lake_manifest_hash = resolve_lake_manifest_hash(
-            explicit_hash=None,
-            repo_root=repo_root,
-        )
-    except (OSError, ValueError):
-        pass
-    try:
-        result.events_csv_hash_or_not_applicable = resolve_events_csv_hash(
-            explicit_hash=None,
-            events_csv=None,
-            repo_root=repo_root,
-        )
-    except (OSError, ValueError):
-        pass
-    for cand in candidates:
-        recipe_hash = str(
-            getattr(cand, "feature_recipe_hash", None)
-            or cand.metadata.get("feature_recipe_hash")
-            or ""
-        ).strip()
-        if recipe_hash:
-            result.feature_recipe_hash = recipe_hash
-            break
-    scope = str(screening_scope or "").lower()
-    if scope in {"pilot", "pilot-scope", "pilot_scope"} and result.feature_recipe_hash:
-        result.hftbacktest_handoff_status = "recipe_hash_handoff_ready"
 
 
 def filter_candidates(
@@ -3219,13 +3254,20 @@ def filter_candidates(
             screening_scope=screening_scope,
             repo_root=repo_root,
         )
-    return apply_promotion_gates(
+    result = apply_promotion_gates(
         result,
         screening_scope=screening_scope,
         gates=gates,
         repo_root=repo_root,
         persist_promotions=persist_promotions,
     )
+    _apply_filter_result_provenance_metadata(
+        result,
+        candidates,
+        screening_scope=screening_scope,
+        repo_root=repo_root,
+    )
+    return result
 
 
 def apply_promotion_gates(
