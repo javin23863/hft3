@@ -325,6 +325,37 @@ class TestScreenPaidBatch:
             assert result.status == "OK"
             assert Path(result.screening_artifact_path).parent.parent == scratch
 
+    def test_screen_paid_batch_reports_artifact_validation_error(self, monkeypatch, tmp_path):
+        import numpy as np
+        from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult, ScreeningArtifactError
+
+        def fake_write(*_args, **_kwargs):
+            raise ScreeningArtifactError("screening_artifact_hash mismatch")
+
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._write_screening_artifact",
+            fake_write,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            lambda **kwargs: FilterResult(backend="vectorbt", run_id="artifact_error"),
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.apply_promotion_gates",
+            lambda result, **kwargs: result,
+        )
+
+        ctx = make_context(repo_root=str(tmp_path))
+        cache = BoundedLRUCache(max_entries=4, max_memory_mb=64)
+        cache.put(_batch_cache_key(ctx), np.array([[1, 2, 3, 4, 5, 1_700_000_000_000.0]]))
+
+        results = screen_paid_batch([make_unit()], ctx, data_cache=cache, run_screening=True)
+
+        assert len(results) == 1
+        assert results[0].status == "ERROR"
+        assert "screening_artifact_hash mismatch" in str(results[0].error)
+
     def test_default_scratch_dir_under_runtime_not_pipeline_runs(self):
         repo = "/repo/root"
         scratch_dir = _worker_scratch_artifact_dir(repo, "u99")

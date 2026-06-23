@@ -23,6 +23,7 @@ from backtest_pipeline.src.paid_screen_profiling import RunProfiler, DEFAULT_RES
 from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
 from backtest_pipeline.src.paid_screen_matrix import run_vectorbt_simulation_matrix
 from backtest_pipeline.src.vectorbt_adapter import (
+    ScreeningArtifactError,
     apply_filter_result_provenance_metadata,
     apply_promotion_gates,
 )
@@ -639,7 +640,7 @@ def _write_screening_artifact(
 
     from backtest_pipeline.src.research_pipeline_stages import annotate_promoted_screening_handoffs
 
-    annotate_promoted_screening_handoffs(artifact, artifact_path=artifact_path)
+    annotate_promoted_screening_handoffs(serializable, artifact_path=artifact_path)
 
     return str(serializable.get("screening_artifact_hash") or "")
 
@@ -860,11 +861,19 @@ def screen_paid_batch(
                 artifact_path = os.path.join(artifact_dir, "screening_artifact.json")
 
                 # Write the artifact
-                artifact_hash = _write_screening_artifact(
-                    artifact_path, filter_result,
-                    unit, model_entry, context, ohlcv_hash, profiler,
-                    candidate=candidate,
-                )
+                try:
+                    artifact_hash = _write_screening_artifact(
+                        artifact_path, filter_result,
+                        unit, model_entry, context, ohlcv_hash, profiler,
+                        candidate=candidate,
+                    )
+                except ScreeningArtifactError as exc:
+                    results.append(UnitScreeningResult(
+                        unit_id=unit.unit_id,
+                        status="ERROR",
+                        error=str(exc),
+                    ))
+                    continue
 
                 result = UnitScreeningResult(
                     unit_id=unit.unit_id,
