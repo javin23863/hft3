@@ -109,7 +109,7 @@ def test_generate_rejects_unknown_context_set(tmp_path: Path) -> None:
 def test_generate_rejects_declared_context_sets_missing_current_context(tmp_path: Path) -> None:
     from scripts.generate_vbt_paid_units_jsonl import _parse_declared_context_sets
 
-    with pytest.raises(ValueError, match="declared_context_sets must include context_set_id"):
+    with pytest.raises(ValueError, match="declared_context_sets_missing_context_set_id"):
         _parse_declared_context_sets("target_only", "target_plus_macro")
 
 
@@ -848,7 +848,7 @@ def test_all_active_holdout_split_includes_holdout_when_explicit(tmp_path: Path)
 def test_vast_full_script_requires_declaration_before_workers() -> None:
     script = (REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh").read_text(encoding="utf-8")
     assert "vbt_full_run_declaration.json" in script
-    assert 'RESEARCH_SPLIT="${VBT_RESEARCH_SPLIT:-}"' in script
+    assert 'RESEARCH_SPLIT="${VBT_RESEARCH_SPLIT:-discovery_confirmation}"' in script
     assert 'if [[ -n "$RESEARCH_SPLIT" ]]' in script
     assert "stage_a_survivors_cme_m6_runnable_npz" in script
     assert "expected_work_units" in script

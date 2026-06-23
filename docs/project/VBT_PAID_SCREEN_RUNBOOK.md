@@ -295,7 +295,7 @@ scope:           VectorBT paid screen
 verify-run:      <command> -> exit <code>; <summary tail>
 plan-drift:      pass | fail | not-run
 data-mode:       fixture | production | live | mixed | n/a
-pr-ai-review:    run | unavailable(no-pr|no-connector|not-authenticated) | waived-by-user
+pr-ai-review:    pending | run | unavailable(no-pr|no-connector|not-authenticated) | waived-by-user
 review-surface:  <PR/MR/CL URL or id>; head=<sha>; split-needed yes|no | none(blocked: <reason>) | none(waived-by-user: <reason>)
 phase: A|B|C|D|E
 pilot-artifact: <path>

@@ -826,7 +826,7 @@ ontology-gate:   pass | fail | n/a | not-run
 verify-run:      <command> -> exit <code>; <summary tail> | WAIVED | not-run
 plan-drift:      pass | fail | not-run
 review-surface:  <PR/MR/CL URL or id>; head=<sha>; split-needed yes|no | none(blocked: <reason>) | none(waived-by-user: <reason>)
-pr-ai-review:    run | unavailable(no-pr|no-connector|not-authenticated) | waived-by-user
+pr-ai-review:    pending | run | unavailable(no-pr|no-connector|not-authenticated) | waived-by-user
 known-gaps:      <list> | none | unverified
 ```
 

@@ -226,6 +226,37 @@ known-gaps:      connector status malformed
     assert any("pr-ai-review must be" in e for e in errs)
 
 
+def test_pr_ai_pending_allowed_before_merge_ready():
+    text = """
+merge-ready:     no
+scope-green:     yes
+scope:           workbench/
+verify-run:      python -m pytest tests/test_workbench/ -q -> exit 0
+plan-drift:      pass
+data-mode:       fixture
+pr-ai-review:    pending
+review-surface:  PR #1; head=abcdef0; split-needed no
+known-gaps:      PR AI review still running
+"""
+    assert not validate_status_block(text)
+
+
+def test_merge_ready_yes_rejects_pr_ai_pending():
+    text = """
+merge-ready:     yes
+scope-green:     yes
+scope:           workbench/
+verify-run:      python -m pytest tests/test_workbench/ -q -> exit 0
+plan-drift:      pass
+data-mode:       fixture
+pr-ai-review:    pending
+review-surface:  PR #1; head=abcdef0; split-needed no
+known-gaps:      none
+"""
+    errs = validate_status_block(text)
+    assert any("PR AI run evidence" in e for e in errs)
+
+
 def test_merge_ready_yes_allows_explicit_pr_ai_waiver():
     text = """
 merge-ready:     yes

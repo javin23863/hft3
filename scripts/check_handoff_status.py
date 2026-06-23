@@ -25,6 +25,7 @@ _FORBIDDEN_WHEN_NOT_GREEN = (
     re.compile(r"\bshipped per plan\b", re.I),
 )
 _VALID_PR_AI = {
+    "pending",
     "run",
     "unavailable(no-pr)",
     "unavailable(no-connector)",
@@ -92,8 +93,8 @@ def validate_status_block(text: str, *, strict_merge: bool = True) -> list[str]:
 
     if pr_ai not in _VALID_PR_AI:
         errors.append(
-            "pr-ai-review must be run, unavailable(no-pr|no-connector|not-authenticated), "
-            "or waived-by-user"
+            "pr-ai-review must be pending, run, "
+            "unavailable(no-pr|no-connector|not-authenticated), or waived-by-user"
         )
     if pr_ai == "run" and not _has_current_review_surface(review_surface):
         errors.append(

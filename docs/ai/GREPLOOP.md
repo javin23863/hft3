@@ -219,7 +219,7 @@ Every handoff after a repo edit must include:
 local-preflight: run | waived-by-user
 patterns: <patterns searched>
 hits: 0 | <summary>
-pr-ai-review: run | unavailable(no-pr|no-connector|not-authenticated) | waived-by-user
+pr-ai-review: pending | run | unavailable(no-pr|no-connector|not-authenticated) | waived-by-user
 review-surface: <PR/MR/CL URL or id>; head=<sha>; split-needed yes|no | none(blocked: <reason>) | none(waived-by-user: <reason>)
 remaining-risk: <none or blocker>
 ```

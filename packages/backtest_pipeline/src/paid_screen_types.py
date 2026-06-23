@@ -77,19 +77,10 @@ class PaidScreenUnit:
     def __post_init__(self) -> None:
         research_clock = validate_research_clock(self.research_clock)
         context_set_id = validate_context_set_id(self.context_set_id)
-        declared_values = self.declared_context_sets or ()
-        declared = tuple(
-            validate_context_set_id(value, context="declared_context_sets")
-            for value in declared_values
-            if str(value).strip()
+        declared = self._parse_declared_context_sets(
+            self.declared_context_sets,
+            context_set_id,
         )
-        if not declared:
-            declared = self._default_declared_context_sets(context_set_id)
-        if context_set_id not in declared:
-            raise ContextSetError(
-                "declared_context_sets_missing_context_set_id:"
-                f"{context_set_id}"
-            )
         object.__setattr__(self, "research_clock", research_clock)
         object.__setattr__(self, "context_set_id", context_set_id)
         object.__setattr__(self, "declared_context_sets", declared)
@@ -107,6 +98,8 @@ class PaidScreenUnit:
             identity_fields["research_clock"] = self.research_clock
         if self.context_set_id != TARGET_ONLY_CONTEXT_SET_ID:
             identity_fields["context_set_id"] = self.context_set_id
+        if self.ablation_group_id:
+            identity_fields["ablation_group_id"] = self.ablation_group_id
         payload = json.dumps(identity_fields, sort_keys=True)
         return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
@@ -124,7 +117,19 @@ class PaidScreenUnit:
             parsed = tuple(part.strip() for part in value.split(",") if part.strip())
         else:
             parsed = tuple(str(part).strip() for part in value if str(part).strip())
-        return parsed or cls._default_declared_context_sets(context_set_id)
+        declared = tuple(
+            dict.fromkeys(
+                validate_context_set_id(part, context="declared_context_sets")
+                for part in parsed
+            )
+        )
+        declared = declared or cls._default_declared_context_sets(context_set_id)
+        if context_set_id not in declared:
+            raise ContextSetError(
+                "declared_context_sets_missing_context_set_id:"
+                f"{context_set_id}"
+            )
+        return declared
 
     @classmethod
     def from_jsonl_row(cls, row: dict) -> "PaidScreenUnit":
@@ -147,7 +152,7 @@ class PaidScreenUnit:
             thesis=row.get("thesis", ""),
             research_clock=row.get("research_clock") or "scheduled_event",
             context_set_id=context_set_id,
-            declared_context_sets=cls._parse_declared_context_sets(row.get("declared_context_sets"), context_set_id),
+            declared_context_sets=row.get("declared_context_sets"),
             ablation_group_id=row.get("ablation_group_id"),
             negative_control_policy=row.get("negative_control_policy"),
         )

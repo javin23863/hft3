@@ -166,6 +166,15 @@ class TestPaidScreenUnit:
         u2 = PaidScreenUnit.from_jsonl_row(row2)
         assert u1.identity_hash() != u2.identity_hash()
 
+    def test_identity_hash_differs_on_ablation_group_id(self):
+        row1 = {"unit_id": "u1", "model_id": "HYP_5", "hyp_id": 5,
+                "symbol": "MES.v.0", "event_id": "CPI_2024_09_11_TIGHT",
+                "event_type": "CPI", "ablation_group_id": "macro_on"}
+        row2 = dict(row1, ablation_group_id="macro_off")
+        u1 = PaidScreenUnit.from_jsonl_row(row1)
+        u2 = PaidScreenUnit.from_jsonl_row(row2)
+        assert u1.identity_hash() != u2.identity_hash()
+
     def test_thesis_not_used_for_identity(self):
         """Thesis is metadata — different thesis, same model = same identity hash."""
         row1 = {"unit_id": "u1", "model_id": "HYP_5", "hyp_id": 5,

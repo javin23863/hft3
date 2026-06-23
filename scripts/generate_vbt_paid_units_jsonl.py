@@ -33,6 +33,7 @@ from backtest_pipeline.src.research_clock import (
     validate_research_clock,
 )
 from backtest_pipeline.src.paid_screen_types import (
+    PaidScreenUnit,
     TARGET_ONLY_CONTEXT_SET_ID,
     validate_context_set_id,
 )
@@ -142,25 +143,7 @@ def _unit_id_for_context(
 
 
 def _parse_declared_context_sets(raw: Optional[str], context_set_id: str) -> List[str]:
-    if raw:
-        values = [
-            validate_context_set_id(item, context="declared_context_sets")
-            for item in raw.split(",")
-            if item.strip()
-        ]
-    elif context_set_id == TARGET_ONLY_CONTEXT_SET_ID:
-        values = [TARGET_ONLY_CONTEXT_SET_ID]
-    else:
-        values = [TARGET_ONLY_CONTEXT_SET_ID, context_set_id]
-    deduped = list(dict.fromkeys(values))
-    if not deduped:
-        raise ValueError("declared_context_sets must be non-empty")
-    if context_set_id not in deduped:
-        raise ValueError(
-            "declared_context_sets must include context_set_id "
-            f"{context_set_id!r}"
-        )
-    return deduped
+    return list(PaidScreenUnit._parse_declared_context_sets(raw, context_set_id))
 
 
 def _default_negative_control_policy(research_clock: str, context_set_id: str) -> Dict[str, str]:
