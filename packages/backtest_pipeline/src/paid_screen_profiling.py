@@ -18,7 +18,11 @@ import hashlib
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-from backtest_pipeline.src.paid_screen_types import PaidScreenUnit
+from backtest_pipeline.src.paid_screen_types import (
+    PaidScreenUnit,
+    RESEARCH_CLOCK_SCHEDULED_EVENT,
+    TARGET_ONLY_CONTEXT_SET_ID,
+)
 from backtest_pipeline.src.research_clock import ResearchClockError, validate_research_clock
 
 DEFAULT_RESEARCH_SPLIT = "discovery_confirmation"
@@ -418,10 +422,10 @@ def _artifact_unit_context_matches(payload: Mapping[str, Any], unit: PaidScreenU
     artifact_clock = _canonical_clock(payload.get("research_clock"))
     if artifact_clock and expected_clock and artifact_clock != expected_clock:
         return False
-    if not artifact_clock and expected_clock != "scheduled_event":
+    if not artifact_clock and expected_clock != RESEARCH_CLOCK_SCHEDULED_EVENT:
         return False
 
-    expected_context = str(unit.context_set_id or "target_only").strip()
+    expected_context = str(unit.context_set_id or TARGET_ONLY_CONTEXT_SET_ID).strip()
     artifact_context = str(
         payload.get("allowed_context_set_id_or_null")
         or payload.get("context_set_id")
@@ -435,14 +439,14 @@ def _artifact_unit_context_matches(payload: Mapping[str, Any], unit: PaidScreenU
                 break
     if artifact_context and artifact_context != expected_context:
         return False
-    if not artifact_context and expected_context != "target_only":
+    if not artifact_context and expected_context != TARGET_ONLY_CONTEXT_SET_ID:
         return False
 
     artifact_declared = _context_list(payload.get("declared_context_sets"))
     expected_declared = list(unit.declared_context_sets)
     if artifact_declared and sorted(artifact_declared) != sorted(expected_declared):
         return False
-    if not artifact_declared and expected_context != "target_only":
+    if not artifact_declared and expected_context != TARGET_ONLY_CONTEXT_SET_ID:
         return False
     return True
 
