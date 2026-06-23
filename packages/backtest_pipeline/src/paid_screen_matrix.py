@@ -47,7 +47,6 @@ import numpy as np
 from backtest_pipeline.src.vectorbt_adapter import (
     DEFAULT_PARAM_GRID,
     _append_budget_skipped_trials,
-    _apply_filter_result_provenance_metadata,
     _apply_holding_period_exit,
     _base_candidate_metric_values,
     _build_run_budget,
@@ -84,13 +83,24 @@ def _finalize_matrix_result(
     screening_scope: str,
     repo_root: Path,
 ) -> FilterResult:
-    _apply_filter_result_provenance_metadata(
-        result,
-        candidates,
-        screening_scope=screening_scope,
-        repo_root=repo_root,
-        stamp_handoff_status=False,
-    )
+    if not result.feature_recipe_hash:
+        promoted_recipe_hash = next(
+            (
+                str(prom.vectorbt_results.get("feature_recipe_hash") or "").strip()
+                for prom in result.promoted
+                if str(prom.vectorbt_results.get("feature_recipe_hash") or "").strip()
+            ),
+            "",
+        )
+        candidate_recipe_hash = next(
+            (
+                str(getattr(candidate, "feature_recipe_hash", "") or "").strip()
+                for candidate in candidates
+                if str(getattr(candidate, "feature_recipe_hash", "") or "").strip()
+            ),
+            "",
+        )
+        result.feature_recipe_hash = promoted_recipe_hash or candidate_recipe_hash
     return result
 
 

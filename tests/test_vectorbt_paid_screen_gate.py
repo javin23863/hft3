@@ -558,6 +558,30 @@ def test_require_runnable_npz_uses_lake_manifest_parquet_authority(
     assert [unit["unit_id"] for unit in kept] == ["keep"]
 
 
+def test_require_runnable_npz_rejects_manifest_outside_lake_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Operator-provided HFT3_MANIFEST_PATH must not be silently ignored."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    external_manifest = tmp_path / "cross_mount" / "manifest.parquet"
+    external_manifest.parent.mkdir()
+    external_manifest.write_bytes(b"placeholder")
+    stray = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(stray, data=np.arange(3, dtype=np.int64))
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(external_manifest))
+
+    with pytest.raises(RuntimeError, match="HFT3_MANIFEST_PATH rejected"):
+        generator._filter_runnable_npz_units(
+            [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
+
+
 def test_require_runnable_npz_derives_npz_from_raw_parquet_output_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

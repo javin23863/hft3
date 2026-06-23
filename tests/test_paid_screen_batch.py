@@ -206,6 +206,41 @@ class TestScreenPaidBatch:
         assert budget is not None
         assert budget.max_wall_clock_seconds == 42
 
+    def test_screen_paid_batch_owns_single_provenance_stamp(self, monkeypatch):
+        import numpy as np
+        from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult
+
+        calls: list[dict] = []
+
+        def _fake_matrix(**kwargs):
+            return FilterResult(backend="vectorbt", run_id="run_test")
+
+        def _fake_stamp(*args, **kwargs):
+            calls.append(dict(kwargs))
+
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            _fake_matrix,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.apply_promotion_gates",
+            lambda result, **kwargs: result,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._apply_filter_result_provenance_metadata",
+            _fake_stamp,
+        )
+
+        ctx = make_context(run_budget={})
+        cache = BoundedLRUCache(max_entries=4, max_memory_mb=64)
+        cache.put(_batch_cache_key(ctx), np.array([[1, 2, 3, 4, 5, 1_700_000_000_000.0]]))
+
+        screen_paid_batch([make_unit()], ctx, data_cache=cache, run_screening=True)
+
+        assert len(calls) == 1
+        assert calls[0]["screening_scope"] == ctx.screening_scope
+
     def test_screen_paid_batch_default_run_budget_has_no_wall_clock_cap(self, monkeypatch):
         from types import SimpleNamespace
         from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache

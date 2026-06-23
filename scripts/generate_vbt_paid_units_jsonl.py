@@ -565,6 +565,11 @@ def _manifest_paths(root: Path) -> List[Path]:
             paths.append(path)
             if path.suffix == ".parquet":
                 return paths
+        else:
+            raise RuntimeError(
+                "HFT3_MANIFEST_PATH rejected: manifest must live under "
+                f"HFT3_NPZ_ROOT or its parent; path={path} root={root}"
+            )
     catalog = root / "manifest.json"
     if not any(p.resolve() == catalog.resolve() for p in paths if p.exists()):
         paths.append(catalog)
