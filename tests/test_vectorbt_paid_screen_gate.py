@@ -99,6 +99,23 @@ def test_generate_context_units_have_distinct_identity_and_control_policy(tmp_pa
     assert context_row["negative_control_policy"]["status"] == "required_before_context_claim"
 
 
+def test_generator_negative_control_policy_uses_shared_default() -> None:
+    from backtest_pipeline.src.paid_screen_types import default_negative_control_policy
+    from scripts.generate_vbt_paid_units_jsonl import _default_negative_control_policy
+
+    assert _default_negative_control_policy(
+        "scheduled_event",
+        "target_only",
+    ) == default_negative_control_policy("scheduled_event", "target_only")
+    assert _default_negative_control_policy(
+        "context_feature_uplift",
+        "target_plus_cross_asset",
+    ) == default_negative_control_policy(
+        "context_feature_uplift",
+        "target_plus_cross_asset",
+    )
+
+
 def test_generate_rejects_unknown_context_set(tmp_path: Path) -> None:
     from scripts.generate_vbt_paid_units_jsonl import _normalize_context_set_id
 

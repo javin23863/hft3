@@ -35,6 +35,7 @@ from backtest_pipeline.src.research_clock import (
 from backtest_pipeline.src.paid_screen_types import (
     PaidScreenUnit,
     TARGET_ONLY_CONTEXT_SET_ID,
+    default_negative_control_policy,
     validate_context_set_id,
 )
 
@@ -147,12 +148,7 @@ def _parse_declared_context_sets(raw: Optional[str], context_set_id: str) -> Lis
 
 
 def _default_negative_control_policy(research_clock: str, context_set_id: str) -> Dict[str, str]:
-    if research_clock == RESEARCH_CLOCK_SCHEDULED_EVENT and context_set_id == TARGET_ONLY_CONTEXT_SET_ID:
-        return {"status": "not_required", "reason": "target_only_baseline"}
-    return {
-        "status": "required_before_context_claim",
-        "reason": "non_target_context_or_non_scheduled_clock",
-    }
+    return default_negative_control_policy(research_clock, context_set_id)
 
 
 def _parse_negative_control_policy(

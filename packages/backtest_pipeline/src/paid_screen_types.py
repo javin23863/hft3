@@ -39,6 +39,22 @@ class ContextSetError(ValueError):
     """Raised when a context-set label is outside the closed plan ontology."""
 
 
+def default_negative_control_policy(
+    research_clock: str,
+    context_set_id: str,
+) -> dict[str, str]:
+    """Return the implied negative-control policy for a unit context."""
+    if (
+        research_clock == RESEARCH_CLOCK_SCHEDULED_EVENT
+        and context_set_id == TARGET_ONLY_CONTEXT_SET_ID
+    ):
+        return {"status": "not_required", "reason": "target_only_baseline"}
+    return {
+        "status": "required_before_context_claim",
+        "reason": "non_target_context_or_non_scheduled_clock",
+    }
+
+
 def validate_context_set_id(value: object, *, context: str = "context_set_id") -> str:
     """Return a canonical context-set ID or raise ``ContextSetError``."""
     normalized = str(value or "").strip().lower().replace("-", "_")
@@ -109,7 +125,7 @@ class PaidScreenUnit:
         if (
             self.negative_control_policy is not None
             and self.negative_control_policy
-            != self._default_negative_control_policy(self.research_clock, self.context_set_id)
+            != default_negative_control_policy(self.research_clock, self.context_set_id)
         ):
             identity_fields["negative_control_policy"] = self.negative_control_policy
         payload = json.dumps(identity_fields, sort_keys=True)
@@ -120,21 +136,6 @@ class PaidScreenUnit:
         if context_set_id == TARGET_ONLY_CONTEXT_SET_ID:
             return (TARGET_ONLY_CONTEXT_SET_ID,)
         return (TARGET_ONLY_CONTEXT_SET_ID, context_set_id)
-
-    @staticmethod
-    def _default_negative_control_policy(
-        research_clock: str,
-        context_set_id: str,
-    ) -> dict[str, str]:
-        if (
-            research_clock == RESEARCH_CLOCK_SCHEDULED_EVENT
-            and context_set_id == TARGET_ONLY_CONTEXT_SET_ID
-        ):
-            return {"status": "not_required", "reason": "target_only_baseline"}
-        return {
-            "status": "required_before_context_claim",
-            "reason": "non_target_context_or_non_scheduled_clock",
-        }
 
     @classmethod
     def _parse_declared_context_sets(cls, value: Any, context_set_id: str) -> tuple[str, ...]:
