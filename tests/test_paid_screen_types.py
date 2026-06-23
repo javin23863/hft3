@@ -115,6 +115,21 @@ class TestPaidScreenUnit:
         }, sort_keys=True)
         assert u.identity_hash() == hashlib.sha256(legacy_payload.encode()).hexdigest()[:16]
 
+    def test_identity_hash_ignores_explicit_default_negative_control_policy(self):
+        row1 = {"unit_id": "u1", "model_id": "HYP_5", "hyp_id": 5,
+                "symbol": "MES.v.0", "event_id": "CPI_2024_09_11_TIGHT",
+                "event_type": "CPI"}
+        row2 = dict(
+            row1,
+            negative_control_policy={
+                "status": "not_required",
+                "reason": "target_only_baseline",
+            },
+        )
+        u1 = PaidScreenUnit.from_jsonl_row(row1)
+        u2 = PaidScreenUnit.from_jsonl_row(row2)
+        assert u1.identity_hash() == u2.identity_hash()
+
     def test_identity_hash_differs_on_model(self):
         row1 = {"unit_id": "u1", "model_id": "HYP_5", "hyp_id": 5,
                 "symbol": "MES.v.0", "event_id": "CPI_2024_09_11_TIGHT",
@@ -166,6 +181,35 @@ class TestPaidScreenUnit:
         u2 = PaidScreenUnit.from_jsonl_row(row2)
         assert u1.identity_hash() != u2.identity_hash()
 
+    def test_identity_hash_differs_on_declared_context_sets(self):
+        row1 = {"unit_id": "u1", "model_id": "HYP_5", "hyp_id": 5,
+                "symbol": "MES.v.0", "event_id": "CPI_2024_09_11_TIGHT",
+                "event_type": "CPI", "context_set_id": "target_plus_cross_asset"}
+        row2 = dict(
+            row1,
+            declared_context_sets=[
+                "target_only",
+                "target_plus_macro",
+                "target_plus_cross_asset",
+            ],
+        )
+        u1 = PaidScreenUnit.from_jsonl_row(row1)
+        u2 = PaidScreenUnit.from_jsonl_row(row2)
+        assert u1.identity_hash() != u2.identity_hash()
+
+    def test_identity_hash_ignores_declared_context_set_order(self):
+        row1 = {"unit_id": "u1", "model_id": "HYP_5", "hyp_id": 5,
+                "symbol": "MES.v.0", "event_id": "CPI_2024_09_11_TIGHT",
+                "event_type": "CPI", "context_set_id": "target_plus_cross_asset",
+                "declared_context_sets": ["target_only", "target_plus_cross_asset"]}
+        row2 = dict(
+            row1,
+            declared_context_sets=["target_plus_cross_asset", "target_only"],
+        )
+        u1 = PaidScreenUnit.from_jsonl_row(row1)
+        u2 = PaidScreenUnit.from_jsonl_row(row2)
+        assert u1.identity_hash() == u2.identity_hash()
+
     def test_identity_hash_differs_on_ablation_group_id(self):
         row1 = {"unit_id": "u1", "model_id": "HYP_5", "hyp_id": 5,
                 "symbol": "MES.v.0", "event_id": "CPI_2024_09_11_TIGHT",
@@ -174,6 +218,38 @@ class TestPaidScreenUnit:
         u1 = PaidScreenUnit.from_jsonl_row(row1)
         u2 = PaidScreenUnit.from_jsonl_row(row2)
         assert u1.identity_hash() != u2.identity_hash()
+
+    def test_identity_hash_differs_on_negative_control_policy(self):
+        row1 = {"unit_id": "u1", "model_id": "HYP_5", "hyp_id": 5,
+                "symbol": "MES.v.0", "event_id": "CPI_2024_09_11_TIGHT",
+                "event_type": "CPI",
+                "negative_control_policy": {"status": "not_required"}}
+        row2 = dict(
+            row1,
+            negative_control_policy={"status": "required_before_context_claim"},
+        )
+        u1 = PaidScreenUnit.from_jsonl_row(row1)
+        u2 = PaidScreenUnit.from_jsonl_row(row2)
+        assert u1.identity_hash() != u2.identity_hash()
+
+    def test_identity_hash_ignores_negative_control_policy_key_order(self):
+        row1 = {"unit_id": "u1", "model_id": "HYP_5", "hyp_id": 5,
+                "symbol": "MES.v.0", "event_id": "CPI_2024_09_11_TIGHT",
+                "event_type": "CPI",
+                "negative_control_policy": {
+                    "status": "required_before_context_claim",
+                    "clock": "context_feature_uplift",
+                }}
+        row2 = dict(
+            row1,
+            negative_control_policy={
+                "clock": "context_feature_uplift",
+                "status": "required_before_context_claim",
+            },
+        )
+        u1 = PaidScreenUnit.from_jsonl_row(row1)
+        u2 = PaidScreenUnit.from_jsonl_row(row2)
+        assert u1.identity_hash() == u2.identity_hash()
 
     def test_thesis_not_used_for_identity(self):
         """Thesis is metadata — different thesis, same model = same identity hash."""

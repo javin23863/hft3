@@ -98,8 +98,20 @@ class PaidScreenUnit:
             identity_fields["research_clock"] = self.research_clock
         if self.context_set_id != TARGET_ONLY_CONTEXT_SET_ID:
             identity_fields["context_set_id"] = self.context_set_id
+        default_declared = tuple(
+            sorted(self._default_declared_context_sets(self.context_set_id))
+        )
+        declared = tuple(sorted(self.declared_context_sets))
+        if declared != default_declared:
+            identity_fields["declared_context_sets"] = list(declared)
         if self.ablation_group_id:
             identity_fields["ablation_group_id"] = self.ablation_group_id
+        if (
+            self.negative_control_policy is not None
+            and self.negative_control_policy
+            != self._default_negative_control_policy(self.research_clock, self.context_set_id)
+        ):
+            identity_fields["negative_control_policy"] = self.negative_control_policy
         payload = json.dumps(identity_fields, sort_keys=True)
         return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
@@ -108,6 +120,21 @@ class PaidScreenUnit:
         if context_set_id == TARGET_ONLY_CONTEXT_SET_ID:
             return (TARGET_ONLY_CONTEXT_SET_ID,)
         return (TARGET_ONLY_CONTEXT_SET_ID, context_set_id)
+
+    @staticmethod
+    def _default_negative_control_policy(
+        research_clock: str,
+        context_set_id: str,
+    ) -> dict[str, str]:
+        if (
+            research_clock == RESEARCH_CLOCK_SCHEDULED_EVENT
+            and context_set_id == TARGET_ONLY_CONTEXT_SET_ID
+        ):
+            return {"status": "not_required", "reason": "target_only_baseline"}
+        return {
+            "status": "required_before_context_claim",
+            "reason": "non_target_context_or_non_scheduled_clock",
+        }
 
     @classmethod
     def _parse_declared_context_sets(cls, value: Any, context_set_id: str) -> tuple[str, ...]:
