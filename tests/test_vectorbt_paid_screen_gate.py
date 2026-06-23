@@ -1024,6 +1024,48 @@ def test_stage_a_survivors_cli_reports_unknown_hyp_id(tmp_path: Path) -> None:
     assert not out.exists()
 
 
+def test_stage_a_survivors_cli_allows_deprecated_tested_cell_hyp_id(tmp_path: Path) -> None:
+    """tested_cells supplies event types; only survivor/pass-through IDs expand into units."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 999999, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == 1
+    assert rows[0]["hyp_id"] == 5
+    assert rows[0]["event_type"] == "CPI"
+
+
 def test_stage_a_survivors_cli_reports_bad_nested_schema(tmp_path: Path) -> None:
     """Malformed nested Stage-A fields should print ERROR instead of a traceback."""
     survivors = tmp_path / "stage_a_survivors.json"

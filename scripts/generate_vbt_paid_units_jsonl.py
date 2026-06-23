@@ -121,8 +121,7 @@ def _parse_stage_a_allowed_cells(
             raise ValueError("stage_a_survivors.json: tested_cells rows must be objects")
         if "hyp_id" not in tc or "event_type" not in tc:
             raise ValueError("stage_a_survivors.json: tested_cells rows require hyp_id and event_type")
-        hyp_id = parse_hyp_id(tc["hyp_id"], context="tested_cell")
-        _hypothesis_model_id(hyp_id)
+        parse_hyp_id(tc["hyp_id"], context="tested_cell")
         event_type = str(tc["event_type"]).strip()
         if not event_type:
             raise ValueError("stage_a_survivors.json: tested_cells rows require hyp_id and event_type")
