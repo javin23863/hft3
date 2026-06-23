@@ -3351,7 +3351,7 @@ def apply_promotion_gates(
                 for code in gate_failures
                 if code not in _VBT_PAID_COMPUTE_EXEMPT_GATE_FAILURES
             ]
-            prom.vectorbt_results["pilot_gate_evaluation"] = {
+            prom.vectorbt_results["paid_compute_gate_evaluation"] = {
                 "scope": scope,
                 "screening_scope": scope,
                 "metric_authority": "official_vectorbt_stats_with_walk_forward_oos",

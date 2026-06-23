@@ -13,7 +13,10 @@ from backtest_pipeline.src.hft_campaign.scenario import HftReplayScenario, compu
 from backtest_pipeline.src.hft_campaign.transitional_handoff import load_screening_artifact
 from backtest_pipeline.src.recipe_hash_gate import extract_feature_recipe_hash_from_promoted_row
 from backtest_pipeline.src.hftbacktest_realism import validate_candidate_replay_eligibility
-from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
+from backtest_pipeline.src.vectorbt_adapter import (
+    ScreeningArtifactError,
+    validate_screening_artifact,
+)
 
 
 @dataclass
@@ -121,7 +124,11 @@ def generate_scenario_manifest(cfg: ManifestGenerationConfig) -> tuple[list[HftR
         reasons.append("transitional_handoff_not_allowed_in_production")
         return [], reasons
     if not transitional:
-        reasons.extend(validate_screening_artifact(screening))
+        try:
+            validate_screening_artifact(screening)
+        except ScreeningArtifactError as exc:
+            reasons.append(str(exc))
+            return [], reasons
 
     selected_ids, selection_reasons = select_replay_eligible_candidates(
         screening,

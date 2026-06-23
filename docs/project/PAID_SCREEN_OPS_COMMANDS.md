@@ -460,8 +460,8 @@ Key fields to verify:
 - `batches` is the number of `(symbol, event_id)` groups — fewer than `units`
   is expected and correct (batching collapses units sharing an event).
 - `after_resume` is `units` without `--resume`. With `--dry-run --resume`,
-  resume filtering is not evaluated against artifacts and the field is
-  `not_checked`.
+  hashes are resolved and valid resume artifacts are scanned before grouping,
+  so `after_resume` is the remaining unit count after resume filtering.
 
 ### 6.2 Dry run with resume preview
 
@@ -475,8 +475,8 @@ python scripts/run_vectorbt_paid_screen_v2.py \
   --resume
 ```
 
-`after_resume=not_checked` is expected here: dry-run previews grouping without
-trusting or scanning resume artifacts.
+`after_resume` is the post-resume remaining unit count here. A value below
+`units` means existing artifacts validated and were skipped.
 
 ---
 

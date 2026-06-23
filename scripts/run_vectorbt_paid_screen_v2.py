@@ -311,7 +311,7 @@ def _print_dry_run_plan(
     grouping_ctx: WorkerContext,
 ) -> None:
     groups = group_units_by_batch_key(units, grouping_ctx)
-    after_resume = "not_checked" if args.resume else str(len(units))
+    after_resume = str(len(units))
     print(
         f"DRY_RUN units={units_raw_count} "
         f"after_resume={after_resume} "
@@ -1198,7 +1198,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"ERROR: invalid unit row {exc}: {row}", file=sys.stderr)
             return 1
 
-    if args.dry_run:
+    if args.dry_run and not args.resume:
         try:
             derive_run_research_split(units_raw)
         except ValueError as exc:
@@ -1268,6 +1268,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         if skipped_unit_ids:
             print(f"[resume] skipping {len(skipped_unit_ids)} units with valid artifacts",
                   flush=True)
+
+    if args.dry_run:
+        _print_dry_run_plan(
+            args=args,
+            out_dir=out_dir,
+            units_raw_count=len(units_raw),
+            units=units,
+            grouping_ctx=grouping_ctx,
+        )
+        return 0
 
     bootstrap_started = datetime.now(timezone.utc)
     if not args.dry_run:

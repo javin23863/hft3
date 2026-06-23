@@ -869,12 +869,64 @@ class TestV2RunHashResolution:
                 "--repo-root",
                 str(repo),
                 "--dry-run",
-                "--resume",
             ],
         )
         assert rc == 0
         out = capsys.readouterr().out
-        assert "after_resume=not_checked" in out
+        assert "after_resume=1" in out
+
+    def test_main_dry_run_resume_reports_filtered_count(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        unit = _matching_paid_batch_unit()
+        units_path = tmp_path / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": unit.unit_id,
+                    "model_id": unit.model_id,
+                    "hyp_id": unit.hyp_id,
+                    "symbol": unit.symbol,
+                    "event_id": unit.event_id,
+                    "event_type": unit.event_type,
+                    "research_split": unit.research_split,
+                    "research_clock": unit.research_clock,
+                    "context_set_id": unit.context_set_id,
+                    "declared_context_sets": list(unit.declared_context_sets),
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        out_dir = tmp_path / "out"
+        _copy_valid_unit_artifact(
+            out_dir / "units" / unit.unit_id / "screening_artifact.json",
+            repo_root=_REPO,
+            unit=unit,
+        )
+
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(_REPO),
+                "--dry-run",
+                "--resume",
+                "--events-csv-hash",
+                "not_applicable_for_vectorbt_pilot",
+                "--lake-manifest-hash",
+                "pilot_requires_lake_manifest_before_screen",
+                "--vectorbt-scope",
+                "pilot",
+            ],
+        )
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "[resume] skipping 1 units with valid artifacts" in out
+        assert "DRY_RUN units=1 after_resume=0 batches=0" in out
 
     def test_main_fails_closed_without_hash_sources(self, tmp_path):
         v2 = _load_v2_module()

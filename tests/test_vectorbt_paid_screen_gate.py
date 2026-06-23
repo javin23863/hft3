@@ -735,6 +735,57 @@ def test_require_runnable_npz_cli_reports_manifest_error(tmp_path: Path) -> None
     assert "Traceback" not in proc.stderr
 
 
+def test_stage_a_require_runnable_npz_cli_reports_manifest_error(tmp_path: Path) -> None:
+    """Stage-A survivor generation must use the same clean manifest-error path."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    env = os.environ.copy()
+    env["HFT3_NPZ_ROOT"] = str(npz_root)
+    env["HFT3_MANIFEST_PATH"] = str(npz_root / "manifest.parquet")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO), str(REPO / "packages"), str(REPO / "apps"), env.get("PYTHONPATH", "")]
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--require-runnable-npz",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: runnable NPZ parquet manifest file is missing" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
 def test_require_runnable_npz_parquet_missing_pandas_fails_closed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

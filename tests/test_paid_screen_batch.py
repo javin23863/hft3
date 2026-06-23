@@ -970,7 +970,7 @@ class TestPromotionGateWiringPlantedPass:
         assert len(gated.promoted) == 1
         assert gated.promoted[0].candidate_id == "planted_pass"
         assert gated.promoted[0].pass_reason == "vectorbt_screen_passed_replay_not_eligible"
-        assert gated.promoted[0].vectorbt_results["pilot_gate_evaluation"]["failures"] == []
+        assert gated.promoted[0].vectorbt_results["paid_compute_gate_evaluation"]["failures"] == []
 
     def test_paid_compute_rejects_low_expectancy_with_explicit_reason(self):
         from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
@@ -980,7 +980,7 @@ class TestPromotionGateWiringPlantedPass:
         gated = apply_promotion_gates(result, screening_scope="paid_compute")
         assert gated.promoted == []
         assert len(gated.rejected) == 1
-        failures = gated.rejected[0].metric_values["pilot_gate_evaluation"]["failures"]
+        failures = gated.rejected[0].metric_values["paid_compute_gate_evaluation"]["failures"]
         assert "oos_expectancy_below_threshold" in failures
 
     def test_paid_compute_rejects_missing_expectancy_with_explicit_reason(self):
@@ -991,7 +991,7 @@ class TestPromotionGateWiringPlantedPass:
         result = FilterResult(backend="vectorbt", run_id="run_planted", promoted=[prom], rejected=[])
         gated = apply_promotion_gates(result, screening_scope="paid-compute")
         assert gated.promoted == []
-        failures = gated.rejected[0].metric_values["pilot_gate_evaluation"]["failures"]
+        failures = gated.rejected[0].metric_values["paid_compute_gate_evaluation"]["failures"]
         assert "missing_oos_expectancy" in failures
 
     def test_paid_compute_hydrates_auxiliary_walk_forward_metrics(self):
@@ -1011,13 +1011,13 @@ class TestPromotionGateWiringPlantedPass:
         metrics = gated.promoted[0].vectorbt_results
         assert metrics["oos_expectancy"] == 1.25
         assert metrics["wf_consistency"] == 0.9
-        assert metrics["pilot_gate_evaluation"]["used_fields"] == {
+        assert metrics["paid_compute_gate_evaluation"]["used_fields"] == {
             "oos_expectancy": "auxiliary_numpy_walk_forward",
             "wf_consistency": "auxiliary_numpy_walk_forward",
             "max_drawdown_pct": "Max Drawdown [%]",
             "num_trades": "Total Trades",
         }
-        assert "wf_consistency" not in metrics["pilot_gate_evaluation"]["skipped_unmeasured_fields"]
+        assert "wf_consistency" not in metrics["paid_compute_gate_evaluation"]["skipped_unmeasured_fields"]
 
     def test_pilot_gate_ignores_auxiliary_walk_forward_metrics(self):
         from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates

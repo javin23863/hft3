@@ -25,7 +25,10 @@ from backtest_pipeline.src.hft_campaign.ontology import (
 )
 from backtest_pipeline.src.hft_campaign.source_lock import build_campaign_source_lock
 from backtest_pipeline.src.recipe_hash_gate import validate_feature_recipe_hash_handoff
-from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
+from backtest_pipeline.src.vectorbt_adapter import (
+    ScreeningArtifactError,
+    validate_screening_artifact,
+)
 
 
 @dataclass
@@ -43,7 +46,10 @@ def validate_stage0_scenario(scenario: HftReplayScenario, *, repo_root: Path) ->
     reasons.extend(load_reasons)
 
     if not transitional:
-        reasons.extend(validate_screening_artifact(screening))
+        try:
+            validate_screening_artifact(screening)
+        except ScreeningArtifactError as exc:
+            reasons.append(str(exc))
         observed_hash = str(screening.get("screening_artifact_hash", ""))
         if observed_hash and observed_hash != scenario.upstream_screening_artifact_hash:
             reasons.append("upstream_screening_artifact_hash_mismatch")
