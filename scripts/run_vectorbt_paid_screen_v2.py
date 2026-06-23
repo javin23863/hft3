@@ -292,9 +292,10 @@ def _print_dry_run_plan(
     grouping_ctx: WorkerContext,
 ) -> None:
     groups = group_units_by_batch_key(units, grouping_ctx)
+    after_resume = "not_checked" if args.resume else str(len(units))
     print(
         f"DRY_RUN units={units_raw_count} "
-        f"after_resume={len(units)} "
+        f"after_resume={after_resume} "
         f"batches={len(groups)} "
         f"workers={args.workers} "
         f"scope={args.vectorbt_scope} "

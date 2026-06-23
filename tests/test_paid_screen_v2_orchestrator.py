@@ -763,6 +763,20 @@ class TestResumeArtifactContextValidation:
             git_commit=v2.resolve_git_commit(str(repo_root)),
         )
 
+    def test_declared_context_sets_match_ignores_order(self):
+        from backtest_pipeline.src.paid_screen_profiling import _artifact_unit_context_matches
+
+        unit = _matching_paid_batch_unit(
+            context_set_id="target_plus_cross_asset",
+            declared_context_sets=("target_only", "target_plus_cross_asset"),
+        )
+        payload = {
+            "research_clock": unit.research_clock,
+            "allowed_context_set_id_or_null": unit.context_set_id,
+            "declared_context_sets": ["target_plus_cross_asset", "target_only"],
+        }
+        assert _artifact_unit_context_matches(payload, unit)
+
     def test_wrong_symbol_rejected(self, tmp_path):
         v2 = _load_v2_module()
         unit = _matching_paid_batch_unit(symbol="ES.v.0")
@@ -825,7 +839,7 @@ class TestResumeArtifactContextValidation:
 
 
 class TestV2RunHashResolution:
-    def test_main_dry_run_without_hash_sources(self, tmp_path):
+    def test_main_dry_run_without_hash_sources(self, tmp_path, capsys):
         v2 = _load_v2_module()
         repo = tmp_path / "repo"
         repo.mkdir()
@@ -855,9 +869,12 @@ class TestV2RunHashResolution:
                 "--repo-root",
                 str(repo),
                 "--dry-run",
+                "--resume",
             ],
         )
         assert rc == 0
+        out = capsys.readouterr().out
+        assert "after_resume=not_checked" in out
 
     def test_main_fails_closed_without_hash_sources(self, tmp_path):
         v2 = _load_v2_module()

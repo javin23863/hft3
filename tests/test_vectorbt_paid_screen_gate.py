@@ -856,6 +856,9 @@ def test_vast_full_script_requires_declaration_before_workers() -> None:
     assert "ERROR: Full-run declaration missing" in script
     assert "ERROR: Declaration expected_work_units=" in script
     assert "ERROR: Declaration mismatch:" in script
+    assert "VBT_WRITE_DECLARATION_TEMPLATE" in script
+    assert "Wrote declaration template:" in script
+    assert "to regenerate the declaration template" in script
     assert "Declaration verified:" in script
     assert "--abort-on-failed-units" in script
     assert "--research-split" in script

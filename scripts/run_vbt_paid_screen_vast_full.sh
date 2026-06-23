@@ -130,10 +130,43 @@ if [[ -z "$LAKE_MANIFEST_HASH" ]]; then
 fi
 GIT_HEAD="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 
+if [[ "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "1" || "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "true" ]]; then
+  python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash = sys.argv[1:9]
+payload = {
+    "host_vcpu": int(host_vcpu),
+    "reserved_vcpu": 26,
+    "workers_requested": int(workers),
+    "expected_work_units": int(unit_count),
+    "units_source": units_source,
+    "stall_minutes": 30,
+    "abort_on_failed_units": True,
+    "git_head": git_head,
+    "events_csv_hash": events_hash,
+    "lake_manifest_hash": lake_hash,
+}
+run_id = os.environ.get("VBT_FULL_RUN_ID")
+if run_id:
+    payload["run_id"] = run_id
+path = Path(decl_path)
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+print(f"Wrote declaration template: {path}")
+print(json.dumps(payload, indent=2, sort_keys=True))
+PY
+  echo "Review $DECL_FILE, then rerun without VBT_WRITE_DECLARATION_TEMPLATE to launch workers."
+  exit 0
+fi
+
 # --- Declaration check ---
 if [[ ! -f "$DECL_FILE" ]]; then
   echo "ERROR: Full-run declaration missing: $DECL_FILE" >&2
-  echo "Generate units on-host, record expected_work_units, then rerun." >&2
+  echo "Run with VBT_WRITE_DECLARATION_TEMPLATE=1 to write the current on-host declaration, review it, then rerun." >&2
   exit 1
 fi
 
@@ -181,7 +214,7 @@ expect_str("git_head", git_head)
 expect_str("events_csv_hash", events_hash)
 expect_str("lake_manifest_hash", lake_hash)
 if payload.get("abort_on_failed_units") is not True:
-    errors.append("abort_on_failed_units must be true")
+    errors.append("abort_on_failed_units must be true; run with VBT_WRITE_DECLARATION_TEMPLATE=1 to regenerate the declaration template")
 if errors:
     for err in errors:
         print(f"ERROR: Declaration mismatch: {err}", file=sys.stderr)

@@ -118,6 +118,11 @@ print(json.dumps(decl, indent=2))
 PY
 ```
 
+If an existing declaration fails with `abort_on_failed_units must be true`,
+rerun the Vast launcher once with `VBT_WRITE_DECLARATION_TEMPLATE=1`; review the
+rewritten `runtime/reports/vbt_full_run_declaration.json`, then rerun without
+the template flag to launch workers.
+
 **Do not rent** if any checklist row fails.
 
 ---

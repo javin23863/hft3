@@ -440,7 +440,7 @@ def _artifact_unit_context_matches(payload: Mapping[str, Any], unit: PaidScreenU
 
     artifact_declared = _context_list(payload.get("declared_context_sets"))
     expected_declared = list(unit.declared_context_sets)
-    if artifact_declared and artifact_declared != expected_declared:
+    if artifact_declared and sorted(artifact_declared) != sorted(expected_declared):
         return False
     if not artifact_declared and expected_context != "target_only":
         return False

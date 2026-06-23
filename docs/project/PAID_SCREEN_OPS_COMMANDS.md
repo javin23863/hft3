@@ -458,8 +458,9 @@ Key fields to verify:
 - `units` == `wc -l` of the JSONL.
 - `batches` is the number of `(symbol, event_id)` groups — fewer than `units`
   is expected and correct (batching collapses units sharing an event).
-- `after_resume` reflects units not yet completed if `--resume` were passed
-  (it is `units` without `--resume`).
+- `after_resume` is `units` without `--resume`. With `--dry-run --resume`,
+  resume filtering is not evaluated against artifacts and the field is
+  `not_checked`.
 
 ### 6.2 Dry run with resume preview
 
@@ -473,8 +474,8 @@ python scripts/run_vectorbt_paid_screen_v2.py \
   --resume
 ```
 
-`after_resume` will be less than `units` if some units in `$OUT` already have
-valid artifacts.
+`after_resume=not_checked` is expected here: dry-run previews grouping without
+trusting or scanning resume artifacts.
 
 ---
 
