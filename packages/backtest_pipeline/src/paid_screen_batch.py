@@ -22,7 +22,10 @@ from backtest_pipeline.src.paid_screen_types import (
 from backtest_pipeline.src.paid_screen_profiling import RunProfiler, DEFAULT_RESEARCH_SPLIT
 from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
 from backtest_pipeline.src.paid_screen_matrix import run_vectorbt_simulation_matrix
-from backtest_pipeline.src.vectorbt_adapter import apply_promotion_gates
+from backtest_pipeline.src.vectorbt_adapter import (
+    _apply_filter_result_provenance_metadata,
+    apply_promotion_gates,
+)
 
 
 def _cache_get(cache, key):
@@ -623,11 +626,11 @@ def _write_screening_artifact(
         validate_screening_artifact,
     )
 
-    artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
-    validate_screening_artifact(artifact)
+    serializable = _json_primitive_screening_payload(artifact)
+    serializable["screening_artifact_hash"] = compute_screening_artifact_hash(serializable)
+    validate_screening_artifact(serializable)
 
     # Write atomically
-    serializable = _json_primitive_screening_payload(artifact)
     tmp_path = artifact_path + ".tmp"
     os.makedirs(os.path.dirname(artifact_path), exist_ok=True)
     with open(tmp_path, "w") as f:
@@ -638,7 +641,7 @@ def _write_screening_artifact(
 
     annotate_promoted_screening_handoffs(artifact, artifact_path=artifact_path)
 
-    return artifact.get("screening_artifact_hash", "")
+    return str(serializable.get("screening_artifact_hash") or "")
 
 
 def screen_paid_batch(
@@ -824,6 +827,12 @@ def screen_paid_batch(
             )
             filter_result = apply_promotion_gates(
                 filter_result,
+                screening_scope=context.screening_scope,
+                repo_root=Path(context.repo_root),
+            )
+            _apply_filter_result_provenance_metadata(
+                filter_result,
+                [candidate],
                 screening_scope=context.screening_scope,
                 repo_root=Path(context.repo_root),
             )

@@ -570,11 +570,14 @@ class TestAssetClassRouting:
 
 
 class TestFilterCandidates:
-    def test_filter_rejects_missing_ohlcv_even_when_vectorbt_installed(self, tmp_path):
+    def test_filter_rejects_missing_ohlcv_even_when_vectorbt_installed(
+        self, monkeypatch, tmp_path
+    ):
         from backtest_pipeline.src import vectorbt_adapter
 
-        vectorbt_adapter._vectorbt_version = None
-        vectorbt_adapter._rust_engine_available = None
+        monkeypatch.setattr(vectorbt_adapter, "_has_vectorbt", True)
+        monkeypatch.setattr(vectorbt_adapter, "_vectorbt_version", None)
+        monkeypatch.setattr(vectorbt_adapter, "_rust_engine_available", None)
         cands = [_mock_candidate("HYP_5", 0.15)]
         result = filter_candidates(
             candidates=cands,
@@ -582,6 +585,7 @@ class TestFilterCandidates:
             event_id="CPI_2024_09_11_TIGHT",
             repo_root=tmp_path,
             data_loader=lambda *_: None,
+            prefer_fs_v1_path=False,
         )
         assert result.total_candidates >= 1
         assert result.backend == "no_ohlcv_data"
@@ -1970,6 +1974,8 @@ class TestFilterCandidates:
         from types import SimpleNamespace
 
         from backtest_pipeline.src import vectorbt_adapter
+        monkeypatch.delenv("DATA_SYSTEM_EVENTS_CSV", raising=False)
+        monkeypatch.delenv("HFT3_MANIFEST_PATH", raising=False)
 
         class FakePortfolio:
             def stats(self):
@@ -2034,6 +2040,8 @@ class TestFilterCandidates:
         from types import SimpleNamespace
 
         from backtest_pipeline.src import vectorbt_adapter
+        monkeypatch.delenv("DATA_SYSTEM_EVENTS_CSV", raising=False)
+        monkeypatch.delenv("HFT3_MANIFEST_PATH", raising=False)
 
         class FakePortfolio:
             def stats(self):
@@ -2211,6 +2219,64 @@ class TestFilterCandidates:
         promoted = artifact["promoted"][0]
         assert promoted["vectorbt_results"]["pilot_gate_evaluation"]["failures"] == []
         assert promoted["gross_return"] == 0.0
+
+    def test_optional_official_stats_use_not_run_when_non_finite(
+        self, monkeypatch, tmp_path
+    ):
+        import sys
+        from types import SimpleNamespace
+
+        from backtest_pipeline.src import vectorbt_adapter
+
+        class FakePortfolio:
+            def stats(self):
+                stats = _complete_vbt_stats(total_trades=10, expectancy=0.01)
+                stats["Profit Factor"] = np.inf
+                stats.pop("Sharpe Ratio")
+                stats.pop("Sortino Ratio")
+                return stats
+
+        fake_vectorbt = SimpleNamespace(
+            Portfolio=SimpleNamespace(from_signals=lambda *_, **__: FakePortfolio())
+        )
+        monkeypatch.setitem(sys.modules, "vectorbt", fake_vectorbt)
+        monkeypatch.setattr(vectorbt_adapter, "_has_vectorbt", True)
+        monkeypatch.setattr(vectorbt_adapter, "_vectorbt_version", "1.0.0")
+        monkeypatch.setattr(vectorbt_adapter, "_rust_engine_available", False)
+
+        close = 100.0 + np.arange(80, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+
+        result = filter_candidates(
+            candidates=[_mock_candidate("HYP_5", 0.15)],
+            parsed=None,
+            event_id="SYNTHETIC",
+            repo_root=tmp_path,
+            gates=PromotionGate(),
+            param_grid={
+                "signal_threshold": [0.15],
+                "holding_period_bars": [15],
+                "stop_loss_pct": [None],
+                "take_profit_pct": [None],
+            },
+            data_loader=lambda *_: ohlcv,
+            signal_computer=lambda *_: (
+                np.r_[0.0, 1.0, np.zeros(len(ohlcv) - 2)],
+                np.r_[np.zeros(len(ohlcv) - 1), -1.0],
+            ),
+        )
+
+        artifact = result.to_dict()
+        validate_screening_artifact(artifact)
+        assert artifact["promoted_ids"]
+        promoted = artifact["promoted"][0]
+        assert promoted["profit_factor"] == {
+            "status": "not_run",
+            "reason": "official_vectorbt_profit_factor_missing_or_non_finite",
+        }
+        assert promoted["sharpe"]["status"] == "not_run"
+        assert promoted["sortino"]["status"] == "not_run"
+        assert promoted["vectorbt_results"]["profit_factor"]["status"] == "not_run"
 
     def test_missing_expectancy_rejects_even_when_total_trades_zero(self, monkeypatch, tmp_path):
         import sys

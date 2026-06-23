@@ -2428,6 +2428,19 @@ def _stats_float(stats: Mapping[str, Any], *names: str) -> Optional[float]:
     return None
 
 
+def _optional_official_stats_or_not_run(
+    stats: Mapping[str, Any],
+    metric_name: str,
+    *names: str,
+) -> Any:
+    value = _stats_float(stats, *names)
+    if value is None:
+        return _screening_not_run(
+            f"official_vectorbt_{metric_name}_missing_or_non_finite"
+        )
+    return value
+
+
 def _normalise_vectorbt_stats_for_gate(vbt_stats: Mapping[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
     """Map official ``Portfolio.stats()`` fields to the pilot gate surface.
 
@@ -2462,9 +2475,15 @@ def _normalise_vectorbt_stats_for_gate(vbt_stats: Mapping[str, Any]) -> Tuple[Di
         "num_trades": total_trades_i,
         "trade_count": total_trades_i,
         "max_drawdown_pct": round(max_drawdown_pct, 8),
-        "profit_factor": _stats_float(vbt_stats, "Profit Factor"),
-        "sharpe": _stats_float(vbt_stats, "Sharpe Ratio"),
-        "sortino": _stats_float(vbt_stats, "Sortino Ratio"),
+        "profit_factor": _optional_official_stats_or_not_run(
+            vbt_stats, "profit_factor", "Profit Factor"
+        ),
+        "sharpe": _optional_official_stats_or_not_run(
+            vbt_stats, "sharpe", "Sharpe Ratio"
+        ),
+        "sortino": _optional_official_stats_or_not_run(
+            vbt_stats, "sortino", "Sortino Ratio"
+        ),
         "gate_metric_authority": "official_vectorbt_portfolio_stats",
         "gate_metric_non_stats_status": {
             field_name: "not_measured_not_used_by_vbt2_pilot_gate"
@@ -2949,6 +2968,7 @@ def _apply_filter_result_provenance_metadata(
     *,
     screening_scope: str,
     repo_root: Path,
+    stamp_handoff_status: bool = True,
 ) -> None:
     from backtest_pipeline.src.paid_screen_profiling import (
         resolve_events_csv_hash,
@@ -2975,16 +2995,19 @@ def _apply_filter_result_provenance_metadata(
         promoted_recipe_hash = _promoted_feature_recipe_hash(prom)
         if promoted_recipe_hash:
             break
+    candidate_recipe_hash = ""
+    for cand in candidates:
+        candidate_recipe_hash = _candidate_feature_recipe_hash(cand)
+        if candidate_recipe_hash:
+            break
     if promoted_recipe_hash:
         result.feature_recipe_hash = promoted_recipe_hash
-    elif not result.feature_recipe_hash:
-        for cand in candidates:
-            recipe_hash = _candidate_feature_recipe_hash(cand)
-            if recipe_hash:
-                result.feature_recipe_hash = recipe_hash
-                break
-    if _is_pilot_handoff_scope(screening_scope) and promoted_recipe_hash:
-        result.hftbacktest_handoff_status = "recipe_hash_handoff_ready"
+    elif candidate_recipe_hash:
+        result.feature_recipe_hash = candidate_recipe_hash
+    if stamp_handoff_status and _is_pilot_handoff_scope(screening_scope):
+        result.hftbacktest_handoff_status = (
+            "recipe_hash_handoff_ready" if promoted_recipe_hash else ""
+        )
 
 
 def _apply_fs_v1_screen_metadata(

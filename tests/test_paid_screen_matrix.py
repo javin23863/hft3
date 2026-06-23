@@ -822,3 +822,6 @@ class TestRunVectorbtSimulationMatrix:
         for prom in result.promoted:
             assert prom.vectorbt_results["feature_recipe_hash"] == "recipe_hash_abc"
             assert prom.vectorbt_results["feature_recipe"] == recipe
+        artifact = result.to_dict()
+        assert artifact["feature_recipe_hash"] == "recipe_hash_abc"
+        assert "hftbacktest_handoff_status" not in artifact

@@ -47,6 +47,7 @@ import numpy as np
 from backtest_pipeline.src.vectorbt_adapter import (
     DEFAULT_PARAM_GRID,
     _append_budget_skipped_trials,
+    _apply_filter_result_provenance_metadata,
     _apply_holding_period_exit,
     _base_candidate_metric_values,
     _build_run_budget,
@@ -74,6 +75,23 @@ logger = logging.getLogger(__name__)
 # Default chunk size for matrix Portfolio.from_signals calls.
 DEFAULT_MATRIX_CHUNK_SIZE = 256
 ALLOWED_MATRIX_CHUNK_SIZES = (128, 256, 512, 1024)
+
+
+def _finalize_matrix_result(
+    result: FilterResult,
+    candidates: List[CandidateModel],
+    *,
+    screening_scope: str,
+    repo_root: Path,
+) -> FilterResult:
+    _apply_filter_result_provenance_metadata(
+        result,
+        candidates,
+        screening_scope=screening_scope,
+        repo_root=repo_root,
+        stamp_handoff_status=False,
+    )
+    return result
 
 
 def _chunk_parameter_trials(
@@ -285,7 +303,12 @@ def run_vectorbt_simulation_matrix(
                     },
                 )
             )
-        return result
+        return _finalize_matrix_result(
+            result,
+            candidates,
+            screening_scope=screening_scope,
+            repo_root=repo_root,
+        )
 
     import vectorbt as vbt  # type: ignore[no-redef]
 
@@ -353,7 +376,12 @@ def run_vectorbt_simulation_matrix(
                     first_param_index,
                     reason="WALL_CLOCK_BUDGET_REACHED",
                 )
-                return result
+                return _finalize_matrix_result(
+                    result,
+                    candidates,
+                    screening_scope=screening_scope,
+                    repo_root=repo_root,
+                )
             # Trial-count budget check.
             remaining_budget = trial_budget - result.trials_run
             if remaining_budget <= 0:
@@ -365,7 +393,12 @@ def run_vectorbt_simulation_matrix(
                     candidate_index,
                     first_param_index,
                 )
-                return result
+                return _finalize_matrix_result(
+                    result,
+                    candidates,
+                    screening_scope=screening_scope,
+                    repo_root=repo_root,
+                )
 
             # Build the merged param dicts + candidate IDs for this chunk
             # (identical to the loop mode's per-trial merge).  We may need to
@@ -471,7 +504,12 @@ def run_vectorbt_simulation_matrix(
                         candidate_index,
                         first_param_index,
                     )
-                    return result
+                    return _finalize_matrix_result(
+                        result,
+                        candidates,
+                        screening_scope=screening_scope,
+                        repo_root=repo_root,
+                    )
                 continue
 
             # Build [bars, n_surviving] matrices with per-column shift +
@@ -685,7 +723,17 @@ def run_vectorbt_simulation_matrix(
                     candidate_index,
                     first_param_index,
                 )
-                return result
+                return _finalize_matrix_result(
+                    result,
+                    candidates,
+                    screening_scope=screening_scope,
+                    repo_root=repo_root,
+                )
 
     counters.finalize_signal_reuse()
-    return result
+    return _finalize_matrix_result(
+        result,
+        candidates,
+        screening_scope=screening_scope,
+        repo_root=repo_root,
+    )
