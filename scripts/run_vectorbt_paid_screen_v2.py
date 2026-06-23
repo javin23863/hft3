@@ -124,11 +124,11 @@ def _assert_hashes_match_ready_gate(
     expected_lake = raw_expected_lake.strip()
     if not expected_events or not expected_lake:
         raise ValueError(f"ready gate pilot_hashes missing events/lake hashes: {gate_path}")
-    if expected_events and events_csv_hash != expected_events:
+    if events_csv_hash != expected_events:
         raise ValueError(
             f"events_csv_hash {events_csv_hash} != ready gate {expected_events}"
         )
-    if expected_lake and lake_manifest_hash != expected_lake:
+    if lake_manifest_hash != expected_lake:
         raise ValueError(
             f"lake_manifest_hash {lake_manifest_hash} != ready gate {expected_lake}"
         )

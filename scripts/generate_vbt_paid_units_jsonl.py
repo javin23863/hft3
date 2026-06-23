@@ -595,7 +595,6 @@ def _manifest_path_matches_lake(path: Path, root: Path) -> bool:
 
 
 def _manifest_paths(root: Path) -> List[Path]:
-    paths: List[Path] = []
     env_path = os.environ.get("HFT3_MANIFEST_PATH", "").strip()
     if env_path:
         path = Path(env_path)
