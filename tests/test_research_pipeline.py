@@ -114,6 +114,473 @@ def test_run_pipeline_doc_without_vectorbt_is_dry_run_only(monkeypatch, capsys):
     assert "--doc without --vectorbt/--vectorbt-only is dry-run only" in capsys.readouterr().err
 
 
+def test_pipeline_runtime_config_defaults_from_json(tmp_path):
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    cfg_path = tmp_path / "runtime.json"
+    cfg_path.write_text(
+        json.dumps(
+            {
+                "max_candidates": 7,
+                "vectorbt": {
+                    "scope": "paid-compute",
+                    "budget": {
+                        "max_trials": 3,
+                        "max_total_trials": 21,
+                        "abort_on_budget_exhaustion": True,
+                    },
+                },
+                "llm_ideas": {"max_ideas": 4, "review_memory_limit": 2},
+            }
+        ),
+        encoding="utf-8",
+    )
+    cfg = run_pipeline.load_pipeline_runtime_config(cfg_path)
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+    )
+
+    run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+
+    assert args.max_candidates == 7
+    assert args.vectorbt_scope == "paid-compute"
+    assert args.vectorbt_max_trials == 3
+    assert args.vectorbt_max_total_trials == 21
+    assert args.max_ideas == 4
+    assert args.review_memory_limit == 2
+    assert run_pipeline._vectorbt_run_budget(args, cfg) == {
+        "max_trials": 3,
+        "max_total_trials": 21,
+        "abort_on_budget_exhaustion": True,
+    }
+
+
+def test_pipeline_runtime_config_rejects_false_abort_policy(tmp_path):
+    import argparse
+
+    import pytest
+    import scripts.run_pipeline as run_pipeline
+
+    cfg_path = tmp_path / "runtime.json"
+    cfg_path.write_text(
+        json.dumps({"vectorbt": {"budget": {"abort_on_budget_exhaustion": False}}}),
+        encoding="utf-8",
+    )
+    cfg = run_pipeline.load_pipeline_runtime_config(cfg_path)
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+    )
+
+    with pytest.raises(ValueError, match="abort_on_budget_exhaustion must be true"):
+        run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+
+
+def test_pipeline_runtime_config_hash_includes_idea_sampling_override(tmp_path):
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    cfg = run_pipeline.load_pipeline_runtime_config()
+
+    def make_args(temperature):
+        return argparse.Namespace(
+            max_candidates=None,
+            vectorbt_scope=None,
+            vectorbt_max_trials=None,
+            vectorbt_max_models=None,
+            vectorbt_max_symbols=None,
+            vectorbt_max_feature_sets=None,
+            vectorbt_max_total_trials=None,
+            vectorbt_max_wall_clock_seconds=None,
+            vectorbt_max_peak_memory_mb=None,
+            max_ideas=None,
+            review_memory_limit=None,
+            idea_temperature=temperature,
+            idea_top_p=None,
+        )
+
+    args_a = make_args(0.11)
+    run_pipeline._apply_pipeline_runtime_defaults(args_a, cfg)
+    run_pipeline._resolve_idea_sampling_values(args_a, cfg)
+    receipt_a = run_pipeline._pipeline_config_receipt(
+        config=cfg,
+        config_path=tmp_path / "runtime.json",
+        args=args_a,
+    )
+
+    args_b = make_args(0.22)
+    run_pipeline._apply_pipeline_runtime_defaults(args_b, cfg)
+    run_pipeline._resolve_idea_sampling_values(args_b, cfg)
+    receipt_b = run_pipeline._pipeline_config_receipt(
+        config=cfg,
+        config_path=tmp_path / "runtime.json",
+        args=args_b,
+    )
+
+    assert receipt_a["effective"]["llm_ideas"]["temperature"] == 0.11
+    assert receipt_b["effective"]["llm_ideas"]["temperature"] == 0.22
+    assert receipt_a["pipeline_runtime_config_hash"] != receipt_b["pipeline_runtime_config_hash"]
+
+
+def test_candidate_prefilter_rejects_malformed_and_bounds():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel
+
+    good = CandidateModel(
+        candidate_id="good",
+        model_id="BOOK_PRESSURE",
+        strategy_params={"signal_threshold": 0.2, "holding_period_bars": 3},
+        thesis="x",
+    )
+    bad = CandidateModel(
+        candidate_id="bad",
+        model_id="bad model",
+        strategy_params={"signal_threshold": 1.2, "holding_period_bars": 0},
+        thesis="x",
+    )
+
+    accepted, receipt = run_pipeline.prefilter_candidates(
+        [good, bad],
+        config=run_pipeline._DEFAULT_PIPELINE_RUNTIME_CONFIG["candidate_prefilter"],
+    )
+
+    assert accepted == [good]
+    assert receipt["accepted_ids"] == ["good"]
+    assert receipt["rejected_count"] == 1
+    assert receipt["rejected"][0]["candidate_id"] == "bad"
+    assert receipt["rejected"][0]["reasons"] == [
+        "malformed_model_id",
+        "signal_threshold_out_of_bounds",
+        "holding_period_bars_nonpositive",
+    ]
+
+
+def test_document_ingestion_cache_miss_then_hit(tmp_path, monkeypatch):
+    import scripts.run_pipeline as run_pipeline
+
+    doc = tmp_path / "paper.txt"
+    doc.write_text("CPI affects MES. Must not use lookahead.", encoding="utf-8")
+    records = {
+        "nodes": [{"id": "doc:paper", "type": "document"}],
+        "edges": [],
+    }
+    calls = {"extract": 0}
+    persisted = []
+
+    def fake_extract(path):
+        calls["extract"] += 1
+        return doc.read_text(encoding="utf-8")
+
+    monkeypatch.setattr(run_pipeline, "extract_text", fake_extract)
+    monkeypatch.setattr(run_pipeline, "summarise_text", lambda text: "summary")
+    monkeypatch.setattr(run_pipeline, "build_knowledge_graph", lambda text, doc_id: {"doc_id": doc_id})
+    monkeypatch.setattr(run_pipeline, "graph_to_kg_records", lambda graph: records)
+    monkeypatch.setattr(
+        run_pipeline,
+        "persist_graph_slice",
+        lambda repo_root, graph: persisted.append(graph) or (1, 0),
+    )
+
+    summary, meta = run_pipeline.ingest_document_with_cache(
+        doc,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )
+    summary2, meta2 = run_pipeline.ingest_document_with_cache(
+        doc,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )
+
+    assert summary == "summary"
+    assert summary2 == "summary"
+    assert meta["status"] == "miss"
+    assert meta2["status"] == "hit"
+    assert calls["extract"] == 1
+    assert Path(meta["cache_path"]).is_file()
+    assert len(persisted) == 2
+
+
+def test_run_pipeline_dry_run_writes_runtime_receipt(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="heuristic",
+        llm_status="skipped_no_llm",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_dry",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.15},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_dry_receipt",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_dry_receipt")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_response",
+        lambda report, request, **kwargs: {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "parsed": {"primary_model_id": report.parsed.primary_model_id},
+        },
+    )
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_dry_receipt"
+    assert payload["run_id"] == "pipeline_dry_receipt"
+    assert (run_dir / "pipeline_run.log").is_file()
+    assert (run_dir / "pipeline_runtime_config.json").is_file()
+    assert (run_dir / "candidate_prefilter.json").is_file()
+    runtime_receipt = json.loads((run_dir / "pipeline_runtime_config.json").read_text(encoding="utf-8"))
+    assert runtime_receipt["pipeline_runtime_config_hash"]
+    assert runtime_receipt["effective"]["max_candidates"] == 1
+    receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
+    assert receipt["run_id"] == "pipeline_dry_receipt"
+    assert receipt["status"] == "dry_run_complete"
+    assert receipt["candidate_prefilter"]["accepted_count"] == 1
+
+
+def test_run_pipeline_failure_writes_receipt(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_failure_receipt",
+        "thesis": "Fade spread blowout after CPI",
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_failure_receipt")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("synthetic parse failure")
+
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", boom)
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            "Fade spread blowout after CPI",
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 1
+    assert "synthetic parse failure" in capsys.readouterr().err
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_failure_receipt"
+    receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
+    assert receipt["status"] == "pipeline_failed"
+    assert receipt["error"]["type"] == "RuntimeError"
+    assert receipt["request_packet"]["request_id"] == "pipeline_failure_receipt"
+
+
+def test_run_pipeline_url_doc_source_is_not_path_normalized(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="heuristic",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_url_doc",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.05},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_url_doc",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+    captured = {}
+    url = "https://example.com/research-note.txt"
+
+    def fake_ingest(source, **kwargs):
+        captured["source"] = source
+        return "doc summary", {"status": "disabled_url_cache"}
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_url_doc")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "ingest_document_with_cache", fake_ingest)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_response",
+        lambda report, request, **kwargs: {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "parsed": {"primary_model_id": report.parsed.primary_model_id},
+        },
+    )
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--doc",
+            url,
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 0
+    _last_json_object(capsys.readouterr().out)
+    assert captured["source"] == url
+
+
+def test_run_pipeline_idea_set_requires_vectorbt_writes_receipt(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="idea_set",
+    )
+    idea_packet = _idea_packet()
+    idea_packet["ideas"] = [idea_packet["ideas"][1]]
+    idea_packet["ideas"][0]["status"] = "queued_for_test"
+    candidate = CandidateModel(
+        candidate_id="cand_idea",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.15},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_idea_requires_vbt",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_idea_requires_vbt")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: idea_packet)
+    monkeypatch.setattr(run_pipeline, "candidates_from_ideas", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(run_pipeline, "parsed_from_idea", lambda idea: parsed)
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--idea-set",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 1
+    payload = _last_json_object(capsys.readouterr().out)
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_idea_requires_vbt"
+    receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
+    prefilter = json.loads((run_dir / "candidate_prefilter.json").read_text(encoding="utf-8"))
+    assert payload["status"] == "blocked_idea_set_requires_vectorbt_prefilter"
+    assert receipt["status"] == "blocked_idea_set_requires_vectorbt_prefilter"
+    assert receipt["candidate_prefilter"]["accepted_count"] == 1
+    assert prefilter["accepted_ids"] == ["cand_idea"]
+
+
 def test_extract_text_dev_instructions_pdf():
     if not PDF.is_file():
         pytest.skip("dev_instructions.pdf not in repo")
@@ -1090,6 +1557,11 @@ def test_run_pipeline_vectorbt_hftbacktest_opt_in_calls_writer(tmp_path, monkeyp
     monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
     monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
     monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
+    monkeypatch.setattr(
+        run_pipeline,
+        "_strict_replay_eligible_ids",
+        lambda artifact: (["hashed_trial_cand_vbt"], {}),
+    )
     monkeypatch.setattr(run_pipeline, "write_hftbacktest_realism_artifacts", fake_writer)
     monkeypatch.setattr(sys, "argv", [
         "run_pipeline.py",
@@ -1140,6 +1612,129 @@ def test_run_pipeline_vectorbt_hftbacktest_opt_in_calls_writer(tmp_path, monkeyp
     assert payload["hftbacktest_realism"]["replay_summary"] == payload["replay_summary"]
     assert payload["paths"]["screening_artifact_path"] == str(run_dir / "screening_artifact.json")
     assert payload["paths"]["hftbacktest_realism_dir"] == str(run_dir / "hftbacktest_realism")
+
+
+def test_run_pipeline_vectorbt_hftbacktest_opt_in_blocks_without_strict_replay_eligibility(
+    tmp_path, monkeypatch, capsys
+):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+    from backtest_pipeline.src.promotion_gate import PromotedCandidate
+    from backtest_pipeline.src.vectorbt_adapter import FilterResult
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_vbt",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis=parsed.thesis,
+    )
+
+    def fake_filter_candidates(*args, **kwargs):
+        return FilterResult(
+            promoted=[
+                PromotedCandidate(
+                    candidate_id="hashed_trial_cand_vbt",
+                    hypothesis_id="SPREAD_BLOWOUT_RECOMPRESSION",
+                    strategy_family="SPREAD_BLOWOUT_RECOMPRESSION",
+                    asset_class="CME",
+                    symbol="MES",
+                    timeframe="1m",
+                    param_values={"signal_threshold": 0.1},
+                    vectorbt_run_id="vbt_test",
+                    vectorbt_results={
+                        "base_candidate_id": "cand_vbt",
+                        "oos_expectancy": 1.0,
+                        "num_trades": 12,
+                    },
+                    pass_reason="vectorbt_screen_passed_replay_not_eligible",
+                )
+            ],
+            rejected=[],
+            vectorbt_available=True,
+            backend="vectorbt",
+            run_id="vbt_test",
+            total_candidates=1,
+            code_commit="abc123",
+            vectorbt_version="1.0.0",
+            vectorbt_engine="rust",
+            engine_parity_status="rust_engine_verified",
+            rust_engine_required_for_scope=False,
+            rust_engine_available=True,
+            vectorbt_engine_runtime_proof=True,
+            parameter_space_id="vbt_ps_test",
+            parameter_space_hash="ps_hash_test",
+            max_trials=1,
+            trials_run=1,
+            max_total_trials=1,
+            candidate_ids=["cand_vbt"],
+            candidate_reasons={"cand_vbt": "queued_for_vectorbt_screen"},
+            stop_reasons=[],
+        )
+
+    data_path = tmp_path / "data.npz"
+    latency_path = tmp_path / "latency.json"
+    fill_queue_path = tmp_path / "fill_queue.json"
+    for path in (data_path, latency_path, fill_queue_path):
+        path.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_vbt_hbt_ineligible")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: {
+        "schema_version": "1",
+        "request_id": "pipeline_vbt_hbt_ineligible",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    })
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
+    monkeypatch.setattr(
+        run_pipeline,
+        "write_hftbacktest_realism_artifacts",
+        lambda *args, **kwargs: pytest.fail("ineligible row called HftBacktest writer"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        parsed.thesis,
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--max-candidates",
+        "1",
+        "--no-llm",
+        "--vectorbt",
+        "--hftbacktest-realism",
+        "--hftbacktest-data-npz",
+        str(data_path),
+        "--hftbacktest-latency-model",
+        str(latency_path),
+        "--hftbacktest-fill-queue-model",
+        str(fill_queue_path),
+    ])
+
+    assert run_pipeline.main() == 2
+    payload = _last_json_object(capsys.readouterr().out)
+
+    assert payload["status"] == "blocked_hftbacktest_realism_replay_ineligible"
+    assert payload["hftbacktest_realism"] is None
+    assert payload["replay_summary"]["fail_closed_reasons"] == [
+        "screening_artifact_has_no_strict_replay_eligible_candidate"
+    ]
 
 
 def test_run_pipeline_vectorbt_hftbacktest_opt_in_no_promoted_does_not_call_writer(

@@ -50,6 +50,33 @@ python scripts/run_pipeline.py \
   --event-id CPI_2024_09_11_TIGHT
 ```
 
+## Runtime Reproducibility
+
+Legacy `scripts/run_pipeline.py` now loads a separate JSON runtime config
+(`config/research_pipeline/default_runtime.json` by default). This is distinct
+from the autoresearch loop YAML passed through `--config`.
+
+Each artifact-producing run writes:
+
+- `pipeline_runtime_config.json` — loaded/effective runtime defaults plus hash
+- `pipeline_run.log` — JSON-lines run log for operational debugging
+- `candidate_prefilter.json` — lightweight prefilter receipt
+- `pipeline_run_receipt.json` — final structured payload for the run,
+  including fail-closed failures after artifact setup
+
+Optional documents are cached by source fingerprint under
+`runtime/research_pipeline/doc_cache` unless disabled in the runtime config.
+Local file cache keys include the source file SHA256. URL caching is disabled
+by default because remote content can change behind a stable URL. The cache
+covers extracted text summary and KG slice records; it does not change the
+VectorBT or HftBacktest gates.
+
+`--hftbacktest-realism` remains fail-closed: the writer is called only after a
+promoted screening row is strict replay-eligible and carries a robustness
+evidence receipt from the robustness applicator.
+
+Implementation plan and review gates: [AUTORESEARCH_PIPELINE_UPGRADE_PLAN.md](../project/AUTORESEARCH_PIPELINE_UPGRADE_PLAN.md).
+
 ## LLM
 
 Default model: `gpt-5.5` with `xhigh` reasoning through an OpenAI-compatible `/v1/chat/completions` endpoint. Override with `HFT3_RESEARCH_LLM_MODEL`, `HFT3_MODEL_DEVELOPMENT_LLM_MODEL`, `HFT3_LLM_BASE_URL`, and `HFT3_LLM_REASONING_EFFORT`. This runtime is **not** OpenFoundry or AlphaGeometry. Heuristic fallback remains active when the endpoint is unavailable.

@@ -1,0 +1,35 @@
+{
+  "schema_version": "hft3_research_pipeline_runtime_v1",
+  "max_candidates": 5,
+  "vectorbt": {
+    "scope": "pilot",
+    "budget": {
+      "max_trials": null,
+      "max_models": null,
+      "max_symbols": null,
+      "max_feature_sets": null,
+      "max_total_trials": null,
+      "max_wall_clock_seconds": null,
+      "max_peak_memory_mb_or_null": null,
+      "abort_on_budget_exhaustion": null
+    }
+  },
+  "llm_ideas": {
+    "max_ideas": null,
+    "review_memory_limit": 5,
+    "temperature": 0.7,
+    "top_p": 0.95
+  },
+  "doc_cache": {
+    "enabled": true,
+    "root": "runtime/research_pipeline/doc_cache",
+    "cache_urls": false
+  },
+  "candidate_prefilter": {
+    "enabled": true,
+    "model_id_pattern": "^[A-Z][A-Z0-9_]*$",
+    "signal_threshold_min": 0.0,
+    "signal_threshold_max": 1.0,
+    "require_positive_holding_period_bars": true
+  }
+}

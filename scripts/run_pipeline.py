@@ -4,12 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import hashlib
 import json
+import logging
+import math
 import os
+import re
 import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Mapping
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages"), str(REPO / "apps")]
@@ -18,6 +24,7 @@ from research_pipeline.deployment import deploy_best
 from research_pipeline.document_ingestion import (
     build_knowledge_graph,
     extract_text,
+    graph_to_kg_records,
     summarise_text,
 )
 from research_pipeline.evaluation import evaluate_model
@@ -35,7 +42,10 @@ from research_pipeline.idea_generation import (
 from backtest_pipeline.src.fs_v1_screen_path import FS_V1_BAR_CONSTRUCTION_ID
 from backtest_pipeline.src.vectorbt_adapter import filter_candidates, persist_screening_artifact
 from data_system.src.feature_store import feature_store_root
-from backtest_pipeline.src.hftbacktest_realism import write_hftbacktest_realism_artifacts
+from backtest_pipeline.src.hftbacktest_realism import (
+    validate_candidate_replay_eligibility,
+    write_hftbacktest_realism_artifacts,
+)
 from backtest_pipeline.src.promotion_gate import PromotionGate
 from research_pipeline.packets import (
     build_pipeline_request,
@@ -51,10 +61,336 @@ def _run_id() -> str:
     return f"pipeline_{ts}_{uuid.uuid4().hex[:8]}"
 
 
+_DEFAULT_PIPELINE_CONFIG_PATH = REPO / "config" / "research_pipeline" / "default_runtime.json"
+_DEFAULT_PIPELINE_RUNTIME_CONFIG: dict[str, Any] = {
+    "schema_version": "hft3_research_pipeline_runtime_v1",
+    "max_candidates": 5,
+    "vectorbt": {
+        "scope": "pilot",
+        "budget": {
+            "max_trials": None,
+            "max_models": None,
+            "max_symbols": None,
+            "max_feature_sets": None,
+            "max_total_trials": None,
+            "max_wall_clock_seconds": None,
+            "max_peak_memory_mb_or_null": None,
+            "abort_on_budget_exhaustion": None,
+        },
+    },
+    "llm_ideas": {
+        "max_ideas": None,
+        "review_memory_limit": 5,
+        "temperature": 0.7,
+        "top_p": 0.95,
+    },
+    "doc_cache": {
+        "enabled": True,
+        "root": "runtime/research_pipeline/doc_cache",
+        "cache_urls": False,
+    },
+    "candidate_prefilter": {
+        "enabled": True,
+        "model_id_pattern": r"^[A-Z][A-Z0-9_]*$",
+        "signal_threshold_min": 0.0,
+        "signal_threshold_max": 1.0,
+        "require_positive_holding_period_bars": True,
+    },
+}
+_VECTORBT_SCOPE_CHOICES = {
+    "pilot",
+    "screen",
+    "refine",
+    "paid",
+    "paid-compute",
+    "paid_compute",
+    "broad",
+    "broad-screen",
+    "broad_screen",
+    "all-model",
+    "all_model",
+    "all-models",
+    "all_models",
+}
+_VECTORBT_BUDGET_ARGS = {
+    "max_trials": "vectorbt_max_trials",
+    "max_models": "vectorbt_max_models",
+    "max_symbols": "vectorbt_max_symbols",
+    "max_feature_sets": "vectorbt_max_feature_sets",
+    "max_total_trials": "vectorbt_max_total_trials",
+    "max_wall_clock_seconds": "vectorbt_max_wall_clock_seconds",
+    "max_peak_memory_mb_or_null": "vectorbt_max_peak_memory_mb",
+}
 _PIPELINE_RESULT_MARKER = "HFT3_PIPELINE_RESULT="
+_LOG_HANDLER_ATTR = "_hft3_pipeline_run_handler"
+logger = logging.getLogger("hft3.research_pipeline.run_pipeline")
+_ACTIVE_RUN_FAILURE_CONTEXT: dict[str, Any] | None = None
+
+
+def _json_default(value: Any) -> str:
+    if isinstance(value, Path):
+        return str(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
+def _write_json(path: Path, payload: Mapping[str, Any]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, default=_json_default) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _deep_merge(base: dict[str, Any], updates: Mapping[str, Any]) -> dict[str, Any]:
+    for key, value in updates.items():
+        if isinstance(value, Mapping) and isinstance(base.get(key), dict):
+            base[key] = _deep_merge(dict(base[key]), value)
+        else:
+            base[key] = value
+    return base
+
+
+def load_pipeline_runtime_config(path: Path | None = None) -> dict[str, Any]:
+    config = copy.deepcopy(_DEFAULT_PIPELINE_RUNTIME_CONFIG)
+    config_path = path or _DEFAULT_PIPELINE_CONFIG_PATH
+    if config_path.is_file():
+        raw = json.loads(config_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError(f"pipeline runtime config must be a JSON object: {config_path}")
+        _deep_merge(config, raw)
+    elif path is not None:
+        raise FileNotFoundError(f"pipeline runtime config not found: {config_path}")
+    return config
+
+
+def _section(config: Mapping[str, Any], key: str) -> dict[str, Any]:
+    value = config.get(key)
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _positive_int(value: Any, *, name: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a positive integer") from exc
+    if parsed <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    return parsed
+
+
+def _nonnegative_int(value: Any, *, name: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a nonnegative integer") from exc
+    if parsed < 0:
+        raise ValueError(f"{name} must be a nonnegative integer")
+    return parsed
+
+
+def _optional_positive_int(value: Any, *, name: str) -> int | None:
+    if value is None:
+        return None
+    return _positive_int(value, name=name)
+
+
+def _float_default(value: Any, *, name: str) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be numeric") from exc
+    if not math.isfinite(parsed):
+        raise ValueError(f"{name} must be finite")
+    return parsed
+
+
+def _bool_default(value: Any, *, name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"{name} must be boolean")
+
+
+def _required_true(value: Any, *, name: str) -> bool:
+    parsed = _bool_default(value, name=name)
+    if not parsed:
+        raise ValueError(f"{name} must be true")
+    return parsed
+
+
+def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[str, Any]) -> None:
+    vectorbt_config = _section(config, "vectorbt")
+    idea_config = _section(config, "llm_ideas")
+
+    if args.max_candidates is None:
+        args.max_candidates = config.get("max_candidates", 5)
+    args.max_candidates = _positive_int(args.max_candidates, name="max_candidates")
+
+    if args.vectorbt_scope is None:
+        args.vectorbt_scope = str(vectorbt_config.get("scope") or "pilot")
+    if args.vectorbt_scope not in _VECTORBT_SCOPE_CHOICES:
+        raise ValueError(f"vectorbt.scope must be one of: {', '.join(sorted(_VECTORBT_SCOPE_CHOICES))}")
+
+    budget_config = _section(vectorbt_config, "budget")
+    if budget_config.get("abort_on_budget_exhaustion") is not None:
+        _required_true(
+            budget_config["abort_on_budget_exhaustion"],
+            name="vectorbt.budget.abort_on_budget_exhaustion",
+        )
+    for config_key, arg_name in _VECTORBT_BUDGET_ARGS.items():
+        if getattr(args, arg_name) is None and budget_config.get(config_key) is not None:
+            setattr(args, arg_name, int(budget_config[config_key]))
+
+    if args.max_ideas is None:
+        args.max_ideas = _optional_positive_int(idea_config.get("max_ideas"), name="llm_ideas.max_ideas")
+    if args.review_memory_limit is None:
+        args.review_memory_limit = idea_config.get("review_memory_limit", 5)
+    args.review_memory_limit = _nonnegative_int(args.review_memory_limit, name="review_memory_limit")
+
+
+class _PipelineJsonFormatter(logging.Formatter):
+    def __init__(self, run_id: str) -> None:
+        super().__init__()
+        self.run_id = run_id
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "run_id": self.run_id,
+            "event": record.getMessage(),
+        }
+        extra_payload = getattr(record, "payload", None)
+        if isinstance(extra_payload, Mapping):
+            payload["payload"] = dict(extra_payload)
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=_json_default)
+
+
+def _configure_run_logging(artifact_dir: Path, run_id: str) -> Path:
+    log_path = artifact_dir / "pipeline_run.log"
+    for handler in list(logger.handlers):
+        if getattr(handler, _LOG_HANDLER_ATTR, False):
+            logger.removeHandler(handler)
+            handler.close()
+    handler = logging.FileHandler(log_path, encoding="utf-8")
+    setattr(handler, _LOG_HANDLER_ATTR, True)
+    handler.setFormatter(_PipelineJsonFormatter(run_id))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.info("pipeline_run_logging_configured", extra={"payload": {"log_path": str(log_path)}})
+    return log_path
+
+
+def _pipeline_config_receipt(
+    *,
+    config: Mapping[str, Any],
+    config_path: Path,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    idea_config = _section(config, "llm_ideas")
+    vectorbt_budget = {
+        key: getattr(args, arg_name)
+        for key, arg_name in _VECTORBT_BUDGET_ARGS.items()
+    }
+    abort_default = _section(_section(config, "vectorbt"), "budget").get("abort_on_budget_exhaustion")
+    if abort_default is not None:
+        vectorbt_budget["abort_on_budget_exhaustion"] = _required_true(
+            abort_default,
+            name="vectorbt.budget.abort_on_budget_exhaustion",
+        )
+    effective = {
+        "max_candidates": args.max_candidates,
+        "vectorbt": {
+            "scope": args.vectorbt_scope,
+            "budget": vectorbt_budget,
+        },
+        "llm_ideas": {
+            "max_ideas": args.max_ideas,
+            "review_memory_limit": args.review_memory_limit,
+            "temperature": getattr(args, "resolved_idea_temperature", idea_config.get("temperature", 0.7)),
+            "top_p": getattr(args, "resolved_idea_top_p", idea_config.get("top_p", 0.95)),
+        },
+        "doc_cache": _section(config, "doc_cache"),
+        "candidate_prefilter": _section(config, "candidate_prefilter"),
+    }
+    hash_payload = {
+        "loaded_config": copy.deepcopy(dict(config)),
+        "effective": effective,
+    }
+    config_hash = hashlib.sha256(
+        json.dumps(hash_payload, sort_keys=True, default=_json_default).encode("utf-8")
+    ).hexdigest()
+    return {
+        "schema_version": "hft3_pipeline_runtime_config_receipt_v1",
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "pipeline_config_path": str(config_path),
+        "pipeline_runtime_config_hash": config_hash,
+        "loaded_config": copy.deepcopy(dict(config)),
+        "effective": effective,
+    }
+
+
+def _write_pipeline_run_receipt(payload: Mapping[str, Any]) -> Path | None:
+    artifact_dir = payload.get("artifact_dir")
+    if not artifact_dir:
+        return None
+    receipt_path = _write_json(Path(str(artifact_dir)) / "pipeline_run_receipt.json", payload)
+    logger.info(
+        "pipeline_run_receipt_written",
+        extra={"payload": {"receipt_path": str(receipt_path), "status": payload.get("status")}},
+    )
+    return receipt_path
+
+
+def _set_active_run_failure_context(**context: Any) -> None:
+    global _ACTIVE_RUN_FAILURE_CONTEXT
+    _ACTIVE_RUN_FAILURE_CONTEXT = dict(context)
+
+
+def _update_active_run_failure_context(**context: Any) -> None:
+    if _ACTIVE_RUN_FAILURE_CONTEXT is not None:
+        _ACTIVE_RUN_FAILURE_CONTEXT.update(context)
+
+
+def _emit_pipeline_failure_receipt(exc: Exception) -> None:
+    context = dict(_ACTIVE_RUN_FAILURE_CONTEXT or {})
+    artifact_dir = context.get("artifact_dir")
+    if not artifact_dir:
+        logger.exception("pipeline_run_failed_without_artifact_dir")
+        return
+    payload: dict[str, Any] = {
+        "run_id": context.get("run_id"),
+        "artifact_dir": str(artifact_dir),
+        "status": "pipeline_failed",
+        "error": {
+            "type": type(exc).__name__,
+            "message": str(exc),
+        },
+    }
+    for key in (
+        "request_packet",
+        "document_summary",
+        "document_cache",
+        "candidate_prefilter",
+        "paths",
+    ):
+        if key in context:
+            payload[key] = context[key]
+    logger.exception("pipeline_run_failed", extra={"payload": payload["error"]})
+    _emit_pipeline_payload(payload, orchestrator_result=bool(context.get("orchestrator_result")))
 
 
 def _emit_pipeline_payload(payload: dict, *, orchestrator_result: bool) -> None:
+    _write_pipeline_run_receipt(payload)
     if orchestrator_result:
         slim = {
             "run_id": payload.get("run_id"),
@@ -62,9 +398,9 @@ def _emit_pipeline_payload(payload: dict, *, orchestrator_result: bool) -> None:
             "status": payload.get("status"),
             "paths": payload.get("paths"),
         }
-        print(_PIPELINE_RESULT_MARKER + json.dumps(slim))
+        print(_PIPELINE_RESULT_MARKER + json.dumps(slim, default=_json_default))
     else:
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(payload, indent=2, default=_json_default))
 
 
 def _pipeline_llm_status(parsed: ParsedHypothesis, *, no_llm: bool) -> str:
@@ -112,23 +448,289 @@ def _optional_resolved_path(path: Path | None) -> Path | None:
     return path.resolve() if path is not None else None
 
 
-def main() -> int:
+def _resolve_config_path(repo_root: Path, raw_path: Any) -> Path:
+    path = Path(str(raw_path))
+    if path.is_absolute():
+        return path
+    return repo_root / path
+
+
+def _doc_cache_path(source: Path, *, repo_root: Path, cache_root: Path) -> Path:
+    source_path = Path(source)
+    source_meta: dict[str, Any]
+    if str(source).startswith(("http://", "https://")):
+        source_meta = {"kind": "url", "source": str(source)}
+    else:
+        resolved = (repo_root / source_path).resolve() if not source_path.is_absolute() else source_path.resolve()
+        stat = resolved.stat()
+        source_meta = {
+            "kind": "file",
+            "source": str(resolved),
+            "size": stat.st_size,
+            "mtime_ns": stat.st_mtime_ns,
+            "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(),
+        }
+    digest = hashlib.sha256(
+        json.dumps(source_meta, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return cache_root / f"{digest}.json"
+
+
+def _doc_id(source: Path) -> str:
+    stem = Path(source).stem or hashlib.sha256(str(source).encode("utf-8")).hexdigest()[:12]
+    safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", stem).strip("._") or "unknown"
+    return f"doc:{safe_stem}"
+
+
+def _graph_from_kg_records(records: Mapping[str, Any]):
+    import networkx as nx
+
+    graph = nx.DiGraph()
+    for node in records.get("nodes", []) or []:
+        if not isinstance(node, Mapping) or not node.get("id"):
+            continue
+        attrs = {k: v for k, v in node.items() if k != "id"}
+        graph.add_node(str(node["id"]), **attrs)
+    for edge in records.get("edges", []) or []:
+        if not isinstance(edge, Mapping) or not edge.get("from") or not edge.get("to"):
+            continue
+        attrs = {k: v for k, v in edge.items() if k not in {"from", "to"}}
+        graph.add_edge(str(edge["from"]), str(edge["to"]), **attrs)
+    return graph
+
+
+def ingest_document_with_cache(
+    source: str | Path,
+    *,
+    repo_root: Path,
+    cache_config: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    enabled = _bool_default(cache_config.get("enabled", True), name="doc_cache.enabled")
+    cache_urls = _bool_default(cache_config.get("cache_urls", False), name="doc_cache.cache_urls")
+    if str(source).startswith(("http://", "https://")) and not cache_urls:
+        enabled = False
+    cache_root = _resolve_config_path(
+        repo_root,
+        cache_config.get("root") or _DEFAULT_PIPELINE_RUNTIME_CONFIG["doc_cache"]["root"],
+    )
+    cache_path = _doc_cache_path(source, repo_root=repo_root, cache_root=cache_root)
+    doc_id = _doc_id(source)
+    if enabled and cache_path.is_file():
+        cached = json.loads(cache_path.read_text(encoding="utf-8"))
+        summary = str(cached.get("summary") or "")
+        records = cached.get("kg_records") or {}
+        persist_graph_slice(repo_root, _graph_from_kg_records(records))
+        return summary, {
+            "enabled": enabled,
+            "status": "hit",
+            "cache_path": str(cache_path),
+            "doc_id": str(cached.get("doc_id") or doc_id),
+        }
+
+    text = extract_text(source)
+    summary = summarise_text(text)
+    kg = build_knowledge_graph(text, doc_id=doc_id)
+    records = graph_to_kg_records(kg)
+    persist_graph_slice(repo_root, kg)
+    if enabled:
+        _write_json(
+            cache_path,
+            {
+                "schema_version": "hft3_doc_ingestion_cache_v1",
+                "created_at_utc": datetime.now(timezone.utc).isoformat(),
+                "doc_id": doc_id,
+                "text_sha256": hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest(),
+                "text_char_count": len(text),
+                "summary": summary,
+                "kg_records": records,
+            },
+        )
+    return summary, {
+        "enabled": enabled,
+        "status": "miss",
+        "cache_path": str(cache_path) if enabled else None,
+        "doc_id": doc_id,
+    }
+
+
+def prefilter_candidates(
+    candidates: list[CandidateModel],
+    *,
+    config: Mapping[str, Any],
+) -> tuple[list[CandidateModel], dict[str, Any]]:
+    enabled = _bool_default(config.get("enabled", True), name="candidate_prefilter.enabled")
+    if not enabled:
+        return candidates, {
+            "schema_version": "hft3_candidate_prefilter_v1",
+            "enabled": False,
+            "total_candidates": len(candidates),
+            "accepted_count": len(candidates),
+            "rejected_count": 0,
+            "accepted_ids": [c.candidate_id for c in candidates],
+            "rejected": [],
+        }
+
+    pattern = re.compile(str(config.get("model_id_pattern") or r"^[A-Z][A-Z0-9_]*$"))
+    threshold_min = _float_default(config.get("signal_threshold_min", 0.0), name="signal_threshold_min")
+    threshold_max = _float_default(config.get("signal_threshold_max", 1.0), name="signal_threshold_max")
+    require_positive_holding = _bool_default(
+        config.get("require_positive_holding_period_bars", True),
+        name="candidate_prefilter.require_positive_holding_period_bars",
+    )
+    accepted: list[CandidateModel] = []
+    rejected: list[dict[str, Any]] = []
+    for candidate in candidates:
+        reasons: list[str] = []
+        model_id = str(candidate.model_id or "")
+        if not pattern.fullmatch(model_id):
+            reasons.append("malformed_model_id")
+        params = dict(candidate.strategy_params or {})
+        if "signal_threshold" in params:
+            try:
+                threshold = float(params["signal_threshold"])
+            except (TypeError, ValueError):
+                threshold = math.nan
+            if (
+                not math.isfinite(threshold)
+                or threshold < threshold_min
+                or threshold > threshold_max
+            ):
+                reasons.append("signal_threshold_out_of_bounds")
+        if require_positive_holding and "holding_period_bars" in params:
+            try:
+                holding = float(params["holding_period_bars"])
+            except (TypeError, ValueError):
+                holding = math.nan
+            if not math.isfinite(holding) or holding <= 0:
+                reasons.append("holding_period_bars_nonpositive")
+        if reasons:
+            rejected.append(
+                {
+                    "candidate_id": candidate.candidate_id,
+                    "model_id": candidate.model_id,
+                    "reasons": reasons,
+                    "params": params,
+                }
+            )
+        else:
+            accepted.append(candidate)
+    return accepted, {
+        "schema_version": "hft3_candidate_prefilter_v1",
+        "enabled": True,
+        "total_candidates": len(candidates),
+        "accepted_count": len(accepted),
+        "rejected_count": len(rejected),
+        "accepted_ids": [c.candidate_id for c in accepted],
+        "rejected": rejected,
+    }
+
+
+def _idea_sampling_value(
+    cli_value: float | None,
+    *,
+    env_name: str,
+    config: Mapping[str, Any],
+    key: str,
+    fallback: float,
+) -> float:
+    if cli_value is not None:
+        return cli_value
+    env_value = _optional_float(os.environ.get(env_name))
+    if env_value is not None:
+        return env_value
+    if config.get(key) is not None:
+        return _float_default(config[key], name=f"llm_ideas.{key}")
+    return fallback
+
+
+def _resolve_idea_sampling_values(args: argparse.Namespace, config: Mapping[str, Any]) -> None:
+    idea_config = _section(config, "llm_ideas")
+    args.resolved_idea_temperature = _idea_sampling_value(
+        args.idea_temperature,
+        env_name="HFT3_IDEA_TEMPERATURE",
+        config=idea_config,
+        key="temperature",
+        fallback=0.7,
+    )
+    args.resolved_idea_top_p = _idea_sampling_value(
+        args.idea_top_p,
+        env_name="HFT3_IDEA_TOP_P",
+        config=idea_config,
+        key="top_p",
+        fallback=0.95,
+    )
+
+
+def _vectorbt_run_budget(args: argparse.Namespace, config: Mapping[str, Any]) -> dict[str, Any]:
+    vectorbt_config = _section(config, "vectorbt")
+    budget_config = _section(vectorbt_config, "budget")
+    run_budget = {
+        key: value
+        for key, value in {
+            "max_trials": args.vectorbt_max_trials,
+            "max_models": args.vectorbt_max_models,
+            "max_symbols": args.vectorbt_max_symbols,
+            "max_feature_sets": args.vectorbt_max_feature_sets,
+            "max_total_trials": args.vectorbt_max_total_trials,
+            "max_wall_clock_seconds": args.vectorbt_max_wall_clock_seconds,
+            "max_peak_memory_mb_or_null": args.vectorbt_max_peak_memory_mb,
+        }.items()
+        if value is not None
+    }
+    if budget_config.get("abort_on_budget_exhaustion") is not None:
+        run_budget["abort_on_budget_exhaustion"] = _required_true(
+            budget_config["abort_on_budget_exhaustion"],
+            name="vectorbt.budget.abort_on_budget_exhaustion",
+        )
+    return run_budget
+
+
+def _strict_replay_eligible_ids(
+    screening_artifact: Mapping[str, Any],
+) -> tuple[list[str], dict[str, list[str]]]:
+    promoted_ids = {str(value) for value in screening_artifact.get("promoted_ids") or []}
+    eligible: list[str] = []
+    ineligible: dict[str, list[str]] = {}
+    for row in screening_artifact.get("promoted") or []:
+        if not isinstance(row, Mapping):
+            continue
+        candidate_id = str(row.get("candidate_id") or "")
+        if not candidate_id or candidate_id not in promoted_ids:
+            continue
+        reasons = validate_candidate_replay_eligibility(row)
+        if row.get("robustness_evidence_receipt") in (None, "", {}):
+            reasons.append("robustness_evidence_receipt_missing")
+        if reasons:
+            ineligible[candidate_id] = list(dict.fromkeys(str(reason) for reason in reasons))
+        else:
+            eligible.append(candidate_id)
+    missing_rows = sorted(promoted_ids - set(eligible) - set(ineligible))
+    for candidate_id in missing_rows:
+        ineligible[candidate_id] = ["candidate_metadata_missing_from_screening_artifact"]
+    return eligible, ineligible
+
+
+def _main_impl(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Autoresearch pipeline")
     parser.add_argument("--thesis", required=True, help="Natural-language trading thesis")
-    parser.add_argument("--doc", type=Path, help="Optional research document (PDF/DOCX/URL)")
+    parser.add_argument("--doc", help="Optional research document (PDF/DOCX/URL)")
     parser.add_argument("--event-id", required=True, help="Explicit catalog event id from events.csv")
     parser.add_argument(
         "--symbol",
         default="MES",
         help="Target symbol for feature-store fs_v1 VectorBT path (default MES)",
     )
-    parser.add_argument("--max-candidates", type=int, default=5)
+    parser.add_argument("--max-candidates", type=int, default=None)
     parser.add_argument("--chi404-summary", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true", help="Parse and generate only")
     parser.add_argument("--no-llm", action="store_true", help="Heuristic hypothesis parse only")
     parser.add_argument("--repo-root", type=Path, default=REPO)
     parser.add_argument("--vectorbt", action="store_true", help="Enable VectorBT pre-filter before HftBacktest")
-    parser.add_argument("--vectorbt-only", action="store_true", help="Run VectorBT filter only, skip HftBacktest")
+    parser.add_argument(
+        "--vectorbt-only",
+        action="store_true",
+        help="Run VectorBT filter only and stop before the downstream realism handoff",
+    )
     parser.add_argument(
         "--vectorbt-scope",
         choices=[
@@ -146,7 +748,7 @@ def main() -> int:
             "all-models",
             "all_models",
         ],
-        default="pilot",
+        default=None,
         help="VectorBT screening scope; all non-pilot broad/refine/paid scopes require the Rust engine",
     )
     parser.add_argument("--vectorbt-max-trials", type=int, default=None)
@@ -170,7 +772,7 @@ def main() -> int:
     parser.add_argument("--native-hot-path-evidence", action="append", default=[])
     parser.add_argument("--idea-set", action="store_true", help="Use packet-strict LLM idea set before candidate tests")
     parser.add_argument("--max-ideas", type=int, default=None, help="Maximum idea records to accept before static filtering")
-    parser.add_argument("--review-memory-limit", type=int, default=5, help="Prior AAR/KG memory facts to include")
+    parser.add_argument("--review-memory-limit", type=int, default=None, help="Prior AAR/KG memory facts to include")
     parser.add_argument("--idea-temperature", type=float, default=None, help="Sampling temperature for idea generation only")
     parser.add_argument("--idea-top-p", type=float, default=None, help="Top-p sampling for idea generation only")
     parser.add_argument(
@@ -185,11 +787,25 @@ def main() -> int:
         default=REPO / "config" / "autoresearch" / "default.yaml",
         help="Autoresearch loop YAML config",
     )
+    parser.add_argument(
+        "--pipeline-config",
+        type=Path,
+        default=_DEFAULT_PIPELINE_CONFIG_PATH,
+        help="Research pipeline runtime JSON config",
+    )
     parser.add_argument("--resume", action="store_true", help="Resume autoresearch campaign from manifest")
     parser.add_argument("--campaign-id", default=None, help="Autoresearch campaign id (required with --resume)")
     parser.add_argument("--max-generations", type=int, default=None, help="Override config max_generations")
     parser.add_argument("--stop-file", type=Path, default=None, help="Stop autoresearch loop when this file exists")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+
+    try:
+        runtime_config = load_pipeline_runtime_config(args.pipeline_config)
+        _apply_pipeline_runtime_defaults(args, runtime_config)
+        _resolve_idea_sampling_values(args, runtime_config)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
 
     if args.autoresearch:
         from research_pipeline.generation_loop import (
@@ -199,6 +815,23 @@ def main() -> int:
         )
 
         repo_root = args.repo_root.resolve()
+        run_id = _run_id()
+        artifact_dir = repo_root / "research_cards" / "pipeline_runs" / run_id
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        _configure_run_logging(artifact_dir, run_id)
+        _set_active_run_failure_context(
+            run_id=run_id,
+            artifact_dir=str(artifact_dir),
+            orchestrator_result=bool(args.orchestrator_result),
+        )
+        _write_json(
+            artifact_dir / "pipeline_runtime_config.json",
+            _pipeline_config_receipt(
+                config=runtime_config,
+                config_path=args.pipeline_config,
+                args=args,
+            ),
+        )
         overrides = {
             "max_generations": args.max_generations,
             "stop_file": str(args.stop_file) if args.stop_file else None,
@@ -221,6 +854,8 @@ def main() -> int:
         )
         _emit_pipeline_payload(
             {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
                 "status": "autoresearch_complete" if code == 0 else "autoresearch_failed",
                 "autoresearch_report": report,
             },
@@ -254,6 +889,7 @@ def main() -> int:
     repo_root = args.repo_root.resolve()
     run_id = _run_id()
     doc_summary = None
+    document_cache = None
     doc_ref = str(args.doc) if args.doc else None
 
     request = build_pipeline_request(
@@ -266,20 +902,54 @@ def main() -> int:
     )
     artifact_dir = repo_root / "research_cards" / "pipeline_runs" / run_id
     artifact_dir.mkdir(parents=True, exist_ok=True)
+    _configure_run_logging(artifact_dir, run_id)
+    _set_active_run_failure_context(
+        run_id=run_id,
+        artifact_dir=str(artifact_dir),
+        orchestrator_result=bool(args.orchestrator_result),
+        request_packet=request,
+    )
+    logger.info(
+        "pipeline_run_start",
+        extra={
+            "payload": {
+                "artifact_dir": str(artifact_dir),
+                "event_id": args.event_id,
+                "vectorbt": bool(args.vectorbt),
+                "vectorbt_only": bool(args.vectorbt_only),
+                "dry_run": bool(args.dry_run),
+            }
+        },
+    )
+    _write_json(
+        artifact_dir / "pipeline_runtime_config.json",
+        _pipeline_config_receipt(
+            config=runtime_config,
+            config_path=args.pipeline_config,
+            args=args,
+        ),
+    )
     (artifact_dir / "request_packet.json").write_text(
         json.dumps(request, indent=2), encoding="utf-8"
     )
 
     if args.doc:
         try:
-            text = extract_text(args.doc)
-            doc_summary = summarise_text(text)
-            doc_id = f"doc:{args.doc.stem}"
-            kg = build_knowledge_graph(text, doc_id=doc_id)
-            persist_graph_slice(repo_root, kg)
+            doc_summary, document_cache = ingest_document_with_cache(
+                args.doc,
+                repo_root=repo_root,
+                cache_config=_section(runtime_config, "doc_cache"),
+            )
+            logger.info("document_ingestion_complete", extra={"payload": document_cache})
         except Exception as exc:
             print(f"Warning: document ingestion failed, continuing without doc: {exc}", file=sys.stderr)
             doc_summary = {"error": str(exc)}
+            document_cache = {"status": "error", "error": str(exc)}
+            logger.warning("document_ingestion_failed", extra={"payload": document_cache})
+    _update_active_run_failure_context(
+        document_summary=doc_summary,
+        document_cache=document_cache,
+    )
 
     idea_packet = None
     idea_candidates_count = 0
@@ -292,16 +962,8 @@ def main() -> int:
             max_candidates=args.max_candidates,
             review_memory_limit=args.review_memory_limit,
             use_llm=not args.no_llm,
-            temperature=(
-                args.idea_temperature
-                if args.idea_temperature is not None
-                else _optional_float(os.environ.get("HFT3_IDEA_TEMPERATURE")) or 0.7
-            ),
-            top_p=(
-                args.idea_top_p
-                if args.idea_top_p is not None
-                else _optional_float(os.environ.get("HFT3_IDEA_TOP_P")) or 0.95
-            ),
+            temperature=args.resolved_idea_temperature,
+            top_p=args.resolved_idea_top_p,
         )
         candidates = candidates_from_ideas(
             idea_packet,
@@ -330,6 +992,25 @@ def main() -> int:
             vectorbt=args.vectorbt,
             vectorbt_only=args.vectorbt_only,
         ):
+            candidates, candidate_prefilter = prefilter_candidates(
+                candidates,
+                config=_section(runtime_config, "candidate_prefilter"),
+            )
+            _write_json(artifact_dir / "candidate_prefilter.json", candidate_prefilter)
+            logger.info("candidate_prefilter_complete", extra={"payload": candidate_prefilter})
+            _update_active_run_failure_context(candidate_prefilter=candidate_prefilter)
+            payload = {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
+                "status": "blocked_idea_set_requires_vectorbt_prefilter",
+                "detail": "--idea-set full runs require --vectorbt so generated ideas pass the prefilter before evaluation.",
+                "request_packet": request,
+                "idea_set_packet": idea_packet,
+                "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
+            }
+            _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             print(
                 "Error: --idea-set full runs require --vectorbt so generated ideas pass the prefilter before evaluation.",
                 file=sys.stderr,
@@ -350,6 +1031,14 @@ def main() -> int:
             target_symbol=args.symbol,
         ))
 
+    candidates, candidate_prefilter = prefilter_candidates(
+        candidates,
+        config=_section(runtime_config, "candidate_prefilter"),
+    )
+    _write_json(artifact_dir / "candidate_prefilter.json", candidate_prefilter)
+    logger.info("candidate_prefilter_complete", extra={"payload": candidate_prefilter})
+    _update_active_run_failure_context(candidate_prefilter=candidate_prefilter)
+
     if args.vectorbt or args.vectorbt_only:
         print(f"Running VectorBT filter on {len(candidates)} candidates x grid...")
         source_meta = {c.candidate_id: dict(c.metadata) for c in candidates}
@@ -358,19 +1047,7 @@ def main() -> int:
             max_drawdown_pct=-50.0,
             min_trades=3 if args.vectorbt_only else 10,
         )
-        run_budget = {
-            key: value
-            for key, value in {
-                "max_trials": args.vectorbt_max_trials,
-                "max_models": args.vectorbt_max_models,
-                "max_symbols": args.vectorbt_max_symbols,
-                "max_feature_sets": args.vectorbt_max_feature_sets,
-                "max_total_trials": args.vectorbt_max_total_trials,
-                "max_wall_clock_seconds": args.vectorbt_max_wall_clock_seconds,
-                "max_peak_memory_mb_or_null": args.vectorbt_max_peak_memory_mb,
-            }.items()
-            if value is not None
-        }
+        run_budget = _vectorbt_run_budget(args, runtime_config)
         filter_result = filter_candidates(
             candidates=candidates,
             parsed=parsed,
@@ -499,6 +1176,7 @@ def main() -> int:
             payload = {
                 "run_id": run_id,
                 "artifact_dir": str(artifact_dir),
+                "status": "vectorbt_only_complete" if candidates else "vectorbt_only_no_survivors",
                 "request_packet": request,
                 "response_packet": response,
                 "vectorbt_filter": vectorbt_artifact,
@@ -517,6 +1195,8 @@ def main() -> int:
                     for c in candidates
                 ],
                 "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
             }
             if idea_packet:
                 payload["idea_summary"] = idea_summary
@@ -527,6 +1207,7 @@ def main() -> int:
             "screening_artifact_path": str(screening_path),
             "vectorbt_filter_path": str(artifact_dir / "vectorbt_filter.json"),
         }
+        _update_active_run_failure_context(paths=paths)
         if not args.hftbacktest_realism:
             payload = {
                 "run_id": run_id,
@@ -539,6 +1220,9 @@ def main() -> int:
                 "vectorbt_filter": vectorbt_artifact,
                 "screening_artifact": vectorbt_artifact,
                 "paths": paths,
+                "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
             }
             _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 2
@@ -559,9 +1243,64 @@ def main() -> int:
                 "hftbacktest_realism": None,
                 "replay_summary": replay_summary,
                 "paths": paths,
+                "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
             }
             _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 2
+        strict_eligible_ids, strict_ineligible_reasons = _strict_replay_eligible_ids(vectorbt_artifact)
+        if not strict_eligible_ids:
+            replay_summary = {
+                "run_id": run_id,
+                "replay_realism_status": "fail",
+                "fail_closed_reasons": ["screening_artifact_has_no_strict_replay_eligible_candidate"],
+                "ineligible_reasons": strict_ineligible_reasons,
+            }
+            payload = {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
+                "status": "blocked_hftbacktest_realism_replay_ineligible",
+                "detail": (
+                    "HftBacktest realism handoff requires at least one promoted row with "
+                    "strict replay eligibility from the robustness evidence applicator"
+                ),
+                "vectorbt_filter": vectorbt_artifact,
+                "screening_artifact": vectorbt_artifact,
+                "hftbacktest_realism": None,
+                "replay_summary": replay_summary,
+                "paths": paths,
+                "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
+            }
+            _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
+            return 2
+        if args.hftbacktest_candidate_id and args.hftbacktest_candidate_id not in strict_eligible_ids:
+            replay_summary = {
+                "run_id": run_id,
+                "replay_realism_status": "fail",
+                "fail_closed_reasons": ["requested_candidate_not_strict_replay_eligible"],
+                "eligible_candidate_ids": strict_eligible_ids,
+                "ineligible_reasons": strict_ineligible_reasons,
+            }
+            payload = {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
+                "status": "blocked_hftbacktest_realism_candidate_not_eligible",
+                "detail": "Requested HftBacktest candidate is not strict replay-eligible.",
+                "vectorbt_filter": vectorbt_artifact,
+                "screening_artifact": vectorbt_artifact,
+                "hftbacktest_realism": None,
+                "replay_summary": replay_summary,
+                "paths": paths,
+                "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
+            }
+            _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
+            return 2
+        hftbacktest_candidate_id = args.hftbacktest_candidate_id or strict_eligible_ids[0]
         missing_hbt_inputs = _missing_hftbacktest_realism_inputs(args)
         if missing_hbt_inputs:
             replay_summary = {
@@ -582,6 +1321,9 @@ def main() -> int:
                 "hftbacktest_realism": None,
                 "replay_summary": replay_summary,
                 "paths": paths,
+                "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
             }
             _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 2
@@ -595,7 +1337,7 @@ def main() -> int:
             latency_model_path=_optional_resolved_path(args.hftbacktest_latency_model),
             fill_queue_model_path=_optional_resolved_path(args.hftbacktest_fill_queue_model),
             observation_artifact_path=_optional_resolved_path(args.hftbacktest_observation_artifact),
-            candidate_id=args.hftbacktest_candidate_id,
+            candidate_id=hftbacktest_candidate_id,
             upstream_ref=args.hftbacktest_upstream_ref,
             native_hot_path_evidence=list(args.native_hot_path_evidence or []),
             run_id=run_id,
@@ -624,6 +1366,9 @@ def main() -> int:
             "hftbacktest_realism": hftbacktest_realism,
             "replay_summary": replay_summary,
             "paths": paths,
+            "document_summary": doc_summary,
+            "document_cache": document_cache,
+            "candidate_prefilter": candidate_prefilter,
         }
         _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
         return 0 if replay_summary.get("replay_realism_status") == "pass" else 2
@@ -665,6 +1410,7 @@ def main() -> int:
         payload = {
             "run_id": run_id,
             "artifact_dir": str(artifact_dir),
+            "status": "dry_run_complete",
             "request_packet": request,
             "response_packet": response,
             "parsed": {
@@ -677,11 +1423,13 @@ def main() -> int:
                 for c in candidates
             ],
             "document_summary": doc_summary,
+            "document_cache": document_cache,
+            "candidate_prefilter": candidate_prefilter,
         }
         if idea_packet:
             payload["idea_summary"] = idea_summary
             payload["idea_set_packet"] = idea_packet
-        print(json.dumps(payload, indent=2))
+        _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
         return 0
 
     chi404 = args.chi404_summary
@@ -743,13 +1491,44 @@ def main() -> int:
         ),
     )
     write_pipeline_packets(artifact_dir, request, response)
-    print(json.dumps({"report": report.to_dict(), "response_packet": response}, indent=2))
+    status = "candidate_deployed" if artifact else "no_candidate_deployed"
+    payload = {
+        "run_id": run_id,
+        "artifact_dir": str(artifact_dir),
+        "status": status,
+        "report": report.to_dict(),
+        "response_packet": response,
+    }
+    if document_cache:
+        payload["document_cache"] = document_cache
+    payload["candidate_prefilter"] = candidate_prefilter
+    _write_pipeline_run_receipt(payload)
+    print(json.dumps(payload, indent=2, default=_json_default))
     if artifact:
         print(f"Artifacts: {artifact}")
     else:
         print("No candidate deployed.", file=sys.stderr)
         return 1
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    global _ACTIVE_RUN_FAILURE_CONTEXT
+    _ACTIVE_RUN_FAILURE_CONTEXT = None
+    try:
+        return _main_impl(argv)
+    except Exception as exc:
+        try:
+            _emit_pipeline_failure_receipt(exc)
+        except Exception as receipt_exc:
+            print(
+                f"Error: pipeline failed and failure receipt could not be written: {receipt_exc}",
+                file=sys.stderr,
+            )
+        print(f"Error: pipeline failed: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        _ACTIVE_RUN_FAILURE_CONTEXT = None
 
 
 if __name__ == "__main__":
