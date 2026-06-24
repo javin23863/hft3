@@ -635,15 +635,40 @@ def _sha256_digest_text(value: Any) -> str | None:
 
 
 def _contains_sha256_digest(value: Any) -> bool:
+    return _split_hash_backed_native_evidence(value) is not None
+
+
+def _split_hash_backed_native_evidence(value: Any) -> tuple[str, str] | None:
     if not isinstance(value, str):
-        return False
-    path, sep, fragment = value.partition("#")
-    if not path or sep != "#":
-        return False
-    if not fragment.lower().startswith("sha256:"):
-        return False
-    digest = fragment[len("sha256:") :]
-    return len(digest) == 64 and all(char in "0123456789abcdefABCDEF" for char in digest)
+        return None
+    text = value.strip()
+    fragment_idx = text.lower().rfind("#sha256:")
+    if fragment_idx > 0:
+        path = text[:fragment_idx]
+        digest = text[fragment_idx + len("#sha256:") :]
+    else:
+        marker = "sha256:"
+        idx = text.lower().rfind(marker)
+        if idx <= 0:
+            return None
+        if not text[idx - 1].isspace():
+            return None
+        path = text[:idx].rstrip(" #\t")
+        digest = text[idx + len(marker) :].strip()
+    if not path:
+        return None
+    if len(digest) != 64 or not all(char in "0123456789abcdefABCDEF" for char in digest):
+        return None
+    return path.replace("\\", "/").strip(), digest.lower()
+
+
+def _native_hot_path_evidence_path(value: Any) -> str:
+    parsed = _split_hash_backed_native_evidence(value)
+    if parsed is not None:
+        return parsed[0].replace("\\", "/").lower().strip()
+    if not isinstance(value, str):
+        return ""
+    return value.split("#", 1)[0].replace("\\", "/").lower().strip()
 
 
 def _looks_like_latency_baseline_evidence_path(normalized: str) -> bool:
@@ -696,7 +721,7 @@ def _validate_native_latency_probe_evidence(latency_model: Mapping[str, Any]) ->
 def _looks_like_native_cpp_hot_path_evidence(value: Any) -> bool:
     if not isinstance(value, str) or not value.strip():
         return False
-    normalized = value.split("#", 1)[0].replace("\\", "/").lower().strip()
+    normalized = _native_hot_path_evidence_path(value)
     if not normalized:
         return False
     if not normalized.startswith(NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_ROOTS):
@@ -711,7 +736,7 @@ def _looks_like_native_cpp_hot_path_evidence(value: Any) -> bool:
 def _native_cpp_hot_path_evidence_classes(value: Any) -> set[str]:
     if not isinstance(value, str):
         return set()
-    normalized = value.split("#", 1)[0].replace("\\", "/").lower().strip()
+    normalized = _native_hot_path_evidence_path(value)
     classes: set[str] = set()
     if (
         "rithmic_latency_probe" in normalized

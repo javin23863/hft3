@@ -2974,10 +2974,37 @@ def test_run_pipeline_vectorbt_hftbacktest_opt_in_blocks_without_strict_replay_e
     ]
 
 
+def test_native_hot_path_evidence_accepts_legacy_space_sha256_format():
+    from backtest_pipeline.src import hftbacktest_realism as hbt0
+
+    digest = "a" * 64
+    legacy = f"reports/cpp_lane/hft3_features_cpp_verify_cpp_parity.json sha256:{digest}"
+    modern = f"reports/cpp_lane/hft3_features_cpp_verify_cpp_parity.json#sha256:{digest}"
+
+    assert hbt0._contains_sha256_digest(modern)
+    assert hbt0._contains_sha256_digest(legacy)
+    assert hbt0._looks_like_native_cpp_hot_path_evidence(legacy)
+    assert hbt0._native_cpp_hot_path_evidence_classes(legacy) == {"features"}
+    assert not hbt0._contains_sha256_digest(f"sha256:{digest}")
+    assert not hbt0._contains_sha256_digest(
+        f"reports/cpp_lane/hft3_features_cpp_verify_cpp_parity.jsonsha256:{digest}"
+    )
+
+
 def test_strict_replay_eligible_ids_requires_applied_robustness_receipt(monkeypatch):
     import scripts.run_pipeline as run_pipeline
+    from backtest_pipeline.src.hftbacktest_realism import (
+        validate_applied_robustness_evidence_receipt,
+    )
 
-    monkeypatch.setattr(run_pipeline, "validate_candidate_replay_eligibility", lambda _row: [])
+    def fake_replay_eligibility(row, *, screening_artifact=None):
+        reasons = validate_applied_robustness_evidence_receipt(
+            row,
+            screening_artifact=screening_artifact,
+        )
+        return [f"screening_artifact_replay_ineligible:{reason}" for reason in reasons]
+
+    monkeypatch.setattr(run_pipeline, "validate_candidate_replay_eligibility", fake_replay_eligibility)
     artifact = {
         "screening_artifact_hash": "9" * 64,
         "data_manifest_hash": "d" * 64,
@@ -3048,7 +3075,12 @@ def test_strict_replay_eligible_ids_requires_applied_robustness_receipt(monkeypa
             {**artifact, "promoted": [{**base_row, "robustness_evidence_receipt": receipt}]}
         )
         assert eligible == []
-        assert ineligible == {"cand_vbt": ["robustness_evidence_receipt_missing"]}
+        assert "cand_vbt" in ineligible
+        assert ineligible["cand_vbt"] != ["robustness_evidence_receipt_missing"]
+        assert all(
+            reason.startswith("screening_artifact_replay_ineligible:")
+            for reason in ineligible["cand_vbt"]
+        )
 
     invalid_artifacts = [
         {key: value for key, value in artifact.items() if key != "robustness_evidence_receipt"},
@@ -3103,7 +3135,36 @@ def test_strict_replay_eligible_ids_requires_applied_robustness_receipt(monkeypa
             }
         )
         assert eligible == []
-        assert ineligible == {"cand_vbt": ["robustness_evidence_receipt_missing"]}
+        assert "cand_vbt" in ineligible
+        assert ineligible["cand_vbt"] != ["robustness_evidence_receipt_missing"]
+        assert all(
+            reason.startswith("screening_artifact_replay_ineligible:")
+            for reason in ineligible["cand_vbt"]
+        )
+
+
+def test_strict_replay_eligible_ids_passes_screening_artifact_to_validator(monkeypatch):
+    import scripts.run_pipeline as run_pipeline
+
+    artifact = {
+        "promoted_ids": ["cand_vbt"],
+        "promoted": [{"candidate_id": "cand_vbt"}],
+    }
+
+    def fake_replay_eligibility(row, *, screening_artifact=None):
+        assert screening_artifact is artifact
+        return ["screening_artifact_replay_ineligible:robustness_evidence_receipt_candidate_mismatch"]
+
+    monkeypatch.setattr(run_pipeline, "validate_candidate_replay_eligibility", fake_replay_eligibility)
+
+    eligible, ineligible = run_pipeline._strict_replay_eligible_ids(artifact)
+
+    assert eligible == []
+    assert ineligible == {
+        "cand_vbt": [
+            "screening_artifact_replay_ineligible:robustness_evidence_receipt_candidate_mismatch"
+        ]
+    }
 
 
 def test_run_pipeline_vectorbt_hftbacktest_opt_in_no_promoted_does_not_call_writer(

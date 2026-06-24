@@ -29,6 +29,7 @@ import importlib
 import importlib.util
 import os
 import sys
+import threading
 import warnings
 from pathlib import Path
 from typing import Optional
@@ -39,6 +40,7 @@ _MODULE_NAME = "hft3_features_cpp"
 _cached: Optional[object] = None
 _searched: bool = False
 _searched_active_build: Optional[Path] = None
+_load_lock = threading.Lock()
 
 
 def _repo_root() -> Path:
@@ -152,9 +154,16 @@ def load_cpp_features() -> Optional[object]:
     """
     Import and return the hft3_features_cpp module, or None if not built.
 
-    Thread-safe for read-after-first-call; the first call is not guaranteed
-    reentrant but that is acceptable for a module-level loader.
+    Thread-safe around the first search/cache mutation. When
+    HFT3_FEATURES_CPP_BUILD_DIR is set, a miss remains fail-fast so lane
+    runners cannot fall through to stale default builds.
     """
+    with _load_lock:
+        return _load_cpp_features_locked()
+
+
+def _load_cpp_features_locked() -> Optional[object]:
+    """Search/load implementation guarded by load_cpp_features()."""
     global _cached, _searched, _searched_active_build
     active_build = _active_build_dir()
     if _searched:
@@ -200,6 +209,12 @@ def load_cpp_features() -> Optional[object]:
             return _cached
 
     if os.environ.get("HFT3_FEATURES_CPP_BUILD_DIR"):
+        warnings.warn(
+            "HFT3_FEATURES_CPP_BUILD_DIR is set but hft3_features_cpp was not "
+            "found there; not falling back to sys.path/default build dirs.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         _searched = True
         _searched_active_build = active_build
         return None

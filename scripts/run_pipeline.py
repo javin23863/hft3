@@ -48,7 +48,6 @@ from backtest_pipeline.src.vectorbt_adapter import filter_candidates, persist_sc
 from data_system.src.feature_store import feature_store_root
 from backtest_pipeline.src.hftbacktest_realism import (
     compute_robustness_evidence_receipt_hash,
-    validate_applied_robustness_evidence_receipt,
     validate_candidate_replay_eligibility,
     write_hftbacktest_realism_artifacts,
 )
@@ -1224,9 +1223,10 @@ def _strict_replay_eligible_ids(
         candidate_id = str(row.get("candidate_id") or "")
         if not candidate_id or candidate_id not in promoted_ids:
             continue
-        reasons = validate_candidate_replay_eligibility(row)
-        if validate_applied_robustness_evidence_receipt(row, screening_artifact=screening_artifact):
-            reasons.append("robustness_evidence_receipt_missing")
+        reasons = validate_candidate_replay_eligibility(
+            row,
+            screening_artifact=screening_artifact,
+        )
         if reasons:
             ineligible[candidate_id] = list(dict.fromkeys(str(reason) for reason in reasons))
         else:
