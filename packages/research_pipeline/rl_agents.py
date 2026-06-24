@@ -204,7 +204,7 @@ def train_rl_agent(
             "max_steps_per_episode": max_steps_per_episode,
             "max_updates": resolved_max_updates,
             "updates_used": updates_used,
-            "budget_exhausted": max_updates is not None and updates_used >= resolved_max_updates,
+            "budget_exhausted": updates_used >= resolved_max_updates,
         },
         "hyperparameters": {
             "learning_rate": learning_rate,

@@ -136,11 +136,23 @@ def search_plan(
         seed=seed,
     )
     count = 0
-    for selection in per_model:
+    yielded_pairs: set[tuple[int, str]] = set()
+    for selection_index, selection in enumerate(per_model):
+        model_id = models[selection_index % len(models)]
+        yield model_id, selection
+        yielded_pairs.add((selection_index, model_id))
+        count += 1
+        if count >= max_candidates:
+            return
+
+    for selection_index, selection in enumerate(per_model):
         for model_id in models:
+            if (selection_index, model_id) in yielded_pairs:
+                continue
             if count >= max_candidates:
                 return
             yield model_id, selection
+            yielded_pairs.add((selection_index, model_id))
             count += 1
 
 

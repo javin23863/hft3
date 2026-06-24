@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -57,7 +56,6 @@ def _hypothesis_slugs() -> List[str]:
     return sorted(k for k, v in reg.items() if v.get("kind") == "hypothesis")
 
 
-@lru_cache(maxsize=1)
 def _symbol_aliases() -> Dict[str, List[str]]:
     if not _SYMBOL_ALIASES_PATH.is_file():
         return {}

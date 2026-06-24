@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -48,10 +49,23 @@ def aggregate_evaluation_results(
             gates=gates,
             error="no_event_results",
         )
-    net_pnls = [float(result.net_pnl) for result in results]
-    total_trades = sum(int(result.num_trades) for result in results)
+    dated_results = [
+        (_event_date_key(result.event_id), position, result)
+        for position, result in enumerate(results)
+    ]
+    date_keys = [date_key for date_key, _, _ in dated_results if date_key is not None]
+    risk_metrics_gateable = (
+        len(date_keys) == len(results)
+        and len(set(date_keys)) == len(date_keys)
+    )
+    ordered_results = [
+        result
+        for _, _, result in sorted(dated_results, key=lambda item: (item[0], item[1]))
+    ] if risk_metrics_gateable else results
+    net_pnls = [float(result.net_pnl) for result in ordered_results]
+    total_trades = sum(int(result.num_trades) for result in ordered_results)
     total_pnl = sum(net_pnls)
-    weighted_wins = sum(float(result.win_rate) * int(result.num_trades) for result in results)
+    weighted_wins = sum(float(result.win_rate) * int(result.num_trades) for result in ordered_results)
     win_rate = weighted_wins / total_trades if total_trades > 0 else 0.0
     expectancy = total_pnl / total_trades if total_trades > 0 else 0.0
     sharpe = _sharpe(net_pnls)
@@ -68,12 +82,13 @@ def aggregate_evaluation_results(
             "error": result.error,
             "passes": result.passes_all_gates(),
         }
-        for result in results
+        for result in ordered_results
     ]
-    errors = [f"{result.event_id}:{result.error}" for result in results if result.error]
+    errors = [f"{result.event_id}:{result.error}" for result in ordered_results if result.error]
+    risk_metrics_gateable = risk_metrics_gateable and not errors and len(net_pnls) >= 2
     return EvaluationResult(
         candidate=candidate,
-        event_id=",".join(result.event_id for result in results),
+        event_id=",".join(result.event_id for result in ordered_results),
         net_pnl=total_pnl,
         num_trades=total_trades,
         win_rate=win_rate,
@@ -83,11 +98,26 @@ def aggregate_evaluation_results(
         sharpe=sharpe,
         sortino=sortino,
         max_drawdown=max_drawdown,
-        risk_metrics_source="cross_event_net_pnl_input_order_diagnostic",
-        risk_metrics_gateable=False,
+        risk_metrics_source=(
+            "cross_event_net_pnl_chronological"
+            if risk_metrics_gateable
+            else "cross_event_net_pnl_diagnostic"
+        ),
+        risk_metrics_gateable=risk_metrics_gateable,
         event_results=event_payloads,
         error=";".join(errors) if errors else None,
     )
+
+
+_EVENT_DATE_RE = re.compile(r"(20\d{2})[_-](\d{2})[_-](\d{2})")
+
+
+def _event_date_key(event_id: str) -> tuple[int, int, int] | None:
+    match = _EVENT_DATE_RE.search(event_id)
+    if not match:
+        return None
+    year, month, day = match.groups()
+    return int(year), int(month), int(day)
 
 
 def _worst_signed_tail_pnl(results: Sequence[EvaluationResult]) -> float:

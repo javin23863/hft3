@@ -171,6 +171,21 @@ def test_parse_hypothesis_prefers_longest_symbol_alias():
     assert "GC" not in parsed.instrument_universe
 
 
+def test_symbol_aliases_reflect_path_changes(tmp_path, monkeypatch):
+    from research_pipeline import hypothesis_parser
+
+    first = tmp_path / "first_aliases.yaml"
+    second = tmp_path / "second_aliases.yaml"
+    first.write_text("MES:\n  - micro test symbol\n", encoding="utf-8")
+    second.write_text("MNQ:\n  - micro test symbol\n", encoding="utf-8")
+
+    monkeypatch.setattr(hypothesis_parser, "_SYMBOL_ALIASES_PATH", first)
+    assert hypothesis_parser.canonicalize_instrument("micro test symbol") == "MES"
+
+    monkeypatch.setattr(hypothesis_parser, "_SYMBOL_ALIASES_PATH", second)
+    assert hypothesis_parser.canonicalize_instrument("micro test symbol") == "MNQ"
+
+
 def test_parse_hypothesis_uses_model_alias_and_registry_ranges():
     from research_pipeline.hypothesis_parser import parse_hypothesis
 
@@ -285,7 +300,10 @@ def test_generate_candidates_records_search_metadata_and_hybrid_limit():
         exit_rules=[],
         indicators=[],
         feature_list=["SECOND_WAVE_CONTINUATION", "STOP_RUN_EXHAUSTION_FADE"],
-        param_ranges={"signal_threshold": [0.1, 0.3]},
+        param_ranges={
+            "signal_threshold": [0.1, 0.3],
+            "stop_loss_pct": [0.01, 0.03],
+        },
         primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
     )
 
@@ -293,8 +311,10 @@ def test_generate_candidates_records_search_metadata_and_hybrid_limit():
 
     assert len(cands) == 4
     model_ids = {cand.model_id for cand in cands}
+    params_seen = {tuple(sorted(cand.strategy_params.items())) for cand in cands}
     assert "SPREAD_BLOWOUT_RECOMPRESSION" in model_ids
     assert model_ids & {"SECOND_WAVE_CONTINUATION", "STOP_RUN_EXHAUSTION_FADE"}
+    assert len(params_seen) == len(cands)
     assert all(cand.metadata["parameter_search"]["search_method"] == "hybrid" for cand in cands)
     assert cands[0].metadata["parameter_search"]["max_candidates"] == 4
 
@@ -376,22 +396,76 @@ def test_aggregate_evaluation_results_applies_risk_gates():
     permissive = GateThresholds(min_trades=0)
     strict = GateThresholds(min_trades=0, max_drawdown=4.0)
     per_event = [
-        EvaluationResult(candidate, "CPI_1", 10.0, 5, 0.6, 2.0, -1.0, permissive),
-        EvaluationResult(candidate, "NFP_1", -5.0, 5, 0.4, -1.0, -5.0, permissive),
-        EvaluationResult(candidate, "FOMC_1", 20.0, 10, 0.7, 2.0, -0.5, permissive),
+        EvaluationResult(candidate, "NFP_2024_10_04", -5.0, 5, 0.4, -1.0, -5.0, permissive),
+        EvaluationResult(candidate, "CPI_2024_09_11_TIGHT", 10.0, 5, 0.6, 2.0, -1.0, permissive),
+        EvaluationResult(candidate, "FOMC_2024_11_07", 20.0, 10, 0.7, 2.0, -0.5, permissive),
     ]
 
     aggregate = aggregate_evaluation_results(candidate, per_event, gates=strict)
 
-    assert aggregate.event_id == "CPI_1,NFP_1,FOMC_1"
+    assert aggregate.event_id == "CPI_2024_09_11_TIGHT,NFP_2024_10_04,FOMC_2024_11_07"
     assert aggregate.net_pnl == 25.0
     assert aggregate.num_trades == 20
     assert aggregate.win_rate == pytest.approx(0.6)
     assert aggregate.tail_loss == -5.0
     assert aggregate.max_drawdown == 5.0
-    assert aggregate.risk_metrics_source == "cross_event_net_pnl_input_order_diagnostic"
+    assert aggregate.risk_metrics_source == "cross_event_net_pnl_chronological"
+    assert aggregate.risk_metrics_gateable is True
+    assert aggregate.event_results[1]["event_id"] == "NFP_2024_10_04"
+    assert aggregate.passes_all_gates() is False
+
+
+def test_cross_event_risk_metrics_fail_closed_without_dated_event_order():
+    from research_pipeline.evaluation import aggregate_evaluation_results
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    candidate = CandidateModel(
+        candidate_id="cand_cross_undated",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis="cross-event",
+    )
+    permissive = GateThresholds(min_trades=0)
+    per_event = [
+        EvaluationResult(candidate, "NFP_1", -5.0, 5, 0.4, -1.0, -5.0, permissive),
+        EvaluationResult(candidate, "CPI_1", 10.0, 5, 0.6, 2.0, -1.0, permissive),
+    ]
+
+    aggregate = aggregate_evaluation_results(
+        candidate,
+        per_event,
+        gates=GateThresholds(min_trades=0, max_drawdown=4.0),
+    )
+
+    assert aggregate.risk_metrics_source == "cross_event_net_pnl_diagnostic"
     assert aggregate.risk_metrics_gateable is False
-    assert aggregate.event_results[1]["event_id"] == "NFP_1"
+    assert aggregate.passes_all_gates() is False
+
+
+def test_cross_event_risk_metrics_fail_closed_on_same_date_ties():
+    from research_pipeline.evaluation import aggregate_evaluation_results
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    candidate = CandidateModel(
+        candidate_id="cand_cross_same_date",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis="cross-event",
+    )
+    permissive = GateThresholds(min_trades=0)
+    per_event = [
+        EvaluationResult(candidate, "CPI_2024_09_11_TIGHT", 10.0, 5, 0.6, 2.0, -1.0, permissive),
+        EvaluationResult(candidate, "EIA_2024_09_11", -5.0, 5, 0.4, -1.0, -5.0, permissive),
+    ]
+
+    aggregate = aggregate_evaluation_results(
+        candidate,
+        per_event,
+        gates=GateThresholds(min_trades=0, max_drawdown=4.0),
+    )
+
+    assert aggregate.risk_metrics_source == "cross_event_net_pnl_diagnostic"
+    assert aggregate.risk_metrics_gateable is False
     assert aggregate.passes_all_gates() is False
 
 
@@ -851,6 +925,16 @@ def test_train_rl_agent_records_budget_exhaustion():
 
     assert artifact["training_budget"]["updates_used"] == 3
     assert artifact["training_budget"]["budget_exhausted"] is True
+
+    natural = train_rl_agent(
+        _rl_rows(),
+        ["order_book_imbalance", "queue_imbalance"],
+        seed=11,
+        episodes=1,
+        max_steps_per_episode=1,
+    )
+    assert natural["training_budget"]["updates_used"] == 1
+    assert natural["training_budget"]["budget_exhausted"] is True
 
 
 def test_validate_rl_artifact_rejects_promotable_policy():
