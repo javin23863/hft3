@@ -313,14 +313,25 @@ def test_document_ingestion_cache_miss_then_hit(tmp_path, monkeypatch):
         repo_root=tmp_path,
         cache_config={"enabled": True, "root": "cache"},
     )
+    cache_path = Path(meta["cache_path"])
+    doc.touch()
+    summary3, meta3 = run_pipeline.ingest_document_with_cache(
+        doc,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )
 
     assert summary == "summary"
     assert summary2 == "summary"
+    assert summary3 == "summary"
     assert meta["status"] == "miss"
     assert meta2["status"] == "hit"
+    assert meta3["status"] == "hit"
     assert calls["extract"] == 1
-    assert Path(meta["cache_path"]).is_file()
-    assert len(persisted) == 2
+    assert cache_path.is_file()
+    assert meta3["cache_path"] == str(cache_path)
+    assert len(list((tmp_path / "cache").glob("*.json"))) == 1
+    assert len(persisted) == 3
 
 
 def test_run_pipeline_dry_run_writes_runtime_receipt(tmp_path, monkeypatch, capsys):

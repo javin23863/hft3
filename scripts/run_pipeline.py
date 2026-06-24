@@ -124,7 +124,6 @@ _VECTORBT_BUDGET_ARGS = {
 _PIPELINE_RESULT_MARKER = "HFT3_PIPELINE_RESULT="
 _LOG_HANDLER_ATTR = "_hft3_pipeline_run_handler"
 logger = logging.getLogger("hft3.research_pipeline.run_pipeline")
-_ACTIVE_RUN_FAILURE_CONTEXT: dict[str, Any] | None = None
 
 
 def _json_default(value: Any) -> str:
@@ -351,18 +350,17 @@ def _write_pipeline_run_receipt(payload: Mapping[str, Any]) -> Path | None:
     return receipt_path
 
 
-def _set_active_run_failure_context(**context: Any) -> None:
-    global _ACTIVE_RUN_FAILURE_CONTEXT
-    _ACTIVE_RUN_FAILURE_CONTEXT = dict(context)
+def _set_active_run_failure_context(context: dict[str, Any], **values: Any) -> None:
+    context.clear()
+    context.update(values)
 
 
-def _update_active_run_failure_context(**context: Any) -> None:
-    if _ACTIVE_RUN_FAILURE_CONTEXT is not None:
-        _ACTIVE_RUN_FAILURE_CONTEXT.update(context)
+def _update_active_run_failure_context(context: dict[str, Any], **values: Any) -> None:
+    context.update(values)
 
 
-def _emit_pipeline_failure_receipt(exc: Exception) -> None:
-    context = dict(_ACTIVE_RUN_FAILURE_CONTEXT or {})
+def _emit_pipeline_failure_receipt(exc: Exception, context: Mapping[str, Any]) -> None:
+    context = dict(context)
     artifact_dir = context.get("artifact_dir")
     if not artifact_dir:
         logger.exception("pipeline_run_failed_without_artifact_dir")
@@ -455,25 +453,72 @@ def _resolve_config_path(repo_root: Path, raw_path: Any) -> Path:
     return repo_root / path
 
 
-def _doc_cache_path(source: Path, *, repo_root: Path, cache_root: Path) -> Path:
-    source_path = Path(source)
-    source_meta: dict[str, Any]
-    if str(source).startswith(("http://", "https://")):
-        source_meta = {"kind": "url", "source": str(source)}
+def _is_url_source(source: str | Path) -> bool:
+    return str(source).startswith(("http://", "https://"))
+
+
+def _resolve_doc_file(source: str | Path, *, repo_root: Path) -> Path:
+    source_path = Path(str(source))
+    return (repo_root / source_path).resolve() if not source_path.is_absolute() else source_path.resolve()
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _doc_cache_path(source: str | Path, *, repo_root: Path, cache_root: Path) -> Path:
+    if _is_url_source(source):
+        source_meta: dict[str, Any] = {"kind": "url", "source": str(source)}
     else:
-        resolved = (repo_root / source_path).resolve() if not source_path.is_absolute() else source_path.resolve()
-        stat = resolved.stat()
-        source_meta = {
-            "kind": "file",
-            "source": str(resolved),
-            "size": stat.st_size,
-            "mtime_ns": stat.st_mtime_ns,
-            "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(),
-        }
+        resolved = _resolve_doc_file(source, repo_root=repo_root)
+        source_meta = {"kind": "file", "source": str(resolved)}
     digest = hashlib.sha256(
         json.dumps(source_meta, sort_keys=True).encode("utf-8")
     ).hexdigest()
     return cache_root / f"{digest}.json"
+
+
+def _doc_file_metadata(path: Path, *, sha256: str | None = None) -> dict[str, Any]:
+    stat = path.stat()
+    metadata: dict[str, Any] = {
+        "kind": "file",
+        "source": str(path),
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+    }
+    if sha256 is not None:
+        metadata["sha256"] = sha256
+    return metadata
+
+
+def _cached_doc_match_metadata(
+    cached: Mapping[str, Any],
+    source: str | Path,
+    *,
+    repo_root: Path,
+) -> tuple[bool, dict[str, Any] | None]:
+    if _is_url_source(source):
+        return True, None
+    resolved = _resolve_doc_file(source, repo_root=repo_root)
+    source_file = cached.get("source_file")
+    if not isinstance(source_file, Mapping):
+        return False, None
+    if str(source_file.get("source") or "") != str(resolved):
+        return False, None
+    stat = resolved.stat()
+    if source_file.get("size") == stat.st_size and source_file.get("mtime_ns") == stat.st_mtime_ns:
+        return True, None
+    cached_sha = source_file.get("sha256")
+    if not cached_sha:
+        return False, None
+    current_sha = _file_sha256(resolved)
+    if str(cached_sha) != current_sha:
+        return False, None
+    return True, _doc_file_metadata(resolved, sha256=current_sha)
 
 
 def _doc_id(source: Path) -> str:
@@ -507,7 +552,7 @@ def ingest_document_with_cache(
 ) -> tuple[str, dict[str, Any]]:
     enabled = _bool_default(cache_config.get("enabled", True), name="doc_cache.enabled")
     cache_urls = _bool_default(cache_config.get("cache_urls", False), name="doc_cache.cache_urls")
-    if str(source).startswith(("http://", "https://")) and not cache_urls:
+    if _is_url_source(source) and not cache_urls:
         enabled = False
     cache_root = _resolve_config_path(
         repo_root,
@@ -517,15 +562,20 @@ def ingest_document_with_cache(
     doc_id = _doc_id(source)
     if enabled and cache_path.is_file():
         cached = json.loads(cache_path.read_text(encoding="utf-8"))
-        summary = str(cached.get("summary") or "")
-        records = cached.get("kg_records") or {}
-        persist_graph_slice(repo_root, _graph_from_kg_records(records))
-        return summary, {
-            "enabled": enabled,
-            "status": "hit",
-            "cache_path": str(cache_path),
-            "doc_id": str(cached.get("doc_id") or doc_id),
-        }
+        cache_matches, refreshed_source_file = _cached_doc_match_metadata(cached, source, repo_root=repo_root)
+        if cache_matches:
+            if refreshed_source_file is not None:
+                cached["source_file"] = refreshed_source_file
+                _write_json(cache_path, cached)
+            summary = str(cached.get("summary") or "")
+            records = cached.get("kg_records") or {}
+            persist_graph_slice(repo_root, _graph_from_kg_records(records))
+            return summary, {
+                "enabled": enabled,
+                "status": "hit",
+                "cache_path": str(cache_path),
+                "doc_id": str(cached.get("doc_id") or doc_id),
+            }
 
     text = extract_text(source)
     summary = summarise_text(text)
@@ -541,6 +591,14 @@ def ingest_document_with_cache(
                 "doc_id": doc_id,
                 "text_sha256": hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest(),
                 "text_char_count": len(text),
+                "source_file": (
+                    _doc_file_metadata(
+                        _resolve_doc_file(source, repo_root=repo_root),
+                        sha256=_file_sha256(_resolve_doc_file(source, repo_root=repo_root)),
+                    )
+                    if not _is_url_source(source)
+                    else None
+                ),
                 "summary": summary,
                 "kg_records": records,
             },
@@ -710,7 +768,9 @@ def _strict_replay_eligible_ids(
     return eligible, ineligible
 
 
-def _main_impl(argv: list[str] | None = None) -> int:
+def _main_impl(argv: list[str] | None = None, failure_context: dict[str, Any] | None = None) -> int:
+    if failure_context is None:
+        failure_context = {}
     parser = argparse.ArgumentParser(description="Autoresearch pipeline")
     parser.add_argument("--thesis", required=True, help="Natural-language trading thesis")
     parser.add_argument("--doc", help="Optional research document (PDF/DOCX/URL)")
@@ -820,6 +880,7 @@ def _main_impl(argv: list[str] | None = None) -> int:
         artifact_dir.mkdir(parents=True, exist_ok=True)
         _configure_run_logging(artifact_dir, run_id)
         _set_active_run_failure_context(
+            failure_context,
             run_id=run_id,
             artifact_dir=str(artifact_dir),
             orchestrator_result=bool(args.orchestrator_result),
@@ -904,6 +965,7 @@ def _main_impl(argv: list[str] | None = None) -> int:
     artifact_dir.mkdir(parents=True, exist_ok=True)
     _configure_run_logging(artifact_dir, run_id)
     _set_active_run_failure_context(
+        failure_context,
         run_id=run_id,
         artifact_dir=str(artifact_dir),
         orchestrator_result=bool(args.orchestrator_result),
@@ -947,6 +1009,7 @@ def _main_impl(argv: list[str] | None = None) -> int:
             document_cache = {"status": "error", "error": str(exc)}
             logger.warning("document_ingestion_failed", extra={"payload": document_cache})
     _update_active_run_failure_context(
+        failure_context,
         document_summary=doc_summary,
         document_cache=document_cache,
     )
@@ -998,7 +1061,7 @@ def _main_impl(argv: list[str] | None = None) -> int:
             )
             _write_json(artifact_dir / "candidate_prefilter.json", candidate_prefilter)
             logger.info("candidate_prefilter_complete", extra={"payload": candidate_prefilter})
-            _update_active_run_failure_context(candidate_prefilter=candidate_prefilter)
+            _update_active_run_failure_context(failure_context, candidate_prefilter=candidate_prefilter)
             payload = {
                 "run_id": run_id,
                 "artifact_dir": str(artifact_dir),
@@ -1037,7 +1100,7 @@ def _main_impl(argv: list[str] | None = None) -> int:
     )
     _write_json(artifact_dir / "candidate_prefilter.json", candidate_prefilter)
     logger.info("candidate_prefilter_complete", extra={"payload": candidate_prefilter})
-    _update_active_run_failure_context(candidate_prefilter=candidate_prefilter)
+    _update_active_run_failure_context(failure_context, candidate_prefilter=candidate_prefilter)
 
     if args.vectorbt or args.vectorbt_only:
         print(f"Running VectorBT filter on {len(candidates)} candidates x grid...")
@@ -1207,7 +1270,7 @@ def _main_impl(argv: list[str] | None = None) -> int:
             "screening_artifact_path": str(screening_path),
             "vectorbt_filter_path": str(artifact_dir / "vectorbt_filter.json"),
         }
-        _update_active_run_failure_context(paths=paths)
+        _update_active_run_failure_context(failure_context, paths=paths)
         if not args.hftbacktest_realism:
             payload = {
                 "run_id": run_id,
@@ -1513,13 +1576,12 @@ def _main_impl(argv: list[str] | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    global _ACTIVE_RUN_FAILURE_CONTEXT
-    _ACTIVE_RUN_FAILURE_CONTEXT = None
+    failure_context: dict[str, Any] = {}
     try:
-        return _main_impl(argv)
+        return _main_impl(argv, failure_context=failure_context)
     except Exception as exc:
         try:
-            _emit_pipeline_failure_receipt(exc)
+            _emit_pipeline_failure_receipt(exc, failure_context)
         except Exception as receipt_exc:
             print(
                 f"Error: pipeline failed and failure receipt could not be written: {receipt_exc}",
@@ -1527,8 +1589,6 @@ def main(argv: list[str] | None = None) -> int:
             )
         print(f"Error: pipeline failed: {exc}", file=sys.stderr)
         return 1
-    finally:
-        _ACTIVE_RUN_FAILURE_CONTEXT = None
 
 
 if __name__ == "__main__":
