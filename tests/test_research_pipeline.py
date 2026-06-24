@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -683,6 +685,67 @@ def test_run_pipeline_failure_writes_receipt(tmp_path, monkeypatch, capsys):
     assert receipt["status"] == "pipeline_failed"
     assert receipt["error"]["type"] == "RuntimeError"
     assert receipt["request_packet"]["request_id"] == "pipeline_failure_receipt"
+
+
+def test_run_pipeline_concurrent_failures_keep_call_local_receipts(tmp_path, monkeypatch):
+    import scripts.run_pipeline as run_pipeline
+
+    thread_state = threading.local()
+    barrier = threading.Barrier(2)
+    run_ids = ("pipeline_concurrent_failure_a", "pipeline_concurrent_failure_b")
+
+    def fake_run_id():
+        return thread_state.run_id
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {},
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    def fail_after_both_runs_started(*args, **kwargs):
+        barrier.wait(timeout=5)
+        raise RuntimeError(f"synthetic parse failure for {thread_state.run_id}")
+
+    def run_pipeline_thread(run_id: str) -> int:
+        thread_state.run_id = run_id
+        return run_pipeline.main(
+            [
+                "--thesis",
+                f"Fade spread blowout after CPI {run_id}",
+                "--event-id",
+                "CPI_2024_09_11_TIGHT",
+                "--repo-root",
+                str(tmp_path),
+                "--dry-run",
+                "--no-llm",
+                "--max-candidates",
+                "1",
+            ]
+        )
+
+    monkeypatch.setattr(run_pipeline, "_run_id", fake_run_id)
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", fail_after_both_runs_started)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = dict(zip(run_ids, executor.map(run_pipeline_thread, run_ids)))
+
+    assert results == {run_id: 1 for run_id in run_ids}
+    for run_id in run_ids:
+        run_dir = tmp_path / "research_cards" / "pipeline_runs" / run_id
+        receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
+        assert receipt["run_id"] == run_id
+        assert receipt["request_packet"]["request_id"] == run_id
+        assert receipt["request_packet"]["thesis"] == f"Fade spread blowout after CPI {run_id}"
+        assert receipt["error"] == {
+            "type": "RuntimeError",
+            "message": f"synthetic parse failure for {run_id}",
+        }
 
 
 def test_run_pipeline_url_doc_source_is_not_path_normalized(tmp_path, monkeypatch, capsys):
