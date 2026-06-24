@@ -80,6 +80,21 @@ VectorBT screening; the emitted `candidate_search` metadata records
 `objective_evaluations=0`. They do not promote candidates and do not replace
 the VectorBT -> robustness evidence -> HftBacktest gate order.
 
+The parser consumes the model registry metadata documented in
+[model_registry.md](../model_registry.md). Natural-language model aliases,
+registry default parameter ranges, `volatility_regime`, and canonical CME
+symbol aliases are copied into parsed-hypothesis receipts. If `--symbol` is
+omitted, the pipeline derives the target symbol from the parsed compatible
+instrument universe. If `--symbol` is supplied and conflicts with the model's
+`valid_instrument_universe` or `target_instrument_universe`, candidate
+generation fails closed before VectorBT/HftBacktest. Concrete loader variants
+such as `MES.v.0` compare by canonical root (`MES`) for compatibility while
+preserving the requested suffix for downstream feature-store loading.
+
+Structural registry entries are metadata/feature receipts, not primary
+autoresearch hypothesis routes. The parser only selects `kind=hypothesis`
+models as primary models for this entrypoint.
+
 RL policy artifacts are controlled by the runtime config's `rl_training`
 section or the `--rl-training-data`, `--rl-feature`, `--rl-device`,
 `--rl-required`, and `--rl-seed` CLI flags. The current implementation is

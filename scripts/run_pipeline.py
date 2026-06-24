@@ -23,16 +23,8 @@ from typing import Any, Mapping, Sequence
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages"), str(REPO / "apps")]
 
-from research_pipeline.deployment import deploy_best
-from research_pipeline.document_ingestion import (
-    build_knowledge_graph,
-    extract_text,
-    graph_to_kg_records,
-    summarise_text,
-)
 from research_pipeline.evaluation import evaluate_model
 from research_pipeline.hypothesis_parser import parse_hypothesis
-from research_pipeline.knowledge_graph import persist_graph_slice
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.parameter_search import SUPPORTED_SEARCH_METHODS
 from research_pipeline.rl_agents import (
@@ -61,13 +53,39 @@ from backtest_pipeline.src.hftbacktest_realism import (
     write_hftbacktest_realism_artifacts,
 )
 from backtest_pipeline.src.promotion_gate import PromotionGate
-from research_pipeline.packets import (
-    build_pipeline_request,
-    build_pipeline_response,
-    write_pipeline_packets,
-)
 from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds, PipelineReport, ParsedHypothesis
-from data_layer.llm.openai_compatible_client import DEFAULT_MODEL_DEVELOPMENT_MODEL
+
+DEFAULT_MODEL_DEVELOPMENT_MODEL = os.environ.get(
+    "HFT3_MODEL_DEVELOPMENT_LLM_MODEL",
+    os.environ.get(
+        "HFT3_MODEL_DEV_LLM_MODEL",
+        os.environ.get("HFT3_LLM_MODEL", "gpt-5.5"),
+    ),
+)
+
+
+def deploy_best(repo_root: Path, report: PipelineReport) -> Path | None:
+    from research_pipeline.deployment import deploy_best as _deploy_best
+
+    return _deploy_best(repo_root, report)
+
+
+def build_pipeline_request(**kwargs):
+    from research_pipeline.packets import build_pipeline_request as _build_pipeline_request
+
+    return _build_pipeline_request(**kwargs)
+
+
+def build_pipeline_response(*args, **kwargs):
+    from research_pipeline.packets import build_pipeline_response as _build_pipeline_response
+
+    return _build_pipeline_response(*args, **kwargs)
+
+
+def write_pipeline_packets(*args, **kwargs):
+    from research_pipeline.packets import write_pipeline_packets as _write_pipeline_packets
+
+    return _write_pipeline_packets(*args, **kwargs)
 
 
 def _run_id() -> str:
@@ -752,6 +770,92 @@ def _pipeline_llm_status(parsed: ParsedHypothesis, *, no_llm: bool) -> str:
     return "ok" if parsed.source == "openai_compatible" else "unavailable"
 
 
+def _symbol_root(symbol: str) -> str:
+    return str(symbol).upper().split(".", 1)[0]
+
+
+def _normalize_requested_symbol(symbol: str) -> str:
+    raw = str(symbol)
+    if "." not in raw:
+        return raw.upper()
+    root, suffix = raw.split(".", 1)
+    return f"{root.upper()}.{suffix}"
+
+
+def _resolve_target_symbol(parsed: ParsedHypothesis, cli_symbol: str | None) -> str:
+    parsed_symbols = [_symbol_root(str(symbol)) for symbol in (parsed.instrument_universe or [])]
+    compatibility = str(
+        parsed.metadata.get("instrument_universe_compatibility") or "not_declared"
+    )
+    registry_entry = load_model_registry().get("models", {}).get(parsed.primary_model_id, {})
+    registry_valid = [
+        _symbol_root(str(symbol))
+        for symbol in (registry_entry.get("valid_instrument_universe") or [])
+    ]
+    registry_targets = [
+        _symbol_root(str(symbol))
+        for symbol in (registry_entry.get("target_instrument_universe") or [])
+    ]
+    compatible = [
+        _symbol_root(str(symbol))
+        for symbol in (parsed.metadata.get("compatible_instrument_universe") or [])
+    ]
+    target_valid = [
+        _symbol_root(str(symbol))
+        for symbol in (
+            parsed.metadata.get("target_instrument_universe")
+            or registry_targets
+            or []
+        )
+    ]
+    if compatibility == "not_declared" and registry_valid:
+        unsupported = [symbol for symbol in parsed_symbols if symbol not in registry_valid]
+        if unsupported:
+            raise ValueError(
+                f"parsed instruments {unsupported} are not compatible with model {parsed.primary_model_id}"
+            )
+        compatible = [symbol for symbol in parsed_symbols if symbol in registry_valid]
+        allowed = compatible
+    elif compatibility == "not_declared":
+        allowed = parsed_symbols
+    else:
+        allowed = compatible or (parsed_symbols if compatibility == "compatible" else [])
+    if compatibility == "missing_valid_instrument_universe":
+        raise ValueError(
+            f"model {parsed.primary_model_id} does not declare valid_instrument_universe"
+        )
+    unsupported = [
+        _symbol_root(str(symbol))
+        for symbol in (parsed.metadata.get("unsupported_instruments") or [])
+    ]
+    if unsupported:
+        raise ValueError(
+            f"parsed instruments {unsupported} are not compatible with model {parsed.primary_model_id}"
+        )
+    target_allowed = [
+        symbol for symbol in allowed if not target_valid or symbol in target_valid
+    ]
+    if target_valid and not target_allowed:
+        target_allowed = target_valid
+    if parsed_symbols and not allowed:
+        raise ValueError(
+            f"parsed instruments {parsed_symbols} are not compatible with model {parsed.primary_model_id}"
+        )
+    if cli_symbol:
+        requested = _normalize_requested_symbol(str(cli_symbol))
+        requested_root = _symbol_root(requested)
+        if target_valid and requested_root not in target_valid:
+            raise ValueError(
+                f"--symbol {requested} is not compatible with target instruments {target_valid}"
+            )
+        if not target_valid and allowed and requested_root not in allowed:
+            raise ValueError(
+                f"--symbol {requested} is not compatible with parsed instruments {allowed}"
+            )
+        return requested
+    return (target_allowed or compatible or parsed_symbols or ["MES"])[0]
+
+
 def _optional_float(value: str | None) -> float | None:
     if value is None or value == "":
         return None
@@ -906,6 +1010,14 @@ def ingest_document_with_cache(
     repo_root: Path,
     cache_config: Mapping[str, Any],
 ) -> tuple[str, dict[str, Any]]:
+    from research_pipeline.document_ingestion import (
+        build_knowledge_graph,
+        extract_text,
+        graph_to_kg_records,
+        summarise_text,
+    )
+    from research_pipeline.knowledge_graph import persist_graph_slice
+
     enabled = _bool_default(cache_config.get("enabled", True), name="doc_cache.enabled")
     cache_urls = _bool_default(cache_config.get("cache_urls", False), name="doc_cache.cache_urls")
     if _is_url_source(source) and not cache_urls:
@@ -1222,8 +1334,8 @@ def _main_impl(
     parser.add_argument("--event-id", required=True, help="Explicit catalog event id from events.csv")
     parser.add_argument(
         "--symbol",
-        default="MES",
-        help="Target symbol for feature-store fs_v1 VectorBT path (default MES)",
+        default=None,
+        help="Target symbol for feature-store fs_v1 VectorBT path; defaults to the parsed compatible instrument",
     )
     parser.add_argument("--max-candidates", type=int, default=None)
     parser.add_argument("--chi404-summary", type=Path, default=None)
@@ -1552,16 +1664,42 @@ def _main_impl(
             temperature=args.resolved_idea_temperature,
             top_p=args.resolved_idea_top_p,
         )
-        candidates = candidates_from_ideas(
-            idea_packet,
-            max_candidates=args.max_candidates,
-            expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
-            search_method=args.candidate_search_method,
-            search_seed=args.candidate_search_seed,
-        )
-        idea_candidates_count = len(candidates)
-        queued = [idea for idea in idea_packet.get("ideas", []) if idea.get("status") == "queued_for_test"]
+        try:
+            candidates = candidates_from_ideas(
+                idea_packet,
+                max_candidates=args.max_candidates,
+                expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+                target_event_id=args.event_id,
+                target_symbol_resolver=lambda idea_parsed: _resolve_target_symbol(
+                    idea_parsed, args.symbol
+                ),
+                search_method=args.candidate_search_method,
+                search_seed=args.candidate_search_seed,
+            )
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        queued = [
+            idea
+            for idea in idea_packet.get("ideas", [])
+            if idea.get("status") == "queued_for_test"
+        ]
         parsed = parsed_from_idea(queued[0]) if queued else parse_hypothesis(args.thesis, use_llm=False)
+        try:
+            target_symbol = _resolve_target_symbol(parsed, args.symbol)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        idea_candidates_count = len(candidates)
+        candidate_symbols = {candidate.target_symbol for candidate in candidates}
+        if len(candidate_symbols) > 1:
+            print(
+                f"Error: --idea-set produced multiple target symbols {sorted(candidate_symbols)}; run one symbol per screening pass.",
+                file=sys.stderr,
+            )
+            return 2
+        if candidate_symbols:
+            target_symbol = next(iter(candidate_symbols))
         (artifact_dir / "review_memory.json").write_text(
             json.dumps(
                 {
@@ -1612,15 +1750,20 @@ def _main_impl(
             pipeline_request=request,
             repo_root=repo_root,
         )
-        candidates = list(generate_candidates(
-            parsed,
-            max_candidates=args.max_candidates,
-            expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
-            target_event_id=args.event_id,
-            target_symbol=args.symbol,
-            search_method=args.candidate_search_method,
-            search_seed=args.candidate_search_seed,
-        ))
+        try:
+            target_symbol = _resolve_target_symbol(parsed, args.symbol)
+            candidates = list(generate_candidates(
+                parsed,
+                max_candidates=args.max_candidates,
+                expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+                target_event_id=args.event_id,
+                target_symbol=target_symbol,
+                search_method=args.candidate_search_method,
+                search_seed=args.candidate_search_seed,
+            ))
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
 
     candidates, candidate_prefilter = prefilter_candidates(
         candidates,
@@ -1648,7 +1791,7 @@ def _main_impl(
             screening_scope=args.vectorbt_scope,
             run_budget=run_budget or None,
             feature_store_root=feature_store_root(repo_root),
-            symbol=args.symbol,
+            symbol=target_symbol,
         )
         vectorbt_artifact = filter_result.to_dict()
         print(
@@ -1707,6 +1850,7 @@ def _main_impl(
                         "asset_class": p.asset_class,
                         "symbol": p.symbol,
                     },
+                    target_symbol=p.symbol,
                 )
                 for p in filter_result.promoted
             ]
@@ -1776,12 +1920,15 @@ def _main_impl(
                     "primary_model_id": parsed.primary_model_id,
                     "source": parsed.source,
                     "param_ranges": parsed.param_ranges,
+                    "metadata": parsed.metadata,
+                    "target_symbol": target_symbol,
                 },
                 "candidates": [
                     {
                         "candidate_id": c.candidate_id,
                         "model_id": c.model_id,
                         "params": c.strategy_params,
+                        "target_symbol": c.target_symbol,
                     }
                     for c in candidates
                 ],
@@ -2008,9 +2155,17 @@ def _main_impl(
                 "primary_model_id": parsed.primary_model_id,
                 "source": parsed.source,
                 "param_ranges": parsed.param_ranges,
+                "metadata": parsed.metadata,
+                "target_symbol": target_symbol,
             },
             "candidates": [
-                {"candidate_id": c.candidate_id, "model_id": c.model_id, "params": c.strategy_params}
+                {
+                    "candidate_id": c.candidate_id,
+                    "model_id": c.model_id,
+                    "params": c.strategy_params,
+                    "target_symbol": c.target_symbol,
+                    "metadata": c.metadata,
+                }
                 for c in candidates
             ],
             "document_summary": doc_summary,

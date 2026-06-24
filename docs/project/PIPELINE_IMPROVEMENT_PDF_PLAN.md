@@ -71,7 +71,7 @@ Goal: bring the already-created advanced autoresearch implementation into this b
 Candidate source branch:
 
 - `codex/advanced-models-autoresearch`
-- latest observed head: `2b8d7644`
+- latest observed head for this port: `5b7a6904`
 
 Expected incoming files and areas:
 
@@ -90,6 +90,57 @@ Gate:
 - Merge/cherry-pick in the isolated worktree only.
 - Resolve conflicts in favor of preserving PR #14 receipt, C++ evidence, and replay-eligibility gates.
 - Do not edit the advanced-models worktree.
+
+Implementation receipt:
+
+- Ported the model-registry metadata and symbol alias surface from the clean
+  advanced worktree into
+  `packages/features_engine/config/model_registry.yaml`,
+  `packages/features_engine/config/symbol_aliases.yaml`, and
+  `docs/model_registry.md`.
+- Ported parser behavior into
+  `packages/research_pipeline/hypothesis_parser.py`: natural-language model
+  aliases, registry default parameter ranges, canonical CME symbol aliases,
+  parser metadata, and instrument-compatibility receipts.
+- Added `ParsedHypothesis.metadata` and persisted parsed metadata in pipeline
+  reports.
+- Wired `scripts/run_pipeline.py` and `packages/research_pipeline/idea_generation.py`
+  so omitted `--symbol` derives from the parsed compatible instrument, while
+  explicit symbol/model mismatches fail closed before VectorBT/HftBacktest.
+- Review fixes keep mixed supported/unsupported instruments fail-closed unless
+  the registry explicitly declares context compatibility; structural-only
+  registry entries are not routed as primary autoresearch hypotheses; concrete
+  loader variants such as `MES.v.0` compare by root while preserving the
+  requested suffix; and `--idea-set` parses after static filtering so emitted
+  parsed receipts match the queued ideas that generated candidates.
+- Parameter search, RL artifact/cache handling, document cache, evaluation
+  workers, and runtime receipts were already implemented on this branch before
+  this Phase 1 completion pass.
+
+Local safe verification receipt:
+
+- `python -m py_compile packages\research_pipeline\types.py packages\research_pipeline\hypothesis_parser.py packages\research_pipeline\idea_generation.py scripts\run_pipeline.py tests\test_research_pipeline.py`
+- Targeted parser/registry pytest: 11 passed.
+- Targeted idea-generation pytest: 4 passed.
+- Targeted `scripts.run_pipeline` dry-run/symbol pytest: 4 passed.
+- `tests\research_pipeline\test_rl_agents.py`: 4 passed.
+- `git diff --check`: line-ending warnings only.
+
+Deferred verification:
+
+- Dependency-complete full-file and end-to-end pipeline tests remain CHI404/CI
+  readiness gates; MSI-local checks are limited to the targeted lightweight
+  paths above.
+
+Deliberate deferment:
+
+- The advanced worktree also contains a legacy cross-event evaluator with
+  Sharpe/Sortino/drawdown gates. This PR keeps those risk gates deferred to the
+  VectorBT -> robustness evidence layer, matching Phase 6 below and the current
+  pipeline ordering. Next command if the owner later wants that legacy diagnostic
+  path: port `research_pipeline.evaluation.aggregate_evaluation_results` and
+  the multi-event CLI into a separate PR that explicitly marks the metrics
+  diagnostic-only until robustness evidence owns promotion.
 
 ### Phase 2 - Microstructure Feature Library
 

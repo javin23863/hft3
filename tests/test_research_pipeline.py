@@ -116,6 +116,298 @@ def test_run_pipeline_doc_without_vectorbt_is_dry_run_only(monkeypatch, capsys):
     assert "--doc without --vectorbt/--vectorbt-only is dry-run only" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    ("thesis", "expected_symbol"),
+    [
+        ("trade micro NQ futures after CPI", "MNQ"),
+        ("GOLD breakout after claims", "GC"),
+        ("WTI liquidity vacuum after EIA", "CL"),
+        ("10Y queue imbalance during macro shock", "ZN"),
+    ],
+)
+def test_parse_hypothesis_detects_symbol_aliases(thesis, expected_symbol):
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis(thesis, use_llm=False)
+
+    assert expected_symbol in parsed.instrument_universe
+
+
+def test_parse_hypothesis_ignores_duration_phrases_as_treasury_aliases():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis(
+        "Use the continuation model over the last 10-year backtest window",
+        use_llm=False,
+    )
+
+    assert parsed.primary_model_id == "SECOND_WAVE_CONTINUATION"
+    assert parsed.instrument_universe == ["MES"]
+    assert parsed.metadata["instrument_universe_compatibility"] == "compatible"
+
+
+def test_parse_hypothesis_uses_model_alias_and_registry_ranges():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("Run a blowout fade on GOLD after CPI", use_llm=False)
+
+    assert parsed.primary_model_id == "SPREAD_BLOWOUT_RECOMPRESSION"
+    assert parsed.param_ranges["signal_threshold"] == [0.02, 0.15]
+    assert parsed.param_ranges["stop_loss"] == [0.05, 0.30]
+    assert parsed.metadata["volatility_regime"] == "high_volatility"
+    assert parsed.metadata["instrument_universe_compatibility"] == "unsupported_instruments"
+    assert parsed.metadata["unsupported_instruments"] == ["GC"]
+
+
+def test_parse_hypothesis_keeps_mixed_unsupported_context_blocked():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis(
+        "Run a blowout fade on ES while watching GOLD after CPI",
+        use_llm=False,
+    )
+
+    assert "ES" in parsed.instrument_universe
+    assert "GC" in parsed.instrument_universe
+    assert parsed.metadata["compatible_instrument_universe"] == ["ES"]
+    assert parsed.metadata["instrument_universe_compatibility"] == "unsupported_instruments"
+    assert parsed.metadata["unsupported_instruments"] == ["GC"]
+
+
+def test_parse_hypothesis_structural_alias_does_not_route_as_primary_model():
+    from features_engine.src.model_registry import load_model_registry
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("Use book pressure after CPI", use_llm=False)
+    model_entry = load_model_registry()["models"][parsed.primary_model_id]
+
+    assert parsed.primary_model_id != "BOOK_PRESSURE"
+    assert model_entry["kind"] == "hypothesis"
+
+
+def test_parse_hypothesis_parenthesized_structural_slug_does_not_route_primary():
+    from features_engine.src.model_registry import load_model_registry
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis(
+        "Use queue imbalance (BOOK_PRESSURE) after CPI",
+        use_llm=False,
+    )
+    model_entry = load_model_registry()["models"][parsed.primary_model_id]
+
+    assert parsed.primary_model_id != "BOOK_PRESSURE"
+    assert model_entry["kind"] == "hypothesis"
+
+
+def test_parse_hypothesis_packet_structural_primary_falls_back_to_hypothesis():
+    from features_engine.src.model_registry import load_model_registry
+    from research_pipeline.hypothesis_parser import _from_llm_dict
+
+    parsed = _from_llm_dict(
+        "Use book pressure after CPI",
+        {
+            "instrument_universe": ["MES"],
+            "entry_rules": ["enter_pressure"],
+            "exit_rules": ["exit_revert"],
+            "indicators": ["BOOK_PRESSURE"],
+            "feature_list": ["BOOK_PRESSURE"],
+            "param_ranges": {"signal_threshold": [0.05, 0.35]},
+            "primary_model_id": "BOOK_PRESSURE",
+        },
+    )
+    model_entry = load_model_registry()["models"][parsed.primary_model_id]
+
+    assert parsed.primary_model_id != "BOOK_PRESSURE"
+    assert model_entry["kind"] == "hypothesis"
+
+
+def test_model_registry_declares_valid_instrument_universe_for_all_models():
+    from features_engine.src.model_registry import load_model_registry
+
+    missing = [
+        slug
+        for slug, entry in load_model_registry()["models"].items()
+        if not entry.get("valid_instrument_universe")
+    ]
+
+    assert missing == []
+
+
+def test_run_pipeline_resolves_cross_asset_target_symbol():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("ES MES lead lag after CPI", use_llm=False)
+
+    assert parsed.primary_model_id == "ES_MES_LEAD_LAG"
+    assert run_pipeline._resolve_target_symbol(parsed, None) == "MES"
+    with pytest.raises(ValueError, match="--symbol ES is not compatible with target instruments"):
+        run_pipeline._resolve_target_symbol(parsed, "ES")
+
+
+def test_run_pipeline_accepts_canonical_symbol_variant():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("Fade spread blowout after CPI release on MES", use_llm=False)
+
+    assert run_pipeline._resolve_target_symbol(parsed, "MES.v.0") == "MES.v.0"
+
+
+def test_run_pipeline_derives_target_symbol_from_parsed_instrument(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {
+                "connector_id": "hft3-cme-mbo",
+                "asset_class": "cme_mbo_microstructure",
+                "vendor_shas": {"openfoundry": "test"},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_symbol_derived")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            "Trade micro NQ futures after CPI",
+            "--event-id",
+            "CPI_1",
+            "--repo-root",
+            str(tmp_path),
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 0
+    payload = _last_json_object(capsys.readouterr().out)
+    assert payload["parsed"]["target_symbol"] == "MNQ"
+    assert payload["candidates"][0]["target_symbol"] == "MNQ"
+
+
+def test_run_pipeline_rejects_cli_symbol_mismatch(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {
+                "connector_id": "hft3-cme-mbo",
+                "asset_class": "cme_mbo_microstructure",
+                "vendor_shas": {"openfoundry": "test"},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_symbol_mismatch")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            "Trade micro NQ futures after CPI",
+            "--event-id",
+            "CPI_1",
+            "--symbol",
+            "MES",
+            "--repo-root",
+            str(tmp_path),
+            "--dry-run",
+            "--no-llm",
+        ]
+    )
+
+    assert code == 2
+    assert "--symbol MES is not compatible" in capsys.readouterr().err
+
+
+def test_run_pipeline_idea_set_parses_after_static_filter(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+
+    idea_packet = _idea_packet()
+    idea_packet["constraints"]["allowed_model_ids"] = ["ES_MES_LEAD_LAG"]
+    idea_packet["ideas"] = [
+        {
+            "idea_id": "idea_cross_asset",
+            "status": "proposed",
+            "lane_code": "cme",
+            "thesis_code": "es_mes_lead_lag",
+            "instrument_ids": ["ES", "MES"],
+            "primary_model_id": "ES_MES_LEAD_LAG",
+            "feature_ids": ["ES_MES_LEAD_LAG"],
+            "param_ranges": {"signal_threshold": [0.05, 0.35]},
+            "entry_rule_codes": ["enter_lead_lag"],
+            "exit_rule_codes": ["exit_revert"],
+            "risk_codes": ["latency_gate_required"],
+            "evidence_ref_ids": ["mem_001"],
+            "rank_inputs": {
+                "novelty": 0.8,
+                "evidence_coverage": 0.8,
+                "lane_fit": 1.0,
+                "prior_failure_overlap": 0.0,
+                "validation_readiness": 1.0,
+            },
+        }
+    ]
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {
+                "connector_id": "hft3-cme-mbo",
+                "asset_class": "cme_mbo_microstructure",
+                "vendor_shas": {"openfoundry": "test"},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_idea_after_filter")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: idea_packet)
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            "fallback spread thesis on MES",
+            "--event-id",
+            "CPI_1",
+            "--repo-root",
+            str(tmp_path),
+            "--idea-set",
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 0
+    payload = _last_json_object(capsys.readouterr().out)
+    assert payload["parsed"]["primary_model_id"] == "ES_MES_LEAD_LAG"
+    assert payload["parsed"]["target_symbol"] == "MES"
+    assert payload["candidates"][0]["model_id"] == "ES_MES_LEAD_LAG"
+    assert payload["candidates"][0]["target_symbol"] == "MES"
+
+
 def test_pipeline_runtime_config_defaults_from_json(tmp_path):
     import argparse
 
@@ -1552,7 +1844,7 @@ def _idea_packet():
         "constraints": {
             "allowed_model_ids": [
                 "SPREAD_BLOWOUT_RECOMPRESSION",
-                "BOOK_PRESSURE",
+                "SECOND_WAVE_CONTINUATION",
             ],
             "allowed_lane_codes": ["cme"],
             "max_candidates": 4,
@@ -1572,10 +1864,10 @@ def _idea_packet():
                 "idea_id": "idea_low",
                 "status": "proposed",
                 "lane_code": "cme",
-                "thesis_code": "book_pressure",
+                "thesis_code": "second_wave_continuation",
                 "instrument_ids": ["MES"],
-                "primary_model_id": "BOOK_PRESSURE",
-                "feature_ids": ["BOOK_PRESSURE"],
+                "primary_model_id": "SECOND_WAVE_CONTINUATION",
+                "feature_ids": ["SECOND_WAVE_CONTINUATION"],
                 "param_ranges": {"signal_threshold": [0.05, 0.35]},
                 "entry_rule_codes": ["enter_pressure"],
                 "exit_rule_codes": ["exit_revert"],
@@ -1656,6 +1948,22 @@ def test_idea_static_filter_rejects_invalid_and_orders_queue():
         "ideas_tested_pass": 0,
         "candidates_from_ideas": 2,
     }
+
+
+def test_idea_static_filter_rejects_structural_primary_even_if_allowed():
+    from research_pipeline.idea_generation import candidates_from_ideas
+
+    packet = _idea_packet()
+    packet["constraints"]["allowed_model_ids"] = ["BOOK_PRESSURE"]
+    packet["ideas"] = [packet["ideas"][0]]
+    packet["ideas"][0]["primary_model_id"] = "BOOK_PRESSURE"
+    packet["ideas"][0]["feature_ids"] = ["BOOK_PRESSURE"]
+
+    candidates = candidates_from_ideas(packet, max_candidates=1)
+
+    assert candidates == []
+    assert packet["ideas"][0]["status"] == "static_reject"
+    assert "primary_model_id_not_hypothesis" in packet["ideas"][0]["static_error_codes"]
 
 
 def test_idea_feature_ids_do_not_expand_candidate_model_families():
