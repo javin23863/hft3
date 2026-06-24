@@ -112,6 +112,22 @@ def _resolve_target_symbol(parsed: ParsedHypothesis, cli_symbol: str | None) -> 
         str(symbol).upper()
         for symbol in (registry_entry.get("valid_instrument_universe") or [])
     ]
+    registry_targets = [
+        str(symbol).upper()
+        for symbol in (registry_entry.get("target_instrument_universe") or [])
+    ]
+    compatible = [
+        str(symbol).upper()
+        for symbol in (parsed.metadata.get("compatible_instrument_universe") or [])
+    ]
+    target_valid = [
+        str(symbol).upper()
+        for symbol in (
+            parsed.metadata.get("target_instrument_universe")
+            or registry_targets
+            or []
+        )
+    ]
     if compatibility == "not_declared" and registry_valid:
         unsupported = [symbol for symbol in parsed_symbols if symbol not in registry_valid]
         if unsupported:
@@ -120,20 +136,10 @@ def _resolve_target_symbol(parsed: ParsedHypothesis, cli_symbol: str | None) -> 
             )
         compatible = [symbol for symbol in parsed_symbols if symbol in registry_valid]
         allowed = compatible
-    elif (
-        compatibility == "not_declared"
-        and registry_entry.get("kind") == "hypothesis"
-        and not registry_valid
-    ):
-        raise ValueError(
-            f"model {parsed.primary_model_id} does not declare valid_instrument_universe"
-        )
+    elif compatibility == "not_declared":
+        allowed = parsed_symbols
     else:
-        compatible = [
-            str(symbol).upper()
-            for symbol in (parsed.metadata.get("compatible_instrument_universe") or [])
-        ]
-        allowed = parsed_symbols if compatibility == "not_declared" else compatible
+        allowed = compatible or (parsed_symbols if compatibility == "compatible" else [])
     if compatibility == "missing_valid_instrument_universe":
         raise ValueError(
             f"model {parsed.primary_model_id} does not declare valid_instrument_universe"
@@ -146,18 +152,27 @@ def _resolve_target_symbol(parsed: ParsedHypothesis, cli_symbol: str | None) -> 
         raise ValueError(
             f"parsed instruments {unsupported} are not compatible with model {parsed.primary_model_id}"
         )
+    target_allowed = [
+        symbol for symbol in allowed if not target_valid or symbol in target_valid
+    ]
+    if target_valid and not target_allowed:
+        target_allowed = target_valid
     if parsed_symbols and not allowed:
         raise ValueError(
             f"parsed instruments {parsed_symbols} are not compatible with model {parsed.primary_model_id}"
         )
     if cli_symbol:
         requested = str(cli_symbol).upper()
-        if allowed and requested not in allowed:
+        if target_valid and requested not in target_valid:
+            raise ValueError(
+                f"--symbol {requested} is not compatible with target instruments {target_valid}"
+            )
+        if not target_valid and allowed and requested not in allowed:
             raise ValueError(
                 f"--symbol {requested} is not compatible with parsed instruments {allowed}"
             )
         return requested
-    return (compatible or parsed_symbols or ["MES"])[0]
+    return (target_allowed or compatible or parsed_symbols or ["MES"])[0]
 
 
 def _idea_set_missing_prefilter(

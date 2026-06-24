@@ -149,6 +149,7 @@ def _model_metadata(model_id: str) -> Dict[str, Any]:
     keys = (
         "recommended_horizon_bars",
         "valid_instrument_universe",
+        "target_instrument_universe",
         "volatility_regime",
         "risk_metrics",
         "feature_recipe",

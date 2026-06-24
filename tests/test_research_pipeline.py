@@ -1048,12 +1048,131 @@ def test_run_pipeline_rejects_unsupported_parsed_symbol(tmp_path, monkeypatch, c
     assert "not compatible with model SPREAD_BLOWOUT_RECOMPRESSION" in capsys.readouterr().err
 
 
-def test_run_pipeline_rejects_model_without_valid_instrument_universe():
+def test_model_registry_declares_valid_instrument_universe_for_all_models():
+    from features_engine.src.model_registry import load_model_registry
+
+    models = load_model_registry()["models"]
+    missing = [
+        slug
+        for slug, entry in models.items()
+        if not entry.get("valid_instrument_universe")
+    ]
+
+    assert missing == []
+
+
+def test_cross_asset_registry_universes_are_pair_scoped():
+    from features_engine.src.model_registry import load_model_registry
+
+    models = load_model_registry()["models"]
+
+    assert models["ES_MES_LEAD_LAG"]["valid_instrument_universe"] == ["ES", "MES"]
+    assert models["ES_MES_LEAD_LAG"]["target_instrument_universe"] == ["MES"]
+    assert models["NQ_MNQ_LEAD_LAG"]["valid_instrument_universe"] == ["NQ", "MNQ"]
+    assert models["NQ_MNQ_LEAD_LAG"]["target_instrument_universe"] == ["MNQ"]
+    assert models["ES_NQ_DIVERGENCE_SNAPBACK"]["valid_instrument_universe"] == [
+        "ES",
+        "MES",
+        "NQ",
+        "MNQ",
+    ]
+    assert models["ZN_ZB_ES_NQ_MACRO_IMPULSE"]["valid_instrument_universe"] == [
+        "ZN",
+        "ZB",
+        "ES",
+        "MES",
+        "NQ",
+        "MNQ",
+    ]
+    assert models["ZN_ZB_ES_NQ_MACRO_IMPULSE"]["target_instrument_universe"] == [
+        "ES",
+        "MES",
+        "NQ",
+        "MNQ",
+    ]
+    assert models["MICRO_CONTRACT_RETAIL_LAG"]["valid_instrument_universe"] == ["ES", "MES"]
+    assert models["MICRO_CONTRACT_RETAIL_LAG"]["target_instrument_universe"] == ["MES"]
+
+
+def test_run_pipeline_resolves_completed_registry_instrument_universe():
     import scripts.run_pipeline as run_pipeline
     from research_pipeline.hypothesis_parser import parse_hypothesis
-    from research_pipeline.types import ParsedHypothesis
 
     parsed = parse_hypothesis("Aggressor deceleration fade on MES after CPI", use_llm=False)
+
+    assert parsed.primary_model_id == "AGGRESSOR_DECELERATION_FADE"
+    assert parsed.metadata["instrument_universe_compatibility"] == "compatible"
+    assert run_pipeline._resolve_target_symbol(parsed, None) == "MES"
+
+
+def test_run_pipeline_rejects_cross_asset_model_on_unrelated_symbol():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("Micro contract retail lag on GOLD after CPI", use_llm=False)
+
+    assert parsed.primary_model_id == "MICRO_CONTRACT_RETAIL_LAG"
+    assert parsed.metadata["instrument_universe_compatibility"] == "unsupported_instruments"
+    with pytest.raises(ValueError, match="not compatible with model MICRO_CONTRACT_RETAIL_LAG"):
+        run_pipeline._resolve_target_symbol(parsed, None)
+
+
+def test_run_pipeline_rejects_cross_asset_source_leg_as_target():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="manual ES to MES lead lag",
+        instrument_universe=["MES"],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=[],
+        feature_list=[],
+        param_ranges={},
+        primary_model_id="ES_MES_LEAD_LAG",
+        metadata={
+            "instrument_universe_compatibility": "compatible",
+            "compatible_instrument_universe": ["ES", "MES"],
+            "target_instrument_universe": ["MES"],
+        },
+    )
+
+    assert run_pipeline._resolve_target_symbol(parsed, None) == "MES"
+    with pytest.raises(ValueError, match="--symbol ES is not compatible with target instruments"):
+        run_pipeline._resolve_target_symbol(parsed, "ES")
+
+
+def test_run_pipeline_allows_cross_asset_source_legs_but_targets_response_leg():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("ES MES lead lag after CPI", use_llm=False)
+
+    assert parsed.primary_model_id == "ES_MES_LEAD_LAG"
+    assert parsed.metadata["instrument_universe_compatibility"] == "compatible"
+    assert run_pipeline._resolve_target_symbol(parsed, None) == "MES"
+    with pytest.raises(ValueError, match="--symbol ES is not compatible with target instruments"):
+        run_pipeline._resolve_target_symbol(parsed, "ES")
+
+
+def test_run_pipeline_allows_explicit_cross_asset_target_when_only_source_leg_parsed():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("Micro contract retail lag on ES after CPI", use_llm=False)
+
+    assert parsed.primary_model_id == "MICRO_CONTRACT_RETAIL_LAG"
+    assert parsed.metadata["compatible_instrument_universe"] == ["ES"]
+    assert run_pipeline._resolve_target_symbol(parsed, None) == "MES"
+    assert run_pipeline._resolve_target_symbol(parsed, "MES") == "MES"
+    with pytest.raises(ValueError, match="--symbol ES is not compatible with target instruments"):
+        run_pipeline._resolve_target_symbol(parsed, "ES")
+
+
+def test_run_pipeline_rejects_explicit_missing_valid_instrument_universe():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import ParsedHypothesis
+
     manual = ParsedHypothesis(
         thesis="manual",
         instrument_universe=["MES"],
@@ -1062,15 +1181,34 @@ def test_run_pipeline_rejects_model_without_valid_instrument_universe():
         indicators=[],
         feature_list=[],
         param_ranges={},
-        primary_model_id="AGGRESSOR_DECELERATION_FADE",
+        primary_model_id="MODEL_WITHOUT_VALID_UNIVERSE",
+        metadata={"instrument_universe_compatibility": "missing_valid_instrument_universe"},
     )
 
-    assert parsed.primary_model_id == "AGGRESSOR_DECELERATION_FADE"
-    assert parsed.metadata["instrument_universe_compatibility"] == "missing_valid_instrument_universe"
-    with pytest.raises(ValueError, match="does not declare valid_instrument_universe"):
-        run_pipeline._resolve_target_symbol(parsed, None)
     with pytest.raises(ValueError, match="does not declare valid_instrument_universe"):
         run_pipeline._resolve_target_symbol(manual, None)
+
+
+def test_run_pipeline_resolves_compatible_empty_metadata_to_parsed_symbol():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="manual compatible",
+        instrument_universe=["MES"],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=[],
+        feature_list=[],
+        param_ranges={},
+        primary_model_id="AGGRESSOR_DECELERATION_FADE",
+        metadata={
+            "instrument_universe_compatibility": "compatible",
+            "compatible_instrument_universe": [],
+        },
+    )
+
+    assert run_pipeline._resolve_target_symbol(parsed, None) == "MES"
 
 
 def _rl_rows() -> list[dict[str, float]]:
