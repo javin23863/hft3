@@ -137,13 +137,21 @@ def search_plan(
     )
     count = 0
     yielded_pairs: set[tuple[int, str]] = set()
-    for selection_index, selection in enumerate(per_model):
-        model_id = models[selection_index % len(models)]
+    primary_budget = max_candidates if len(models) == 1 else (max_candidates + 1) // 2
+    for selection_index, selection in enumerate(per_model[:primary_budget]):
+        yield models[0], selection
+        yielded_pairs.add((selection_index, models[0]))
+        count += 1
+
+    secondary_models = models[1:] or models
+    for selection_index in range(primary_budget, len(per_model)):
+        if count >= max_candidates:
+            return
+        selection = per_model[selection_index]
+        model_id = secondary_models[(selection_index - primary_budget) % len(secondary_models)]
         yield model_id, selection
         yielded_pairs.add((selection_index, model_id))
         count += 1
-        if count >= max_candidates:
-            return
 
     for selection_index, selection in enumerate(per_model):
         for model_id in models:
@@ -162,17 +170,26 @@ def _normalise_grid(grid: Mapping[str, Sequence[Any]]) -> dict[str, list[Any]]:
         values = list(grid[key])
         if not values:
             continue
-        normalised[RANGE_ALIASES.get(key, key)] = values
+        normalised_key = RANGE_ALIASES.get(key, key)
+        if normalised_key in normalised:
+            raise ValueError(f"duplicate parameter range for {normalised_key!r}")
+        normalised[normalised_key] = values
     if not normalised:
         raise ValueError("parameter grid must not be empty")
     return normalised
 
 
 def _param_range(parsed: ParsedHypothesis, key: str, *aliases: str) -> Sequence[float] | None:
-    for candidate_key in (key, *aliases):
-        value = parsed.param_ranges.get(candidate_key)
-        if value:
-            return value
+    present = [
+        candidate_key
+        for candidate_key in (key, *aliases)
+        if parsed.param_ranges.get(candidate_key)
+    ]
+    if len(present) > 1:
+        normalised_key = RANGE_ALIASES.get(key, key)
+        raise ValueError(f"duplicate parameter range for {normalised_key!r}")
+    if present:
+        return parsed.param_ranges[present[0]]
     return None
 
 

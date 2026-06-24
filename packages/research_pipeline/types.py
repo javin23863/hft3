@@ -17,7 +17,7 @@ class ParsedHypothesis:
     feature_list: List[str]
     param_ranges: Dict[str, List[float]]
     primary_model_id: str
-    source: str = "heuristic"  # heuristic | openai_compatible
+    source: str = "heuristic"  # heuristic | openai_compatible | hypothesis_packet
     llm_status: Optional[str] = None  # hypothesis packet status when GPT-5.5 path used
     metadata: Dict[str, Any] = field(default_factory=dict)
 

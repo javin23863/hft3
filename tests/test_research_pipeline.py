@@ -231,6 +231,7 @@ def test_parse_hypothesis_packet_accepts_enriched_fields(monkeypatch):
         repo_root=REPO,
     )
 
+    assert parsed.source == "hypothesis_packet"
     assert parsed.instrument_universe == ["GC"]
     assert parsed.entry_rules == ["fade spread when book imbalance normalizes"]
     assert parsed.exit_rules == ["exit after recompression"]
@@ -289,6 +290,35 @@ def test_parameter_search_seeded_and_unavailable_methods_are_explicit():
     assert [item.params for item in fallback] == [item.params for item in seeded_a]
 
 
+def test_parameter_search_rejects_alias_key_collisions():
+    from research_pipeline.parameter_search import select_parameters
+
+    with pytest.raises(ValueError, match="duplicate parameter range"):
+        select_parameters(
+            {"stop_loss": [0.01], "stop_loss_pct": [0.02]},
+            max_candidates=1,
+        )
+
+
+def test_parameter_grid_rejects_parsed_alias_key_collisions():
+    from research_pipeline.parameter_search import parameter_grid
+    from research_pipeline.types import ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="duplicate parsed ranges",
+        instrument_universe=["MES"],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=[],
+        feature_list=[],
+        param_ranges={"stop_loss_pct": [0.01], "stop_loss": [0.02]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+
+    with pytest.raises(ValueError, match="duplicate parameter range"):
+        parameter_grid(parsed)
+
+
 def test_generate_candidates_records_search_metadata_and_hybrid_limit():
     from research_pipeline.types import ParsedHypothesis
     from research_pipeline.model_generation import generate_candidates
@@ -307,16 +337,17 @@ def test_generate_candidates_records_search_metadata_and_hybrid_limit():
         primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
     )
 
-    cands = list(generate_candidates(parsed, max_candidates=4, hybrid=True, search_method="hybrid", search_seed=3))
+    cands = list(generate_candidates(parsed, max_candidates=5, hybrid=True, search_method="hybrid", search_seed=3))
 
-    assert len(cands) == 4
+    assert len(cands) == 5
     model_ids = {cand.model_id for cand in cands}
     params_seen = {tuple(sorted(cand.strategy_params.items())) for cand in cands}
     assert "SPREAD_BLOWOUT_RECOMPRESSION" in model_ids
     assert model_ids & {"SECOND_WAVE_CONTINUATION", "STOP_RUN_EXHAUSTION_FADE"}
     assert len(params_seen) == len(cands)
+    assert sum(cand.model_id == "SPREAD_BLOWOUT_RECOMPRESSION" for cand in cands) >= 3
     assert all(cand.metadata["parameter_search"]["search_method"] == "hybrid" for cand in cands)
-    assert cands[0].metadata["parameter_search"]["max_candidates"] == 4
+    assert cands[0].metadata["parameter_search"]["max_candidates"] == 5
 
 
 def test_run_pipeline_dry_run_exposes_search_metadata(tmp_path, monkeypatch, capsys):
@@ -836,6 +867,18 @@ def test_train_rl_agent_rejects_non_monotonic_timestamps():
 
     with pytest.raises(ValueError, match="strictly increasing"):
         train_rl_agent(rows, ["order_book_imbalance", "queue_imbalance"])
+
+
+def test_train_rl_agent_rejects_invalid_timestamp_on_validated_rows():
+    from research_pipeline.rl_agents import train_rl_agent
+
+    rows = [
+        {"timestamp_ns": "bad", "order_book_imbalance": 0.2, "reward": 0.01},
+        {"timestamp_ns": 2, "order_book_imbalance": 0.3, "reward": 0.02},
+    ]
+
+    with pytest.raises(ValueError, match="row 0 timestamp_ns"):
+        train_rl_agent(rows, ["order_book_imbalance"])
 
 
 def test_train_rl_agent_rejects_malformed_feature_input():
@@ -2904,7 +2947,7 @@ def test_parse_hypothesis_uses_packet_runner(monkeypatch):
         repo_root=REPO,
     )
     assert parsed.primary_model_id == "SPREAD_BLOWOUT_RECOMPRESSION"
-    assert parsed.source == "openai_compatible"
+    assert parsed.source == "hypothesis_packet"
 
 
 NPZ = REPO / "data" / "npz" / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"

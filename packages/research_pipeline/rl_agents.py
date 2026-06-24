@@ -17,6 +17,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 DEFAULT_ACTION_SPACE = ("hold", "enter_long", "enter_short", "exit")
 PROMOTION_BLOCKED_STATUS = "blocked_downstream_validation_required"
+_TIMESTAMP_FIELDS = ("timestamp_ns", "ts_ns", "timestamp", "decision_time")
 _LEAKY_FEATURE_RE = re.compile(
     r"(^|_)(future|lead|next|target|label|outcome|reward|return|pnl|profit|"
     r"realized|post|after)(_|$)",
@@ -103,7 +104,7 @@ def train_rl_agent(
     rows = _validate_rows(data, feature_names)
     if len(rows) < 2:
         raise ValueError("RL training requires at least two rows for train/eval split")
-    chronology = _chronology_audit(data)
+    chronology = _chronology_audit(rows)
     if not (0.0 < train_fraction < 1.0):
         raise ValueError("train_fraction must be between 0 and 1")
     if not (0.0 < learning_rate <= 1.0):
@@ -381,13 +382,19 @@ def _validate_rows(
         for reward_key in ("reward", "next_return", "return"):
             if reward_key in row:
                 clean[reward_key] = _number(row[reward_key], f"row {row_idx} {reward_key}")
+        for timestamp_key in _TIMESTAMP_FIELDS:
+            if timestamp_key in row:
+                clean[timestamp_key] = _number(row[timestamp_key], f"row {row_idx} {timestamp_key}")
         rows.append(clean)
     return rows
 
 
 def _chronology_audit(data: Sequence[Mapping[str, Any]]) -> dict[str, str]:
-    fields = ("timestamp_ns", "ts_ns", "timestamp", "decision_time")
-    present = [field for field in fields if all(isinstance(row, Mapping) and field in row for row in data)]
+    present = [
+        field
+        for field in _TIMESTAMP_FIELDS
+        if all(isinstance(row, Mapping) and field in row for row in data)
+    ]
     if not present:
         return {"status": "missing_timestamp"}
     field = present[0]
