@@ -38,6 +38,7 @@ _MODULE_NAME = "hft3_features_cpp"
 # Cache: once found, keep the reference.
 _cached: Optional[object] = None
 _searched: bool = False
+_searched_active_build: Optional[Path] = None
 
 
 def _repo_root() -> Path:
@@ -155,10 +156,14 @@ def load_cpp_features() -> Optional[object]:
     Thread-safe for read-after-first-call; the first call is not guaranteed
     reentrant but that is acceptable for a module-level loader.
     """
-    global _cached, _searched
+    global _cached, _searched, _searched_active_build
     active_build = _active_build_dir()
     if _searched:
-        if active_build is not None and _cached is not None and not _module_file_under_build_dir(_cached, active_build):
+        if active_build != _searched_active_build:
+            _cached = None
+            _searched = False
+            sys.modules.pop(_MODULE_NAME, None)
+        elif active_build is not None and _cached is not None and not _module_file_under_build_dir(_cached, active_build):
             _cached = None
             _searched = False
             sys.modules.pop(_MODULE_NAME, None)
@@ -173,6 +178,7 @@ def load_cpp_features() -> Optional[object]:
         else:
             _cached = mod
             _searched = True
+            _searched_active_build = active_build
             return _cached
 
     # 2. Search the requested build dir first. In lane-runner mode, a broken
@@ -188,12 +194,15 @@ def load_cpp_features() -> Optional[object]:
                 sys.modules.pop(_MODULE_NAME, None)
                 _cached = None
                 _searched = True
+                _searched_active_build = active_build
                 return None
             _searched = True
+            _searched_active_build = active_build
             return _cached
 
     if os.environ.get("HFT3_FEATURES_CPP_BUILD_DIR"):
         _searched = True
+        _searched_active_build = active_build
         return None
 
     for search_dir in _candidate_dirs(repo):
@@ -203,6 +212,7 @@ def load_cpp_features() -> Optional[object]:
             try:
                 _cached = _load_cpp_module_from_path(entry, repo)
                 _searched = True
+                _searched_active_build = active_build
                 return _cached
             except Exception:
                 sys.modules.pop(_MODULE_NAME, None)
@@ -212,9 +222,11 @@ def load_cpp_features() -> Optional[object]:
     try:
         _cached = importlib.import_module(_MODULE_NAME)
         _searched = True
+        _searched_active_build = active_build
         return _cached
     except ImportError:
         pass
 
     _searched = True
+    _searched_active_build = active_build
     return None

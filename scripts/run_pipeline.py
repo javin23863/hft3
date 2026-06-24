@@ -521,10 +521,23 @@ def _cached_doc_match_metadata(
     return True, _doc_file_metadata(resolved, sha256=current_sha)
 
 
-def _doc_id(source: Path) -> str:
-    stem = Path(source).stem or hashlib.sha256(str(source).encode("utf-8")).hexdigest()[:12]
+def _doc_id(
+    source: str | Path,
+    *,
+    repo_root: Path,
+    resolved_source: Path | None = None,
+) -> str:
+    if _is_url_source(source):
+        identity = str(source)
+        stem = Path(str(source).rstrip("/")).stem
+    else:
+        resolved = resolved_source or _resolve_doc_file(source, repo_root=repo_root)
+        identity = str(resolved)
+        stem = resolved.stem
+    stem = stem or hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
     safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", stem).strip("._") or "unknown"
-    return f"doc:{safe_stem}"
+    path_hash = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:8]
+    return f"doc:{safe_stem}_{path_hash}"
 
 
 def _graph_from_kg_records(records: Mapping[str, Any]):
@@ -558,12 +571,13 @@ def ingest_document_with_cache(
         repo_root,
         cache_config.get("root") or _DEFAULT_PIPELINE_RUNTIME_CONFIG["doc_cache"]["root"],
     )
+    resolved_source = None if _is_url_source(source) else _resolve_doc_file(source, repo_root=repo_root)
     cache_path = _doc_cache_path(source, repo_root=repo_root, cache_root=cache_root)
-    doc_id = _doc_id(source)
+    doc_id = _doc_id(source, repo_root=repo_root, resolved_source=resolved_source)
     if enabled and cache_path.is_file():
         cached = json.loads(cache_path.read_text(encoding="utf-8"))
         cache_matches, refreshed_source_file = _cached_doc_match_metadata(cached, source, repo_root=repo_root)
-        if cache_matches:
+        if cache_matches and str(cached.get("doc_id") or "") == doc_id:
             if refreshed_source_file is not None:
                 cached["source_file"] = refreshed_source_file
                 _write_json(cache_path, cached)
@@ -593,10 +607,10 @@ def ingest_document_with_cache(
                 "text_char_count": len(text),
                 "source_file": (
                     _doc_file_metadata(
-                        _resolve_doc_file(source, repo_root=repo_root),
-                        sha256=_file_sha256(_resolve_doc_file(source, repo_root=repo_root)),
+                        resolved_source,
+                        sha256=_file_sha256(resolved_source),
                     )
-                    if not _is_url_source(source)
+                    if resolved_source is not None
                     else None
                 ),
                 "summary": summary,

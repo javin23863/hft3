@@ -334,6 +334,89 @@ def test_document_ingestion_cache_miss_then_hit(tmp_path, monkeypatch):
     assert len(persisted) == 3
 
 
+def test_document_ingestion_doc_ids_include_resolved_path_identity(tmp_path, monkeypatch):
+    import scripts.run_pipeline as run_pipeline
+
+    doc_a = tmp_path / "thesis" / "analysis.txt"
+    doc_b = tmp_path / "market_data" / "analysis.txt"
+    doc_a.parent.mkdir()
+    doc_b.parent.mkdir()
+    doc_a.write_text("CPI thesis", encoding="utf-8")
+    doc_b.write_text("Market data note", encoding="utf-8")
+    doc_ids = []
+
+    def fake_extract(path):
+        return Path(path).read_text(encoding="utf-8")
+
+    def fake_build_knowledge_graph(text, doc_id):
+        doc_ids.append(doc_id)
+        return {"doc_id": doc_id}
+
+    monkeypatch.setattr(run_pipeline, "extract_text", fake_extract)
+    monkeypatch.setattr(run_pipeline, "summarise_text", lambda text: "summary")
+    monkeypatch.setattr(run_pipeline, "build_knowledge_graph", fake_build_knowledge_graph)
+    monkeypatch.setattr(run_pipeline, "graph_to_kg_records", lambda graph: {"nodes": [], "edges": []})
+    monkeypatch.setattr(run_pipeline, "persist_graph_slice", lambda *args, **kwargs: (0, 0))
+
+    meta_a = run_pipeline.ingest_document_with_cache(
+        doc_a,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )[1]
+    meta_b = run_pipeline.ingest_document_with_cache(
+        doc_b,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )[1]
+
+    assert len(doc_ids) == 2
+    assert doc_ids[0].startswith("doc:analysis_")
+    assert doc_ids[1].startswith("doc:analysis_")
+    assert doc_ids[0] != doc_ids[1]
+    assert meta_a["doc_id"] == doc_ids[0]
+    assert meta_b["doc_id"] == doc_ids[1]
+
+
+def test_document_ingestion_rebuilds_stale_stem_only_doc_id_cache(tmp_path, monkeypatch):
+    import scripts.run_pipeline as run_pipeline
+
+    doc = tmp_path / "notes" / "analysis.txt"
+    doc.parent.mkdir()
+    doc.write_text("CPI note", encoding="utf-8")
+    calls = {"extract": 0}
+
+    def fake_extract(path):
+        calls["extract"] += 1
+        return Path(path).read_text(encoding="utf-8")
+
+    monkeypatch.setattr(run_pipeline, "extract_text", fake_extract)
+    monkeypatch.setattr(run_pipeline, "summarise_text", lambda text: "summary")
+    monkeypatch.setattr(run_pipeline, "build_knowledge_graph", lambda text, doc_id: {"doc_id": doc_id})
+    monkeypatch.setattr(run_pipeline, "graph_to_kg_records", lambda graph: {"nodes": [], "edges": []})
+    monkeypatch.setattr(run_pipeline, "persist_graph_slice", lambda *args, **kwargs: (0, 0))
+
+    _, meta = run_pipeline.ingest_document_with_cache(
+        doc,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )
+    cache_path = Path(meta["cache_path"])
+    cached = json.loads(cache_path.read_text(encoding="utf-8"))
+    cached["doc_id"] = "doc:analysis"
+    cache_path.write_text(json.dumps(cached, indent=2), encoding="utf-8")
+
+    _, meta2 = run_pipeline.ingest_document_with_cache(
+        doc,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )
+
+    assert calls["extract"] == 2
+    assert meta2["status"] == "miss"
+    assert meta2["doc_id"].startswith("doc:analysis_")
+    assert meta2["doc_id"] != "doc:analysis"
+
+
 def test_run_pipeline_dry_run_writes_runtime_receipt(tmp_path, monkeypatch, capsys):
     import scripts.run_pipeline as run_pipeline
     from research_pipeline.types import CandidateModel, ParsedHypothesis
