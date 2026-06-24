@@ -179,11 +179,33 @@ def test_symbol_aliases_reflect_path_changes(tmp_path, monkeypatch):
     first.write_text("MES:\n  - micro test symbol\n", encoding="utf-8")
     second.write_text("MNQ:\n  - micro test symbol\n", encoding="utf-8")
 
-    monkeypatch.setattr(hypothesis_parser, "_SYMBOL_ALIASES_PATH", first)
-    assert hypothesis_parser.canonicalize_instrument("micro test symbol") == "MES"
+    try:
+        monkeypatch.setattr(hypothesis_parser, "_SYMBOL_ALIASES_PATH", first)
+        hypothesis_parser._symbol_aliases.cache_clear()
+        assert hypothesis_parser.canonicalize_instrument("micro test symbol") == "MES"
 
-    monkeypatch.setattr(hypothesis_parser, "_SYMBOL_ALIASES_PATH", second)
-    assert hypothesis_parser.canonicalize_instrument("micro test symbol") == "MNQ"
+        monkeypatch.setattr(hypothesis_parser, "_SYMBOL_ALIASES_PATH", second)
+        hypothesis_parser._symbol_aliases.cache_clear()
+        assert hypothesis_parser.canonicalize_instrument("micro test symbol") == "MNQ"
+    finally:
+        hypothesis_parser._symbol_aliases.cache_clear()
+
+
+def test_symbol_aliases_are_cached_per_process(tmp_path, monkeypatch):
+    from research_pipeline import hypothesis_parser
+
+    aliases = tmp_path / "aliases.yaml"
+    aliases.write_text("MES:\n  - micro test symbol\n", encoding="utf-8")
+
+    try:
+        monkeypatch.setattr(hypothesis_parser, "_SYMBOL_ALIASES_PATH", aliases)
+        hypothesis_parser._symbol_aliases.cache_clear()
+        assert hypothesis_parser.canonicalize_instrument("micro test symbol") == "MES"
+
+        aliases.write_text("MNQ:\n  - micro test symbol\n", encoding="utf-8")
+        assert hypothesis_parser.canonicalize_instrument("micro test symbol") == "MES"
+    finally:
+        hypothesis_parser._symbol_aliases.cache_clear()
 
 
 def test_parse_hypothesis_uses_model_alias_and_registry_ranges():
@@ -656,6 +678,7 @@ def test_run_pipeline_passes_multi_event_set_to_evaluator(tmp_path, monkeypatch,
 
     def fake_eval(candidate, event_ids, repo_root, **kwargs):
         captured["event_ids"] = list(event_ids)
+        captured["gates"] = kwargs.get("gates")
         return EvaluationResult(
             candidate=candidate,
             event_id=",".join(event_ids),
@@ -686,17 +709,51 @@ def test_run_pipeline_passes_multi_event_set_to_evaluator(tmp_path, monkeypatch,
         "--no-llm",
         "--max-candidates",
         "1",
+        "--min-sharpe",
+        "0.25",
+        "--min-sortino",
+        "0.50",
+        "--max-drawdown",
+        "4.0",
     ])
 
     assert run_pipeline.main() == 0
     payload = _last_json_object(capsys.readouterr().out)
 
     assert captured["event_ids"] == ["CPI_1", "NFP_1", "FOMC_1"]
+    assert captured["gates"].min_sharpe == 0.25
+    assert captured["gates"].min_sortino == 0.50
+    assert captured["gates"].max_drawdown == 4.0
     assert payload["report"]["event_id"] == "CPI_1"
     assert payload["report"]["event_ids"] == ["CPI_1", "NFP_1", "FOMC_1"]
     assert payload["response_packet"]["event_id"] == "CPI_1"
     assert payload["response_packet"]["event_ids"] == ["CPI_1", "NFP_1", "FOMC_1"]
     assert payload["response_packet"]["results"][0]["sharpe"] == 0.5
+
+
+def test_run_pipeline_rejects_nonfinite_risk_gate_arg(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Run a blowout fade on MES after CPI",
+        "--event-id",
+        "CPI_1",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--min-sharpe",
+        "nan",
+    ])
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_pipeline.main()
+
+    assert excinfo.value.code == 2
+    assert "must be a finite number" in capsys.readouterr().err
 
 
 def test_run_pipeline_rejects_multi_event_vectorbt(tmp_path, monkeypatch, capsys):
@@ -980,6 +1037,19 @@ def test_train_rl_agent_rejects_malformed_feature_input():
 
     with pytest.raises(ValueError, match="missing feature 'queue_imbalance'"):
         train_rl_agent(rows, ["order_book_imbalance", "queue_imbalance"])
+
+
+@pytest.mark.parametrize("feature_name", ["order_book|imbalance", "order_book=imbalance"])
+def test_train_rl_agent_rejects_state_key_delimiters(feature_name):
+    from research_pipeline.rl_agents import train_rl_agent
+
+    rows = [
+        {feature_name: 0.1, "reward": 0.01},
+        {feature_name: -0.2, "reward": -0.01},
+    ]
+
+    with pytest.raises(ValueError, match="state-key delimiters"):
+        train_rl_agent(rows, [feature_name])
 
 
 def test_train_rl_agent_rejects_label_like_feature_names():

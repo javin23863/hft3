@@ -329,6 +329,12 @@ def _validate_feature_names(feature_names: Sequence[str]) -> tuple[str, ...]:
         raise ValueError("feature_names must not be empty")
     if len(set(names)) != len(names):
         raise ValueError("feature_names must be unique")
+    invalid_delimiters = [name for name in names if "|" in name or "=" in name]
+    if invalid_delimiters:
+        raise ValueError(
+            "feature_names must not contain '|' or '=' (state-key delimiters): "
+            + ", ".join(invalid_delimiters)
+        )
     leaky = [
         name
         for name in names

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import uuid
@@ -85,6 +86,13 @@ def _optional_float(value: str | None) -> float | None:
     if value is None or value == "":
         return None
     return float(value)
+
+
+def _finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError("must be a finite number")
+    return parsed
 
 
 def _positive_int(value: str) -> int:
@@ -332,6 +340,9 @@ def main() -> int:
         help="Candidate parameter search method; unavailable advanced methods fall back explicitly",
     )
     parser.add_argument("--search-seed", type=int, default=42)
+    parser.add_argument("--min-sharpe", type=_finite_float, default=-1e9, help="Minimum cross-event Sharpe gate")
+    parser.add_argument("--min-sortino", type=_finite_float, default=-1e9, help="Minimum cross-event Sortino gate")
+    parser.add_argument("--max-drawdown", type=_finite_float, default=1e9, help="Maximum cross-event drawdown gate")
     parser.set_defaults(hybrid=True)
     parser.add_argument("--hybrid", dest="hybrid", action="store_true", help="Include adjacent model-family ids in candidate search")
     parser.add_argument("--no-hybrid", dest="hybrid", action="store_false", help="Disable adjacent model-family ids")
@@ -996,7 +1007,12 @@ def main() -> int:
     if chi404 is None:
         print("Warning: no latency data available; backtest will run without CHI404 latency", file=sys.stderr)
 
-    gates = GateThresholds(min_trades=0)
+    gates = GateThresholds(
+        min_trades=0,
+        min_sharpe=args.min_sharpe,
+        min_sortino=args.min_sortino,
+        max_drawdown=args.max_drawdown,
+    )
     results = []
     for cand in candidates:
         print(f"Evaluating {cand.model_id} threshold={cand.strategy_params.get('signal_threshold')}...")
