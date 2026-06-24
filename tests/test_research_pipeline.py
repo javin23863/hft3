@@ -239,6 +239,241 @@ def test_pipeline_runtime_config_rejects_false_abort_policy(tmp_path):
         run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
 
 
+def test_model_registry_volatility_regime_selects_gate_profile():
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    cfg = run_pipeline.load_pipeline_runtime_config()
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+        candidate_search_method=None,
+        candidate_search_seed=None,
+        rl_training_data=None,
+        rl_required=False,
+        rl_device=None,
+        rl_seed=None,
+        rl_feature=None,
+        evaluation_workers=None,
+        gate_profile=None,
+        gate_min_net_pnl=None,
+        gate_min_trades=None,
+        gate_max_tail_loss=None,
+        gate_min_win_rate=None,
+    )
+    run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+
+    resolution = run_pipeline._apply_registry_gate_profile(
+        args,
+        cfg,
+        "SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+
+    assert {
+        key: resolution[key]
+        for key in ("source", "model_id", "volatility_regime", "profile")
+    } == {
+        "source": "model_registry_volatility_regime",
+        "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+        "volatility_regime": "high_volatility",
+        "profile": "high_volatility",
+    }
+    assert resolution["thresholds"] == {
+        "min_net_pnl": 0.0,
+        "min_trades": 10,
+        "max_tail_loss": 5000.0,
+        "min_win_rate": 0.45,
+    }
+    assert resolution["threshold_cli_overrides"] == {
+        "min_net_pnl": False,
+        "min_trades": False,
+        "max_tail_loss": False,
+        "min_win_rate": False,
+    }
+    assert args.gate_profile == "high_volatility"
+    assert args.gate_min_trades == 10
+    assert args.gate_min_win_rate == 0.45
+
+
+def test_cli_gate_profile_overrides_model_registry_regime():
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    cfg = run_pipeline.load_pipeline_runtime_config()
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+        candidate_search_method=None,
+        candidate_search_seed=None,
+        rl_training_data=None,
+        rl_required=False,
+        rl_device=None,
+        rl_seed=None,
+        rl_feature=None,
+        evaluation_workers=None,
+        gate_profile="normal",
+        gate_min_net_pnl=None,
+        gate_min_trades=None,
+        gate_max_tail_loss=None,
+        gate_min_win_rate=None,
+    )
+    run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+
+    resolution = run_pipeline._apply_registry_gate_profile(
+        args,
+        cfg,
+        "SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+
+    assert resolution["source"] == "cli"
+    assert resolution["profile"] == "normal"
+    assert args.gate_profile == "normal"
+    assert args.gate_min_trades == 0
+
+
+def test_candidate_gate_plan_supports_mixed_registry_profiles():
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel
+
+    cfg = run_pipeline.load_pipeline_runtime_config()
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+        candidate_search_method=None,
+        candidate_search_seed=None,
+        rl_training_data=None,
+        rl_required=False,
+        rl_device=None,
+        rl_seed=None,
+        rl_feature=None,
+        evaluation_workers=None,
+        gate_profile=None,
+        gate_min_net_pnl=None,
+        gate_min_trades=None,
+        gate_max_tail_loss=None,
+        gate_min_win_rate=None,
+    )
+    run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+    candidates = [
+        CandidateModel(
+            candidate_id="spread",
+            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+            strategy_params={"signal_threshold": 0.1},
+            thesis="spread",
+        ),
+        CandidateModel(
+            candidate_id="book",
+            model_id="BOOK_PRESSURE",
+            strategy_params={"signal_threshold": 0.1},
+            thesis="book",
+        ),
+    ]
+
+    plan = run_pipeline._candidate_gate_profile_plan(args, cfg, candidates)
+
+    assert plan["by_candidate"]["spread"]["profile"] == "high_volatility"
+    assert plan["by_candidate"]["spread"]["thresholds"]["min_trades"] == 10
+    assert plan["by_candidate"]["book"]["profile"] == "normal"
+    assert plan["by_candidate"]["book"]["thresholds"]["min_trades"] == 0
+
+
+def test_pipeline_config_receipt_includes_candidate_gate_plan(tmp_path):
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    cfg = run_pipeline.load_pipeline_runtime_config()
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+        idea_temperature=None,
+        idea_top_p=None,
+        candidate_search_method=None,
+        candidate_search_seed=None,
+        rl_training_data=None,
+        rl_required=False,
+        rl_device=None,
+        rl_seed=None,
+        rl_feature=None,
+        evaluation_workers=None,
+        gate_profile=None,
+        gate_min_net_pnl=None,
+        gate_min_trades=None,
+        gate_max_tail_loss=None,
+        gate_min_win_rate=None,
+    )
+    run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+    run_pipeline._resolve_idea_sampling_values(args, cfg)
+    gate_plan = {
+        "schema_version": "hft3_gate_profile_plan_v1",
+        "by_candidate": {
+            "spread": {
+                "candidate_id": "spread",
+                "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+                "source": "model_registry_volatility_regime",
+                "volatility_regime": "high_volatility",
+                "profile": "high_volatility",
+                "thresholds": {"min_net_pnl": 0.0, "min_trades": 10, "max_tail_loss": 5000.0, "min_win_rate": 0.45},
+                "threshold_cli_overrides": {
+                    "min_net_pnl": False,
+                    "min_trades": False,
+                    "max_tail_loss": False,
+                    "min_win_rate": False,
+                },
+            }
+        },
+    }
+
+    receipt = run_pipeline._pipeline_config_receipt(
+        config=cfg,
+        config_path=tmp_path / "runtime.json",
+        args=args,
+        gate_profile_plan=gate_plan,
+    )
+
+    assert receipt["effective"]["gate_profiles"]["candidate_gate_plan"] == gate_plan
+
+
 def test_evaluation_workers_are_capped_on_msi(monkeypatch):
     from research_pipeline import runtime_policy
 

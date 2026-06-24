@@ -54,6 +54,11 @@
   },
   "gate_profiles": {
     "default_profile": "normal",
+    "volatility_regime_profiles": {
+      "normal": "normal",
+      "high_volatility": "high_volatility",
+      "low_volatility": "low_volatility"
+    },
     "profiles": {
       "normal": {
         "min_net_pnl": -1000000000.0,

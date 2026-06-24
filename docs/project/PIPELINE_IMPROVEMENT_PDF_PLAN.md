@@ -225,13 +225,17 @@ Implementation receipt:
 
 - `config/research_pipeline/default_runtime.json` and `scripts/run_pipeline.py` now define `normal`, `high_volatility`, and `low_volatility` legacy evaluation gate profiles.
 - CLI overrides exist for profile, min net PnL, min trades, max tail loss, and min win rate.
+- Model-registry `volatility_regime` metadata can select the default legacy
+  profile when no CLI `--gate-profile` override is supplied, and the final run
+  payload and runtime receipt record a per-candidate `gate_profile_plan`.
 - The current gate profile applies only to legacy `EvaluationResult` fields already produced by `evaluate_model`; Sharpe/Sortino/drawdown profile gates remain deferred to the VectorBT/robustness layers that emit those metrics.
 
 Implementation requirements:
 
 - Config file for gate profiles, for example `config/autoresearch/gate_thresholds.yaml`.
 - Profiles include high, normal, and low volatility defaults.
-- Model registry volatility regime selects the default profile.
+- Model registry volatility regime selects the default profile when declared;
+  explicit CLI profile/threshold overrides remain authoritative.
 - CLI overrides are explicit and receipt-backed.
 
 Gate:

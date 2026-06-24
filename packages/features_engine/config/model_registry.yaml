@@ -36,6 +36,7 @@ models:
     legacy_id: HYP_5
     display_name: Spread blowout/recompression
     class: SpreadBlowoutRecompression
+    volatility_regime: high_volatility
 
   AGGRESSOR_DECELERATION_FADE:
     kind: hypothesis

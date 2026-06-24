@@ -111,6 +111,12 @@ tail loss, and min win rate. These profiles apply only to the legacy
 they do not replace VectorBT promotion gates, robustness evidence, or
 HftBacktest replay gates.
 
+When no `--gate-profile` override is supplied, a model-registry
+`volatility_regime` may select a matching legacy gate profile through
+`gate_profiles.volatility_regime_profiles`. The run receipt and runtime config
+receipt record a per-candidate `gate_profile_plan` so reviewers can distinguish
+CLI overrides, runtime-config defaults, and model-registry selection.
+
 `--hftbacktest-realism` remains fail-closed: the writer is called only after a
 promoted screening row is strict replay-eligible and carries a robustness
 evidence receipt from the robustness applicator.

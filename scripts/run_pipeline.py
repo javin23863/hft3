@@ -42,6 +42,7 @@ from research_pipeline.rl_agents import (
     write_rl_policy_artifact,
 )
 from research_pipeline.runtime_policy import effective_evaluation_workers
+from features_engine.src.model_registry import load_model_registry, resolve_model_id
 from research_pipeline.idea_generation import (
     candidates_from_ideas,
     generate_idea_set,
@@ -131,6 +132,11 @@ _DEFAULT_PIPELINE_RUNTIME_CONFIG: dict[str, Any] = {
     },
     "gate_profiles": {
         "default_profile": "normal",
+        "volatility_regime_profiles": {
+            "normal": "normal",
+            "high_volatility": "high_volatility",
+            "low_volatility": "low_volatility",
+        },
         "profiles": {
             "normal": {
                 "min_net_pnl": -1000000000.0,
@@ -298,6 +304,139 @@ def _gate_thresholds_from_args(args: argparse.Namespace) -> GateThresholds:
     )
 
 
+def _model_volatility_regime(model_id: str) -> str | None:
+    try:
+        slug = resolve_model_id(model_id)
+    except KeyError:
+        return None
+    entry = load_model_registry().get("models", {}).get(slug, {})
+    raw = entry.get("volatility_regime")
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    return value or None
+
+
+def _apply_gate_profile_thresholds(
+    args: argparse.Namespace,
+    profile: Mapping[str, Any],
+) -> None:
+    thresholds = _gate_threshold_values(args, profile)
+    args.gate_min_net_pnl = thresholds["min_net_pnl"]
+    args.gate_min_trades = thresholds["min_trades"]
+    args.gate_max_tail_loss = thresholds["max_tail_loss"]
+    args.gate_min_win_rate = thresholds["min_win_rate"]
+
+
+def _gate_threshold_values(args: argparse.Namespace, profile: Mapping[str, Any]) -> dict[str, Any]:
+    cli_overrides = getattr(args, "_gate_threshold_cli_overrides", {}) or {}
+    return {
+        "min_net_pnl": (
+            getattr(args, "gate_min_net_pnl", None)
+            if cli_overrides.get("min_net_pnl")
+            else profile.get("min_net_pnl", -1e9)
+        ),
+        "min_trades": (
+            getattr(args, "gate_min_trades", None)
+            if cli_overrides.get("min_trades")
+            else profile.get("min_trades", 0)
+        ),
+        "max_tail_loss": (
+            getattr(args, "gate_max_tail_loss", None)
+            if cli_overrides.get("max_tail_loss")
+            else profile.get("max_tail_loss", 1e9)
+        ),
+        "min_win_rate": (
+            getattr(args, "gate_min_win_rate", None)
+            if cli_overrides.get("min_win_rate")
+            else profile.get("min_win_rate", 0.0)
+        ),
+    }
+
+
+def _gate_thresholds_from_values(values: Mapping[str, Any]) -> GateThresholds:
+    return GateThresholds(
+        min_net_pnl=_float_default(values.get("min_net_pnl", -1e9), name="gate_profiles.min_net_pnl"),
+        min_trades=_nonnegative_int(values.get("min_trades", 0), name="gate_profiles.min_trades"),
+        max_tail_loss=_float_default(values.get("max_tail_loss", 1e9), name="gate_profiles.max_tail_loss"),
+        min_win_rate=_float_default(values.get("min_win_rate", 0.0), name="gate_profiles.min_win_rate"),
+    )
+
+
+def _resolve_gate_profile_for_model(
+    args: argparse.Namespace,
+    config: Mapping[str, Any],
+    primary_model_id: str,
+) -> dict[str, Any]:
+    profiles = _gate_profiles(config)
+    gate_config = _section(config, "gate_profiles")
+    cli_profile = bool(getattr(args, "_gate_profile_cli_override", False))
+    regime = _model_volatility_regime(primary_model_id)
+    resolution = {
+        "source": "cli" if cli_profile else "config_default",
+        "model_id": str(primary_model_id),
+        "volatility_regime": regime,
+        "profile": getattr(args, "gate_profile", "normal"),
+    }
+    if cli_profile:
+        resolution["thresholds"] = _gate_threshold_values(args, profiles[resolution["profile"]])
+        resolution["threshold_cli_overrides"] = dict(getattr(args, "_gate_threshold_cli_overrides", {}) or {})
+        return resolution
+
+    if regime in {None, "any", "unknown"}:
+        resolution["thresholds"] = _gate_threshold_values(args, profiles[resolution["profile"]])
+        resolution["threshold_cli_overrides"] = dict(getattr(args, "_gate_threshold_cli_overrides", {}) or {})
+        return resolution
+
+    profile_map = _section(gate_config, "volatility_regime_profiles")
+    profile_name = str(profile_map.get(regime) or regime)
+    if profile_name not in profiles:
+        raise ValueError(
+            f"gate_profiles.volatility_regime_profiles maps {regime!r} to unknown profile {profile_name!r}"
+        )
+    resolution["source"] = "model_registry_volatility_regime"
+    resolution["profile"] = profile_name
+    resolution["thresholds"] = _gate_threshold_values(args, profiles[profile_name])
+    resolution["threshold_cli_overrides"] = dict(getattr(args, "_gate_threshold_cli_overrides", {}) or {})
+    _gate_thresholds_from_values(resolution["thresholds"])
+    return resolution
+
+
+def _apply_registry_gate_profile(
+    args: argparse.Namespace,
+    config: Mapping[str, Any],
+    primary_model_id: str,
+) -> dict[str, Any]:
+    resolution = _resolve_gate_profile_for_model(args, config, primary_model_id)
+    args.gate_profile = resolution["profile"]
+    thresholds = resolution["thresholds"]
+    args.gate_min_net_pnl = thresholds["min_net_pnl"]
+    args.gate_min_trades = thresholds["min_trades"]
+    args.gate_max_tail_loss = thresholds["max_tail_loss"]
+    args.gate_min_win_rate = thresholds["min_win_rate"]
+    _gate_thresholds_from_args(args)
+    return resolution
+
+
+def _candidate_gate_profile_plan(
+    args: argparse.Namespace,
+    config: Mapping[str, Any],
+    candidates: Sequence[CandidateModel],
+) -> dict[str, Any]:
+    by_candidate: dict[str, dict[str, Any]] = {}
+    for candidate in candidates:
+        resolution = _resolve_gate_profile_for_model(args, config, candidate.model_id)
+        by_candidate[str(candidate.candidate_id)] = {
+            "candidate_id": str(candidate.candidate_id),
+            "model_id": str(candidate.model_id),
+            **resolution,
+        }
+    return {
+        "schema_version": "hft3_gate_profile_plan_v1",
+        "by_candidate": by_candidate,
+    }
+
+
 def _required_true(value: Any, *, name: str) -> bool:
     parsed = _bool_default(value, name=name)
     if not parsed:
@@ -385,20 +524,20 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
     )
 
     profiles = _gate_profiles(config)
+    args._gate_profile_cli_override = getattr(args, "gate_profile", None) is not None
+    args._gate_threshold_cli_overrides = {
+        "min_net_pnl": getattr(args, "gate_min_net_pnl", None) is not None,
+        "min_trades": getattr(args, "gate_min_trades", None) is not None,
+        "max_tail_loss": getattr(args, "gate_max_tail_loss", None) is not None,
+        "min_win_rate": getattr(args, "gate_min_win_rate", None) is not None,
+    }
     if getattr(args, "gate_profile", None) is None:
         args.gate_profile = str(gate_config.get("default_profile") or "normal")
     args.gate_profile = str(args.gate_profile)
     if args.gate_profile not in profiles:
         raise ValueError("gate_profiles.default_profile must name one of: " + ", ".join(sorted(profiles)))
     profile = profiles[args.gate_profile]
-    if getattr(args, "gate_min_net_pnl", None) is None:
-        args.gate_min_net_pnl = profile.get("min_net_pnl", -1e9)
-    if getattr(args, "gate_min_trades", None) is None:
-        args.gate_min_trades = profile.get("min_trades", 0)
-    if getattr(args, "gate_max_tail_loss", None) is None:
-        args.gate_max_tail_loss = profile.get("max_tail_loss", 1e9)
-    if getattr(args, "gate_min_win_rate", None) is None:
-        args.gate_min_win_rate = profile.get("min_win_rate", 0.0)
+    _apply_gate_profile_thresholds(args, profile)
     _gate_thresholds_from_args(args)
 
 
@@ -465,6 +604,7 @@ def _pipeline_config_receipt(
     config: Mapping[str, Any],
     config_path: Path,
     args: argparse.Namespace,
+    gate_profile_plan: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     idea_config = _section(config, "llm_ideas")
     vectorbt_budget = {
@@ -519,6 +659,9 @@ def _pipeline_config_receipt(
                 "max_tail_loss": getattr(args, "gate_max_tail_loss", 1e9),
                 "min_win_rate": getattr(args, "gate_min_win_rate", 0.0),
             },
+            "threshold_cli_overrides": dict(getattr(args, "_gate_threshold_cli_overrides", {}) or {}),
+            "profile_cli_override": bool(getattr(args, "_gate_profile_cli_override", False)),
+            "candidate_gate_plan": copy.deepcopy(dict(gate_profile_plan or {})) or None,
         },
     }
     hash_payload = {
@@ -1052,11 +1195,14 @@ def _evaluate_candidates_batch(
     event_id: str,
     repo_root: Path,
     chi404_summary: Path | None,
-    gates: GateThresholds,
+    gates_by_candidate_id: Mapping[str, GateThresholds],
     workers: int,
 ) -> list[EvaluationResult]:
     workers = _positive_int(workers, name="evaluation.workers")
-    jobs = [(candidate, event_id, repo_root, chi404_summary, gates) for candidate in candidates]
+    jobs = [
+        (candidate, event_id, repo_root, chi404_summary, gates_by_candidate_id[candidate.candidate_id])
+        for candidate in candidates
+    ]
     if workers == 1 or len(jobs) <= 1:
         return [_evaluate_candidate_worker(job) for job in jobs]
     with ProcessPoolExecutor(max_workers=workers) as executor:
@@ -1884,19 +2030,48 @@ def _main_impl(
     if chi404 is None:
         print("Warning: no latency data available; backtest will run without CHI404 latency", file=sys.stderr)
 
-    gates = _gate_thresholds_from_args(args)
+    gate_profile_plan = _candidate_gate_profile_plan(
+        args,
+        runtime_config,
+        candidates,
+    )
+    _write_json(
+        artifact_dir / "pipeline_runtime_config.json",
+        _pipeline_config_receipt(
+            config=runtime_config,
+            config_path=args.pipeline_config,
+            args=args,
+            gate_profile_plan=gate_profile_plan,
+        ),
+    )
+    logger.info("gate_profile_selected", extra={"payload": gate_profile_plan})
+    _update_active_run_failure_context(failure_context, gate_profile_plan=gate_profile_plan)
+    gates_by_candidate_id = {
+        candidate_id: _gate_thresholds_from_values(resolution["thresholds"])
+        for candidate_id, resolution in gate_profile_plan["by_candidate"].items()
+    }
     for cand in candidates:
-        print(f"Evaluating {cand.model_id} threshold={cand.strategy_params.get('signal_threshold')}...")
+        gate_profile = gate_profile_plan["by_candidate"][cand.candidate_id]["profile"]
+        print(
+            f"Evaluating {cand.model_id} threshold={cand.strategy_params.get('signal_threshold')} "
+            f"gate_profile={gate_profile}..."
+        )
     logger.info(
         "candidate_evaluation_start",
-        extra={"payload": {"candidate_count": len(candidates), "workers": args.evaluation_workers}},
+        extra={
+            "payload": {
+                "candidate_count": len(candidates),
+                "workers": args.evaluation_workers,
+                "gate_profile_plan": gate_profile_plan,
+            }
+        },
     )
     results = _evaluate_candidates_batch(
         candidates,
         event_id=args.event_id,
         repo_root=repo_root,
         chi404_summary=chi404,
-        gates=gates,
+        gates_by_candidate_id=gates_by_candidate_id,
         workers=args.evaluation_workers,
     )
     logger.info(
@@ -1955,6 +2130,7 @@ def _main_impl(
         "status": status,
         "report": report.to_dict(),
         "response_packet": response,
+        "gate_profile_plan": gate_profile_plan,
     }
     if document_cache:
         payload["document_cache"] = document_cache
