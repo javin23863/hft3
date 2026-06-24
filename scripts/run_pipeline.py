@@ -613,16 +613,22 @@ def main() -> int:
         except ValueError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
-        candidates = list(generate_candidates(
-            parsed,
-            max_candidates=args.max_candidates,
-            expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
-            target_event_id=primary_event_id,
-            target_symbol=target_symbol,
-            search_method=args.search_method,
-            hybrid=args.hybrid,
-            search_seed=args.search_seed,
-        ))
+        try:
+            candidates = list(
+                generate_candidates(
+                    parsed,
+                    max_candidates=args.max_candidates,
+                    expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+                    target_event_id=primary_event_id,
+                    target_symbol=target_symbol,
+                    search_method=args.search_method,
+                    hybrid=args.hybrid,
+                    search_seed=args.search_seed,
+                )
+            )
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
 
     rl_artifact = _run_rl_process(args=args, artifact_dir=artifact_dir)
     if _rl_artifact_blocked(rl_artifact):

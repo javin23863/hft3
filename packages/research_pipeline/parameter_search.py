@@ -7,6 +7,7 @@ import random
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
+from features_engine.src.model_registry import all_slugs
 from research_pipeline.types import ParsedHypothesis
 
 DEFAULT_HOLDING_PERIODS_BARS = [15, 30, 60]
@@ -25,11 +26,12 @@ class SearchSelection:
 
 
 def model_ids_for_search(parsed: ParsedHypothesis, *, hybrid: bool = True) -> list[str]:
-    """Return primary model plus optional uppercase adjacent model ids."""
+    """Return primary model plus optional adjacent model ids from the registry."""
+    registry_models = set(all_slugs())
     models = [parsed.primary_model_id]
     if hybrid:
         for feat in parsed.feature_list:
-            if feat not in models and feat.isupper():
+            if feat in registry_models and feat not in models:
                 models.append(feat)
     return models[:3]
 
@@ -170,7 +172,7 @@ def _normalise_grid(grid: Mapping[str, Sequence[Any]]) -> dict[str, list[Any]]:
         values = list(grid[key])
         if not values:
             continue
-        normalised_key = RANGE_ALIASES.get(key, key)
+        normalised_key = _normalised_range_key(key)
         if normalised_key in normalised:
             raise ValueError(f"duplicate parameter range for {normalised_key!r}")
         normalised[normalised_key] = values
@@ -186,11 +188,23 @@ def _param_range(parsed: ParsedHypothesis, key: str, *aliases: str) -> Sequence[
         if parsed.param_ranges.get(candidate_key)
     ]
     if len(present) > 1:
-        normalised_key = RANGE_ALIASES.get(key, key)
+        normalised_key = _canonical_range_key(key, *aliases)
         raise ValueError(f"duplicate parameter range for {normalised_key!r}")
     if present:
         return parsed.param_ranges[present[0]]
     return None
+
+
+def _normalised_range_key(key: str) -> str:
+    return RANGE_ALIASES.get(key, key)
+
+
+def _canonical_range_key(key: str, *aliases: str) -> str:
+    for candidate_key in (key, *aliases):
+        normalised_key = _normalised_range_key(candidate_key)
+        if normalised_key == key:
+            return key
+    return _normalised_range_key(key)
 
 
 def _grid_product(grid: Mapping[str, Sequence[Any]]) -> list[dict[str, Any]]:

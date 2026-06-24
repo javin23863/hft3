@@ -319,6 +319,27 @@ def test_parameter_grid_rejects_parsed_alias_key_collisions():
         parameter_grid(parsed)
 
 
+def test_model_ids_for_search_ignores_uppercase_non_registry_features():
+    from research_pipeline.parameter_search import model_ids_for_search
+    from research_pipeline.types import ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="hybrid uppercase feature filter",
+        instrument_universe=["MES"],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=[],
+        feature_list=["OFI", "VAMP", "SECOND_WAVE_CONTINUATION", "CPI"],
+        param_ranges={},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+
+    assert model_ids_for_search(parsed, hybrid=True) == [
+        "SPREAD_BLOWOUT_RECOMPRESSION",
+        "SECOND_WAVE_CONTINUATION",
+    ]
+
+
 def test_generate_candidates_records_search_metadata_and_hybrid_limit():
     from research_pipeline.types import ParsedHypothesis
     from research_pipeline.model_generation import generate_candidates
@@ -406,6 +427,56 @@ def test_run_pipeline_dry_run_exposes_search_metadata(tmp_path, monkeypatch, cap
     search_meta = payload["candidates"][0]["metadata"]["parameter_search"]
     assert search_meta["method_status"] == "method_unavailable"
     assert search_meta["fallback_method"] == "seeded"
+
+
+def test_run_pipeline_rejects_candidate_generation_value_error_cleanly(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "event_ids": kwargs.get("event_ids"),
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    parsed = parse_hypothesis("Run a blowout fade on MES after CPI", use_llm=False)
+    parsed.param_ranges["stop_loss_pct"] = [0.01, 0.02]
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_test_candidate_error")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Run a blowout fade on MES after CPI",
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--dry-run",
+        "--no-llm",
+    ])
+
+    assert run_pipeline.main() == 2
+    captured = capsys.readouterr()
+    assert "duplicate parameter range for 'stop_loss_pct'" in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_parse_event_ids_supports_repeated_and_comma_separated_values():
@@ -873,7 +944,7 @@ def test_train_rl_agent_audits_monotonic_timestamps():
     assert artifact["metrics"]["audit_status"] == "chronology_audited"
 
 
-def test_train_rl_agent_rejects_non_monotonic_timestamps():
+def test_train_rl_agent_marks_non_monotonic_timestamps_not_gateable():
     from research_pipeline.rl_agents import train_rl_agent
 
     rows = [
@@ -881,8 +952,12 @@ def test_train_rl_agent_rejects_non_monotonic_timestamps():
         for row, timestamp in zip(_rl_rows(), [1, 2, 2, 4, 5])
     ]
 
-    with pytest.raises(ValueError, match="strictly increasing"):
-        train_rl_agent(rows, ["order_book_imbalance", "queue_imbalance"])
+    artifact = train_rl_agent(rows, ["order_book_imbalance", "queue_imbalance"])
+
+    assert artifact["status"] == "trained_research_only"
+    assert artifact["train_eval_split"]["chronology_status"] == "non_monotonic_timestamp"
+    assert artifact["train_eval_split"]["timestamp_field"] == "timestamp_ns"
+    assert artifact["metrics"]["audit_status"] == "chronology_not_audited"
 
 
 def test_train_rl_agent_rejects_invalid_timestamp_on_validated_rows():

@@ -396,7 +396,7 @@ def _chronology_audit(data: Sequence[Mapping[str, Any]]) -> dict[str, str]:
     timestamps = [_number(row[field], f"row {idx} {field}") for idx, row in enumerate(data)]
     for prev, cur in zip(timestamps, timestamps[1:]):
         if cur <= prev:
-            raise ValueError(f"{field} must be strictly increasing for RL train/eval split")
+            return {"status": "non_monotonic_timestamp", "timestamp_field": field}
     return {"status": "monotonic_timestamp", "timestamp_field": field}
 
 
