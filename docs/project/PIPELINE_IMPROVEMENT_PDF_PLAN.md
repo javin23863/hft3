@@ -103,6 +103,12 @@ Required features from the PDF:
 - `spread`
 - `weighted_depth_price`
 
+Implementation receipt:
+
+- `packages/features_engine/feature_sets.py` implements the feature functions with PIT/trailing-window semantics and source receipts.
+- `packages/research_pipeline/feature_recipe.py` recognizes those feature names in the existing `primary_fs_v1` recipe family and records `features_engine.feature_sets.MICROSTRUCTURE_FEATURE_RECEIPTS`.
+- `tests/test_microstructure_feature_sets.py` and `tests/research_pipeline/test_feature_recipe.py` cover formulas, edge cases, and recipe PIT receipt propagation.
+
 Implementation requirements:
 
 - Inputs must be explicit snapshots or trailing windows.

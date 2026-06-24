@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, Mapping, MutableMapping, Sequence
 
 from backtest_pipeline.src.feature_plane import FEATURE_FAMILIES, MODEL_CONSUMPTION_VALUES
+from features_engine.feature_sets import MICROSTRUCTURE_FEATURE_RECEIPTS
 
 FEATURE_RECIPE_SCHEMA_VERSION = "feature_recipe.v1"
 FEATURE_VERSION_FS_V1 = "fs_v1"
@@ -170,6 +171,14 @@ def _default_family_row(
     ).to_dict()
 
 
+def _selected_microstructure_features(feature_names: Sequence[str]) -> list[str]:
+    features = MICROSTRUCTURE_FEATURE_RECEIPTS.get("features", {})
+    if not isinstance(features, Mapping):
+        return []
+    allowed = set(features)
+    return [name for name in feature_names if name in allowed]
+
+
 def default_feature_families(
     *,
     model_id: str,
@@ -179,6 +188,7 @@ def default_feature_families(
 ) -> dict[str, dict[str, Any]]:
     """Honest Phase-1 defaults: primary catalog-eligible; others sidelined until wired."""
     primary_features = [f for f in feature_list if f] or [model_id]
+    microstructure_features = _selected_microstructure_features(primary_features)
     clock = research_clock.strip().lower()
     continuous_scope = clock == "continuous_intraday"
 
@@ -233,6 +243,20 @@ def default_feature_families(
             why="latency_state_not_selected_for_this_recipe",
         ),
     }
+    if microstructure_features:
+        primary = families["primary_fs_v1"]
+        primary["source_ids"] = ["features_engine.feature_sets.MICROSTRUCTURE_FEATURE_RECEIPTS"]
+        primary["pit_proof"] = "declared"
+        primary["lookback_rules"] = [
+            "snapshot_at_decision_time_t_or_trailing_window_ending_at_t",
+        ]
+        primary["transformations"] = [
+            "research_only_microstructure_feature_function",
+        ]
+        primary["why_not_used_or_sidelined"] = (
+            "microstructure_features_declared_for_research_recipe; "
+            "screening_consumption_must_still_be_observed_by_vectorbt"
+        )
     return families
 
 
