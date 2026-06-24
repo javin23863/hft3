@@ -1005,7 +1005,7 @@ def _main_impl(argv: list[str] | None = None, failure_context: dict[str, Any] | 
             logger.info("document_ingestion_complete", extra={"payload": document_cache})
         except Exception as exc:
             print(f"Warning: document ingestion failed, continuing without doc: {exc}", file=sys.stderr)
-            doc_summary = {"error": str(exc)}
+            doc_summary = None
             document_cache = {"status": "error", "error": str(exc)}
             logger.warning("document_ingestion_failed", extra={"payload": document_cache})
     _update_active_run_failure_context(
@@ -1565,8 +1565,7 @@ def _main_impl(argv: list[str] | None = None, failure_context: dict[str, Any] | 
     if document_cache:
         payload["document_cache"] = document_cache
     payload["candidate_prefilter"] = candidate_prefilter
-    _write_pipeline_run_receipt(payload)
-    print(json.dumps(payload, indent=2, default=_json_default))
+    _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
     if artifact:
         print(f"Artifacts: {artifact}")
     else:

@@ -410,6 +410,110 @@ def test_run_pipeline_dry_run_writes_runtime_receipt(tmp_path, monkeypatch, caps
     assert receipt["candidate_prefilter"]["accepted_count"] == 1
 
 
+def test_run_pipeline_full_evaluation_orchestrator_result_uses_marker(
+    tmp_path, monkeypatch, capsys
+):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import (
+        CandidateModel,
+        EvaluationResult,
+        GateThresholds,
+        ParsedHypothesis,
+    )
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="heuristic",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_full_eval",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.05},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_full_marker",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    def fake_evaluate(cand, event_id, repo_root, **kwargs):
+        return EvaluationResult(
+            candidate=cand,
+            event_id=event_id,
+            net_pnl=1.0,
+            num_trades=1,
+            win_rate=1.0,
+            expectancy=1.0,
+            tail_loss=0.0,
+            gates=kwargs.get("gates") or GateThresholds(min_trades=0),
+        )
+
+    def fake_deploy(repo_root, report):
+        report.selected = candidate
+        return tmp_path / "research_cards" / "pipeline_runs" / "pipeline_full_marker"
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_full_marker")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(run_pipeline, "evaluate_model", fake_evaluate)
+    monkeypatch.setattr(run_pipeline, "deploy_best", fake_deploy)
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_response",
+        lambda report, request, **kwargs: {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "selected_model_id": report.selected.model_id if report.selected else None,
+        },
+    )
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--no-llm",
+            "--max-candidates",
+            "1",
+            "--orchestrator-result",
+        ]
+    )
+
+    assert code == 0
+    stdout = capsys.readouterr().out
+    marker_lines = [
+        line
+        for line in stdout.splitlines()
+        if line.startswith(run_pipeline._PIPELINE_RESULT_MARKER)
+    ]
+    assert len(marker_lines) == 1
+    slim = json.loads(marker_lines[0].removeprefix(run_pipeline._PIPELINE_RESULT_MARKER))
+    assert slim == {
+        "run_id": "pipeline_full_marker",
+        "artifact_dir": str(tmp_path / "research_cards" / "pipeline_runs" / "pipeline_full_marker"),
+        "status": "candidate_deployed",
+        "paths": None,
+    }
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_full_marker"
+    receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
+    assert receipt["status"] == "candidate_deployed"
+
+
 def test_run_pipeline_failure_writes_receipt(tmp_path, monkeypatch, capsys):
     import scripts.run_pipeline as run_pipeline
 
@@ -525,6 +629,87 @@ def test_run_pipeline_url_doc_source_is_not_path_normalized(tmp_path, monkeypatc
     assert code == 0
     _last_json_object(capsys.readouterr().out)
     assert captured["source"] == url
+
+
+def test_run_pipeline_doc_ingestion_error_keeps_document_summary_null(
+    tmp_path, monkeypatch, capsys
+):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="heuristic",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_doc_fail",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.05},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_doc_fail",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+    captured = {}
+
+    def fail_ingest(*args, **kwargs):
+        raise RuntimeError("synthetic doc parse failure")
+
+    def fake_response(report, request, **kwargs):
+        captured["document_summary"] = report.document_summary
+        return {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "parsed": {"primary_model_id": report.parsed.primary_model_id},
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_doc_fail")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "ingest_document_with_cache", fail_ingest)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(run_pipeline, "build_pipeline_response", fake_response)
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--doc",
+            str(tmp_path / "paper.txt"),
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 0
+    payload = _last_json_object(capsys.readouterr().out)
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_doc_fail"
+    receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
+    assert captured["document_summary"] is None
+    assert payload["document_summary"] is None
+    assert receipt["document_summary"] is None
+    assert payload["document_cache"] == {
+        "status": "error",
+        "error": "synthetic doc parse failure",
+    }
 
 
 def test_run_pipeline_idea_set_requires_vectorbt_writes_receipt(tmp_path, monkeypatch, capsys):
