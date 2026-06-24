@@ -354,7 +354,7 @@ def _validate_feature_names(feature_names: Sequence[str]) -> tuple[str, ...]:
 
 
 def _normalise_feature_name(name: str) -> str:
-    with_pnl_boundaries = re.sub(r"(?i)pnl", "_pnl_", name)
+    with_pnl_boundaries = re.sub(r"pnl", "_pnl_", name, flags=re.IGNORECASE)
     with_acronym_boundaries = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", "_", with_pnl_boundaries)
     with_boundaries = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", with_acronym_boundaries)
     return re.sub(r"[^A-Za-z0-9]+", "_", with_boundaries).lower().strip("_")

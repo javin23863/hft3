@@ -678,6 +678,11 @@ def main() -> int:
         _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
         return 0
     if _rl_research_only(rl_artifact) and args.dry_run:
+        if args.vectorbt or args.vectorbt_only:
+            print(
+                "Info: --rl --dry-run writes the RL research artifact only; skipping VectorBT filtering.",
+                file=sys.stderr,
+            )
         args.vectorbt = False
         args.vectorbt_only = False
 

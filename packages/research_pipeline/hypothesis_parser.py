@@ -170,10 +170,16 @@ def _with_instrument_compatibility(
         return metadata
 
     unsupported = [symbol for symbol in instrument_universe if symbol.upper() not in valid]
-    metadata["unsupported_instruments"] = unsupported
-    metadata["compatible_instrument_universe"] = [
+    compatible = [
         symbol for symbol in instrument_universe if symbol.upper() in valid
     ]
+    metadata["compatible_instrument_universe"] = compatible
+    if unsupported and compatible:
+        metadata["context_instrument_universe"] = unsupported
+        metadata["unsupported_instruments"] = []
+        metadata["instrument_universe_compatibility"] = "compatible"
+        return metadata
+    metadata["unsupported_instruments"] = unsupported
     metadata["instrument_universe_compatibility"] = (
         "unsupported_instruments" if unsupported else "compatible"
     )

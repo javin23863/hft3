@@ -281,6 +281,21 @@ def test_parse_hypothesis_uses_model_alias_and_registry_ranges():
     assert parsed.metadata["unsupported_instruments"] == ["GC"]
 
 
+def test_parse_hypothesis_treats_extra_symbol_mentions_as_context_when_target_supported():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis(
+        "Micro contract retail lag on MES, watching GOLD for context after CPI",
+        use_llm=False,
+    )
+
+    assert parsed.primary_model_id == "MICRO_CONTRACT_RETAIL_LAG"
+    assert parsed.metadata["instrument_universe_compatibility"] == "compatible"
+    assert parsed.metadata["compatible_instrument_universe"] == ["MES"]
+    assert parsed.metadata["context_instrument_universe"] == ["GC"]
+    assert parsed.metadata["unsupported_instruments"] == []
+
+
 def test_parse_hypothesis_packet_accepts_enriched_fields(monkeypatch):
     import sys
     import types
@@ -1866,10 +1881,12 @@ def test_run_pipeline_dry_run_trained_rl_skips_vectorbt_flag(tmp_path, monkeypat
     ])
 
     assert run_pipeline.main() == 0
-    payload = _last_json_object(capsys.readouterr().out)
+    captured = capsys.readouterr()
+    payload = _last_json_object(captured.out)
 
     assert "vectorbt_filter" not in payload
     assert payload["rl_policy_artifact"]["status"] == "trained_research_only"
+    assert "skipping VectorBT filtering" in captured.err
 
 
 def test_run_pipeline_autoresearch_rl_rejected(monkeypatch, capsys):

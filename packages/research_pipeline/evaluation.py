@@ -35,7 +35,12 @@ def aggregate_evaluation_results(
     *,
     gates: GateThresholds,
 ) -> EvaluationResult:
-    """Aggregate per-event evaluation results into one risk-gated result."""
+    """Aggregate per-event evaluation results into one risk-gated result.
+
+    Sharpe and Sortino use each event's total net PnL as one diagnostic
+    observation. Callers should compare only like-duration event windows when
+    treating those ratios as statistical risk metrics.
+    """
     results = list(event_results)
     if not results:
         return EvaluationResult(
