@@ -253,16 +253,21 @@ def _sortino(pnls: Sequence[float]) -> float:
     downside = [value for value in pnls if value < 0.0]
     downside_std = _stddev(downside)
     if downside_std == 0.0:
-        if downside:
-            return 0.0
         mean = _mean(pnls)
-        return 1e9 if mean > 0.0 else 0.0
+        if mean > 0.0:
+            return 1e9
+        if mean < 0.0:
+            return -1e9
+        return 0.0
     return _mean(pnls) / downside_std
 
 
 def _max_drawdown(pnls: Sequence[float]) -> float:
+    if not pnls:
+        return 0.0
     cumulative = 0.0
-    peak = 0.0
+    first_pnl = float(pnls[0])
+    peak = first_pnl if first_pnl < 0.0 else 0.0
     max_dd = 0.0
     for pnl in pnls:
         cumulative += pnl

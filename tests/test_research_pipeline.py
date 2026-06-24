@@ -532,8 +532,20 @@ def test_tail_loss_gate_uses_signed_tail_pnl_floor():
     assert not gates.passes(1.0, 1, -5.0, 1.0)
 
 
+def test_tail_loss_gate_accepts_legacy_positive_loss_magnitude_cap():
+    from research_pipeline.types import GateThresholds
+
+    gates = GateThresholds(min_trades=0, max_tail_loss=2.0)
+
+    assert gates.signed_tail_loss_floor() == -2.0
+    assert gates.requires_gateable_risk_metrics() is True
+    assert gates.passes(1.0, 1, -1.0, 1.0)
+    assert not gates.passes(1.0, 1, -5.0, 1.0)
+    assert GateThresholds(min_trades=0, max_tail_loss=1e9).requires_gateable_risk_metrics() is False
+
+
 def test_sortino_no_downside_positive_mean_uses_large_sentinel():
-    from research_pipeline.evaluation import _sharpe, _sortino
+    from research_pipeline.evaluation import _max_drawdown, _sharpe, _sortino
 
     assert _sharpe([2.0, 2.0, 2.0]) == 1e9
     assert _sharpe([-2.0, -2.0, -2.0]) == -1e9
@@ -541,7 +553,11 @@ def test_sortino_no_downside_positive_mean_uses_large_sentinel():
     assert _sharpe([2.0]) == 0.0
     assert _sortino([1.0, 2.0, 3.0]) == 1e9
     assert _sortino([0.0, 0.0]) == 0.0
-    assert _sortino([-1.0, 3.0, 3.0]) == 0.0
+    assert _sortino([-1.0, 3.0, 3.0]) == 1e9
+    assert _sortino([-3.0, 1.0]) == -1e9
+    assert _sortino([-1.0, 1.0]) == 0.0
+    assert _max_drawdown([-3.0, 5.0]) == 0.0
+    assert _max_drawdown([-3.0, -2.0, 5.0]) == 2.0
 
 
 def test_run_pipeline_passes_multi_event_set_to_evaluator(tmp_path, monkeypatch, capsys):
