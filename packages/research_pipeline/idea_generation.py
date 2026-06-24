@@ -260,6 +260,13 @@ def static_filter_ideas(packet: Dict[str, Any]) -> List[Dict[str, Any]]:
     return sorted(queued, key=lambda row: str(row.get("idea_id") or ""))
 
 
+def _mark_static_reject(idea: Dict[str, Any], code: str) -> None:
+    errors = list(idea.get("static_error_codes") or [])
+    errors.append(code)
+    idea["status"] = "static_reject"
+    idea["static_error_codes"] = sorted(set(errors))
+
+
 def parsed_from_idea(idea: Dict[str, Any]) -> ParsedHypothesis:
     model_id = str(idea.get("primary_model_id") or "")
     feature_ids = list(idea.get("feature_ids") or [])
@@ -304,14 +311,22 @@ def candidates_from_ideas(
     candidates: List[CandidateModel] = []
     seen: set[str] = set()
     parsed_rows: List[tuple[Dict[str, Any], ParsedHypothesis, str]] = []
+    resolution_errors: List[ValueError] = []
     for idea in queued:
-        parsed = parsed_from_idea(idea)
-        target_symbol = (
-            target_symbol_resolver(parsed)
-            if target_symbol_resolver is not None
-            else "MES"
-        )
+        try:
+            parsed = parsed_from_idea(idea)
+            target_symbol = (
+                target_symbol_resolver(parsed)
+                if target_symbol_resolver is not None
+                else "MES"
+            )
+        except ValueError as exc:
+            resolution_errors.append(exc)
+            _mark_static_reject(idea, "target_symbol_resolution_failed")
+            continue
         parsed_rows.append((idea, parsed, target_symbol))
+    if queued and not parsed_rows and resolution_errors:
+        raise ValueError(str(resolution_errors[0]))
     generators = [
         (
             idea,
@@ -328,12 +343,17 @@ def candidates_from_ideas(
         )
         for idea, parsed, target_symbol in parsed_rows
     ]
+    generation_errors: List[ValueError] = []
     while generators and len(candidates) < max_candidates:
         next_round = []
         for idea, generator in generators:
             try:
                 candidate = next(generator)
             except StopIteration:
+                continue
+            except ValueError as exc:
+                generation_errors.append(exc)
+                _mark_static_reject(idea, "candidate_generation_failed")
                 continue
             identity_key = candidate_identity_hash(candidate)
             if identity_key in seen:
@@ -353,6 +373,13 @@ def candidates_from_ideas(
                 break
             next_round.append((idea, generator))
         generators = next_round
+    if (
+        queued
+        and not candidates
+        and all(idea.get("status") == "static_reject" for idea in queued)
+        and generation_errors
+    ):
+        raise ValueError(str(generation_errors[0]))
     return candidates
 
 

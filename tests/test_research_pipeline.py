@@ -1694,6 +1694,72 @@ def test_idea_static_filter_rejects_invalid_and_orders_queue():
     }
 
 
+def test_candidates_from_ideas_skips_symbol_resolution_errors():
+    from research_pipeline.idea_generation import candidates_from_ideas
+
+    packet = _idea_packet()
+    packet["ideas"] = [
+        json.loads(json.dumps(packet["ideas"][0])),
+        json.loads(json.dumps(packet["ideas"][1])),
+    ]
+
+    def resolver(parsed):
+        if parsed.primary_model_id == "BOOK_PRESSURE":
+            raise ValueError("bad symbol")
+        return "MES"
+
+    candidates = candidates_from_ideas(
+        packet,
+        max_candidates=2,
+        target_symbol_resolver=resolver,
+    )
+    by_id = {idea["idea_id"]: idea for idea in packet["ideas"]}
+
+    assert by_id["idea_low"]["status"] == "static_reject"
+    assert "target_symbol_resolution_failed" in by_id["idea_low"]["static_error_codes"]
+    assert candidates
+    assert {candidate.metadata["idea_id"] for candidate in candidates} == {"idea_high"}
+
+
+def test_candidates_from_ideas_fails_when_all_symbol_resolution_fails():
+    from research_pipeline.idea_generation import candidates_from_ideas
+
+    packet = _idea_packet()
+    packet["ideas"] = [json.loads(json.dumps(packet["ideas"][1]))]
+
+    def resolver(parsed):
+        raise ValueError(f"bad symbol for {parsed.primary_model_id}")
+
+    with pytest.raises(ValueError, match="bad symbol for SPREAD_BLOWOUT_RECOMPRESSION"):
+        candidates_from_ideas(packet, max_candidates=2, target_symbol_resolver=resolver)
+
+    assert packet["ideas"][0]["status"] == "static_reject"
+    assert "target_symbol_resolution_failed" in packet["ideas"][0]["static_error_codes"]
+
+
+def test_candidates_from_ideas_skips_candidate_generation_value_errors():
+    from research_pipeline.idea_generation import candidates_from_ideas
+
+    packet = _idea_packet()
+    packet["ideas"] = [
+        json.loads(json.dumps(packet["ideas"][0])),
+        json.loads(json.dumps(packet["ideas"][1])),
+    ]
+    packet["ideas"][0]["param_ranges"] = {
+        "signal_threshold": [0.05, 0.35],
+        "stop_loss": [0.01, 0.03],
+        "stop_loss_pct": [0.01, 0.03],
+    }
+
+    candidates = candidates_from_ideas(packet, max_candidates=2)
+    by_id = {idea["idea_id"]: idea for idea in packet["ideas"]}
+
+    assert by_id["idea_low"]["status"] == "static_reject"
+    assert "candidate_generation_failed" in by_id["idea_low"]["static_error_codes"]
+    assert candidates
+    assert {candidate.metadata["idea_id"] for candidate in candidates} == {"idea_high"}
+
+
 def test_parsed_from_idea_canonicalizes_instrument_aliases():
     from research_pipeline.idea_generation import parsed_from_idea
 
