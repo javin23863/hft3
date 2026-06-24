@@ -556,8 +556,8 @@ def test_sortino_no_downside_positive_mean_uses_large_sentinel():
     assert _sortino([-1.0, 3.0, 3.0]) == 1e9
     assert _sortino([-3.0, 1.0]) == -1e9
     assert _sortino([-1.0, 1.0]) == 0.0
-    assert _max_drawdown([-3.0, 5.0]) == 0.0
-    assert _max_drawdown([-3.0, -2.0, 5.0]) == 2.0
+    assert _max_drawdown([-10.0, 5.0]) == 10.0
+    assert _max_drawdown([-5.0, -3.0]) == 8.0
 
 
 def test_run_pipeline_passes_multi_event_set_to_evaluator(tmp_path, monkeypatch, capsys):
@@ -937,7 +937,18 @@ def test_train_rl_agent_rejects_camel_case_label_like_feature_names(feature_name
 
 @pytest.mark.parametrize(
     "feature_name",
-    ["daily_pnl_net", "session_profit_outcome", "dailyPNLNet", "grossPnlNet"],
+    [
+        "daily_pnl_net",
+        "session_profit_outcome",
+        "dailyPNLNet",
+        "grossPnlNet",
+        "net_pnl",
+        "gross_pnl",
+        "gross_profit",
+        "realized_pnl",
+        "daily_profit",
+        "cumulative_return",
+    ],
 )
 def test_train_rl_agent_rejects_prefixed_pnl_profit_label_like_feature_names(feature_name):
     from research_pipeline.rl_agents import train_rl_agent

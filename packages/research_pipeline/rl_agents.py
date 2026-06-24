@@ -21,7 +21,8 @@ _TIMESTAMP_FIELDS = ("timestamp_ns", "ts_ns", "timestamp", "decision_time")
 _LEAKY_FEATURE_RE = re.compile(
     r"(^|_)(future|lead|next|target|label|outcome|reward)(_|$)|"
     r"^(return|pnl|profit|realized|post|after)$|"
-    r"(^|_)(pnl|profit)_(net|target|label|outcome)(_|$)",
+    r"(^|_)(pnl|profit)_(net|target|label|outcome)(_|$)|"
+    r"(^|_)(net|gross|realized|daily|cumulative)_(pnl|profit|return)(_|$)",
     re.IGNORECASE,
 )
 
