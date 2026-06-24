@@ -10,20 +10,25 @@ sys.path.insert(0, str(_REPO))
 
 
 def test_cpp_loader_prefers_active_build_dir(monkeypatch, tmp_path: Path) -> None:
-    from features_engine.src.features._cpp_loader import _candidate_dirs
+    from features_engine.src.features._cpp_loader import _candidate_dirs, _override_candidate_dirs
 
     repo = tmp_path / "repo"
     active_build = tmp_path / "cmake-build-lane"
     monkeypatch.setenv("HFT3_FEATURES_CPP_BUILD_DIR", str(active_build))
 
-    candidates = list(_candidate_dirs(repo))
+    override_candidates = list(_override_candidate_dirs())
+    fallback_candidates = list(_candidate_dirs(repo))
 
-    assert candidates[:3] == [
+    assert override_candidates == [
         active_build.resolve(),
         (active_build / "Release").resolve(),
         (active_build / "Debug").resolve(),
     ]
-    assert repo / "build" in candidates
+    assert fallback_candidates == [
+        (repo / "build").resolve(),
+        (repo / "build" / "Release").resolve(),
+        (repo / "build" / "Debug").resolve(),
+    ]
 
 
 def test_cpp_loader_rejects_stale_sys_module_when_active_build_dir_is_set(

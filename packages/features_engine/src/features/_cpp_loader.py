@@ -67,8 +67,7 @@ def _override_candidate_dirs():
 
 
 def _candidate_dirs(repo: Path):
-    """Yield directories to search for the .pyd / .so file."""
-    yield from _override_candidate_dirs()
+    """Yield default fallback dirs; env override is handled first in load_cpp_features()."""
     build = repo / "build"
     yield from _deduped_dirs((build, build / "Release", build / "Debug"))
 
