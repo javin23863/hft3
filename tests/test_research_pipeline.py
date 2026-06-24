@@ -634,6 +634,63 @@ def test_candidate_prefilter_rejects_malformed_and_bounds():
     ]
 
 
+def test_evaluate_candidates_batch_uses_bounded_executor(monkeypatch, tmp_path):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    captured = {"max_workers": None, "jobs": []}
+
+    class InlineExecutor:
+        def __init__(self, max_workers):
+            captured["max_workers"] = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def map(self, func, jobs):
+            captured["jobs"] = list(jobs)
+            return [func(job) for job in captured["jobs"]]
+
+    def fake_evaluate(candidate, event_id, repo_root, **kwargs):
+        gates = kwargs["gates"]
+        return EvaluationResult(
+            candidate=candidate,
+            event_id=event_id,
+            net_pnl=1.0,
+            num_trades=gates.min_trades,
+            win_rate=1.0,
+            expectancy=1.0,
+            tail_loss=0.0,
+            gates=gates,
+        )
+
+    monkeypatch.setattr(run_pipeline, "ProcessPoolExecutor", InlineExecutor)
+    monkeypatch.setattr(run_pipeline, "evaluate_model", fake_evaluate)
+    candidates = [
+        CandidateModel("c1", "BOOK_PRESSURE", {}, "book"),
+        CandidateModel("c2", "SPREAD_BLOWOUT_RECOMPRESSION", {}, "spread"),
+    ]
+
+    results = run_pipeline._evaluate_candidates_batch(
+        candidates,
+        event_id="CPI_2024_09_11_TIGHT",
+        repo_root=tmp_path,
+        chi404_summary=None,
+        gates_by_candidate_id={
+            "c1": GateThresholds(min_trades=1),
+            "c2": GateThresholds(min_trades=2),
+        },
+        workers=2,
+    )
+
+    assert captured["max_workers"] == 2
+    assert [job[0].candidate_id for job in captured["jobs"]] == ["c1", "c2"]
+    assert [result.gates.min_trades for result in results] == [1, 2]
+
+
 def test_document_ingestion_cache_miss_then_hit(tmp_path, monkeypatch):
     import scripts.run_pipeline as run_pipeline
 
@@ -848,6 +905,137 @@ def test_run_pipeline_dry_run_writes_runtime_receipt(tmp_path, monkeypatch, caps
     assert receipt["run_id"] == "pipeline_dry_receipt"
     assert receipt["status"] == "dry_run_complete"
     assert receipt["candidate_prefilter"]["accepted_count"] == 1
+
+
+def test_run_pipeline_dry_run_honors_candidate_search_cli(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="heuristic",
+        llm_status="skipped_no_llm",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_search",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.15},
+        thesis=parsed.thesis,
+        metadata={"candidate_search": {"method": "evolutionary"}},
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_search_cli",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+    captured = {}
+
+    def fake_generate_candidates(parsed_arg, **kwargs):
+        captured.update(kwargs)
+        return [candidate]
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_search_cli")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", fake_generate_candidates)
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_response",
+        lambda report, request, **kwargs: {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "parsed": {"primary_model_id": report.parsed.primary_model_id},
+        },
+    )
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+            "--candidate-search-method",
+            "evolutionary",
+            "--candidate-search-seed",
+            "77",
+        ]
+    )
+
+    assert code == 0
+    assert captured["search_method"] == "evolutionary"
+    assert captured["search_seed"] == 77
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_search_cli"
+    runtime_receipt = json.loads((run_dir / "pipeline_runtime_config.json").read_text(encoding="utf-8"))
+    assert runtime_receipt["effective"]["candidate_search"] == {
+        "method": "evolutionary",
+        "seed": 77,
+    }
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["candidates"][0]["candidate_id"] == "cand_search"
+
+
+def test_run_pipeline_rl_required_blocks_before_candidate_generation(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_rl_blocked",
+        "thesis": "Fade spread blowout after CPI",
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_rl_blocked")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(
+        run_pipeline,
+        "parse_hypothesis",
+        lambda *args, **kwargs: pytest.fail("RL block should happen before parse"),
+    )
+    monkeypatch.setattr(
+        run_pipeline,
+        "generate_candidates",
+        lambda *args, **kwargs: pytest.fail("RL block should happen before candidate generation"),
+    )
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            request["thesis"],
+            "--event-id",
+            request["event_id"],
+            "--repo-root",
+            str(tmp_path),
+            "--no-llm",
+            "--max-candidates",
+            "1",
+            "--rl-required",
+        ]
+    )
+
+    assert code == 2
+    payload = _last_json_object(capsys.readouterr().out)
+    assert payload["status"] == "blocked_rl_training"
+    assert payload["rl_policy_artifact"]["failure_reasons"] == ["missing_rl_feature_names"]
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_rl_blocked"
+    assert (run_dir / "rl_policy_artifact.json").is_file()
 
 
 def test_run_pipeline_log_handlers_are_call_local(tmp_path):
