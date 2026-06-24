@@ -350,9 +350,9 @@ def main() -> int:
     parser.add_argument("--max-candidates", type=int, default=5)
     parser.add_argument(
         "--search-method",
-        choices=["grid", "seeded", "hybrid", "bayesian", "evolutionary"],
+        choices=["grid", "seeded", "mixed", "bayesian", "evolutionary"],
         default="grid",
-        help="Candidate parameter search method; unavailable advanced methods fall back explicitly",
+        help="Candidate parameter sampling method; unavailable advanced methods fall back explicitly",
     )
     parser.add_argument("--search-seed", type=int, default=42)
     parser.add_argument("--min-sharpe", type=_finite_float, default=-1e9, help="Minimum cross-event Sharpe gate")

@@ -60,6 +60,16 @@ def test_microstructure_features_reject_non_finite_levels():
         micro_price(snapshot)
 
 
+def test_microstructure_features_reject_non_positive_prices():
+    zero_price = {"bids": [(0.0, 10.0)], "asks": [(101.0, 10.0)]}
+    negative_price = {"bids": [(-99.0, 10.0)], "asks": [(101.0, 10.0)]}
+
+    with pytest.raises(ValueError, match="non-positive depth price"):
+        micro_price(zero_price)
+    with pytest.raises(ValueError, match="non-positive depth price"):
+        micro_price(negative_price)
+
+
 def test_microstructure_features_skip_zero_quantity_levels():
     snapshot = {"bids": [(99.0, 0.0)], "asks": [(101.0, 10.0)]}
 

@@ -79,12 +79,12 @@ def select_parameters(
         method_status = "method_unavailable"
         fallback_method = "seeded"
         selected_method = "seeded"
-    elif method not in {"grid", "seeded", "hybrid"}:
+    elif method not in {"grid", "seeded", "mixed"}:
         raise ValueError(f"unknown search_method {search_method!r}")
 
     if selected_method == "grid":
         selected_indexes = list(range(min(max_candidates, len(all_params))))
-    elif selected_method == "hybrid":
+    elif selected_method == "mixed":
         head_count = min(max_candidates, max(1, max_candidates // 2), len(all_params))
         head = list(range(head_count))
         tail_budget = max_candidates - len(head)

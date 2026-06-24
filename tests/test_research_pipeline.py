@@ -397,6 +397,18 @@ def test_parameter_search_seeded_and_unavailable_methods_are_explicit():
     assert [item.params for item in fallback] == [item.params for item in seeded_a]
 
 
+def test_parameter_search_mixed_method_replaces_ambiguous_hybrid_name():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+    from research_pipeline.parameter_search import parameter_grid, select_parameters
+
+    parsed = parse_hypothesis("Run a blowout fade on MES after CPI", use_llm=False)
+    grid = parameter_grid(parsed, expand_for_vectorbt=True)
+    mixed = select_parameters(grid, max_candidates=4, search_method="mixed", seed=9)
+
+    assert {item.metadata["search_method"] for item in mixed} == {"mixed"}
+    assert {item.metadata["selected_method"] for item in mixed} == {"mixed"}
+
+
 def test_parameter_search_rejects_alias_key_collisions():
     from research_pipeline.parameter_search import select_parameters
 
@@ -465,7 +477,7 @@ def test_generate_candidates_records_search_metadata_and_hybrid_limit():
         primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
     )
 
-    cands = list(generate_candidates(parsed, max_candidates=5, hybrid=True, search_method="hybrid", search_seed=3))
+    cands = list(generate_candidates(parsed, max_candidates=5, hybrid=True, search_method="mixed", search_seed=3))
 
     assert len(cands) == 5
     model_ids = {cand.model_id for cand in cands}
@@ -474,7 +486,7 @@ def test_generate_candidates_records_search_metadata_and_hybrid_limit():
     assert model_ids & {"SECOND_WAVE_CONTINUATION", "STOP_RUN_EXHAUSTION_FADE"}
     assert len(params_seen) == len(cands)
     assert sum(cand.model_id == "SPREAD_BLOWOUT_RECOMPRESSION" for cand in cands) >= 3
-    assert all(cand.metadata["parameter_search"]["search_method"] == "hybrid" for cand in cands)
+    assert all(cand.metadata["parameter_search"]["search_method"] == "mixed" for cand in cands)
     assert cands[0].metadata["parameter_search"]["max_candidates"] == 5
 
 
