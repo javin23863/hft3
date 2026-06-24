@@ -6,20 +6,24 @@ alwaysApply: true
 # Graphify mandatory (orchestrator)
 
 Full workflow: [docs/GRAPHIFY_WORKFLOW.md](../../docs/GRAPHIFY_WORKFLOW.md).
+Current vault waiver: while `wiki/hot.md` records `waived-by-owner-2026-06-16`,
+skip GraphGate, GraphPre, and GraphPost; use VaultGate plus targeted source
+reads and do not claim graph freshness. The mandatory graphify steps below
+apply only when the owner lifts that waiver.
 
 ## Before any code edit session
 
-1. Run **`scripts/graphify_gate.ps1 -Query "..."`** (or `bash scripts/graphify_gate.sh '...'` on CHI404) — records consult in `graphify-out/.last-graph-query.json`.
-2. Run **`scripts/graphify_pre_edit.ps1`** — fails (exit 2) if gate stamp missing or older than 4 hours.
-3. **Consult the graph output** before locating or editing code:
+1. When graph gates are active, run **`scripts/graphify_gate.ps1 -Query "..."`** (or `bash scripts/graphify_gate.sh '...'` on CHI404) — records consult in `graphify-out/.last-graph-query.json`.
+2. When graph gates are active, run **`scripts/graphify_pre_edit.ps1`** — fails (exit 2) if gate stamp missing or older than 4 hours.
+3. When graph gates are active, **consult the graph output** before locating or editing code:
    - Prefer `graphify query` / `graphify path` / `graphify explain` over blind repo-wide grep.
    - CHI404 / R|Trader: read [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](../../docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md) after graph query.
-4. Do not start builder/investigator edit work until graph gate + context are loaded.
+4. When graph gates are active, do not start builder/investigator edit work until graph gate + context are loaded.
 
 ## After any code edits
 
-1. Rebuild: `graphify update .` or `scripts/graphify_rebuild.ps1` from repo root (AST-only; **no Google API**).
+1. When graph gates are active, rebuild: `graphify update .` or `scripts/graphify_rebuild.ps1` from repo root (AST-only; **no Google API**).
 2. Optional semantic PDF/docs pass: `scripts/graphify_semantic_local.ps1` (local Ollama, not Gemini).
-3. Commit updated `graphify-out/` artifacts with the code change when the team tracks graph in git.
+3. When graph gates are active, commit updated `graphify-out/` artifacts with the code change when the team tracks graph in git.
 
 Orchestrator owns pre-edit consult and post-edit rebuild; subagents receive graph context from the main thread.

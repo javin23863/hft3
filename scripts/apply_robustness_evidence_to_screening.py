@@ -80,14 +80,12 @@ def _load_json_object(path: Path, label: str) -> dict[str, Any]:
 
 def _candidate_evidence_map(payload: Mapping[str, Any]) -> dict[str, Any]:
     schema = payload.get("schema")
-    if schema not in (None, EVIDENCE_SCHEMA):
+    if schema != EVIDENCE_SCHEMA:
         raise ValueError(f"unsupported_robustness_evidence_schema:{schema}")
-    if payload.get("schema") == EVIDENCE_SCHEMA or "candidates" in payload:
-        candidates = payload.get("candidates")
-        if not isinstance(candidates, Mapping):
-            raise ValueError("robustness_evidence_candidates_must_be_object")
-        return {str(candidate_id): value for candidate_id, value in candidates.items()}
-    return {str(candidate_id): value for candidate_id, value in payload.items()}
+    candidates = payload.get("candidates")
+    if not isinstance(candidates, Mapping):
+        raise ValueError("robustness_evidence_candidates_must_be_object")
+    return {str(candidate_id): value for candidate_id, value in candidates.items()}
 
 
 def _parse_candidate_ids(raw: str | None) -> set[str] | None:

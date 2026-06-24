@@ -31,11 +31,15 @@ Non-negotiable order — skip none **except graph while waived** (item 3):
 2. **Vault / Ontology gate** — `scripts/vault_gate.ps1` + `scripts/vault_pre_edit.ps1`; consult Obsidian vault (`wiki/hot.md`, `Home.md`, `Memory Stack.md`, relevant `decisions/`). See [.cursor/rules/graph-before-code.mdc](graph-before-code.mdc).
 3. **Graph gates** — While vault `wiki/hot.md` contains `waived-by-owner-2026-06-16`: **skip** GraphGate, GraphPre, GraphPost; VaultGate + targeted reads replace graph. Once owner lifts the waiver: GraphGate + GraphPre before edits and GraphPost after code edits are **mandatory again**.
 4. **Plan / locate / implement** — delegate; main thread integrates.
-5. **Dual-pass review** — spawn **cavecrew-reviewer** per [docs/REVIEWER_CHARTER.md](../../docs/REVIEWER_CHARTER.md) (Pass A Karpathy + Pass B math invariants). See [.cursor/rules/reviewer-charter.mdc](reviewer-charter.mdc).
-6. **Verify** — bounded pytest/gates with **exact command, exit code, and output tail** pasted in thread.
-7. **Validation honesty handoff** — status block per [docs/VALIDATION_HONESTY.md](../../docs/VALIDATION_HONESTY.md). See [.cursor/rules/validation-honesty.mdc](validation-honesty.mdc).
+5. **Local preflight** — mandatory bounded task-specific `rg` hygiene for stale terms, old fields, missing rows, and whitespace. This is not GrepLoop.
+6. **Dual-pass review** — spawn **cavecrew-reviewer** per [docs/REVIEWER_CHARTER.md](../../docs/REVIEWER_CHARTER.md) (Pass A Karpathy + Pass B math invariants). See [.cursor/rules/reviewer-charter.mdc](reviewer-charter.mdc).
+7. **Verify** — bounded pytest/gates with **exact command, exit code, and output tail** pasted in thread.
+8. **Plan Drift Review** — compare executed work against the approved plan before Review Surface Gate.
+9. **Review Surface Gate** — create or reuse a PR/MR/CL review surface after Plan Drift Review passes when the work is intended to advance toward merge-ready. If blocked, report `pr-ai-review: unavailable(no-pr)` and `merge-ready: no`.
+10. **PR GrepLoop** — run the installed external PR AI loop on the current-head review surface. Fix actionable feedback, rerun local gates, push, and repeat until clean or bounded stop. Missing connector/auth means `merge-ready: no` unless the owner explicitly records `pr-ai-review: waived-by-user` plus `review-surface: none(waived-by-user: <reason>)`.
+11. **Validation honesty handoff** — status block per [docs/VALIDATION_HONESTY.md](../../docs/VALIDATION_HONESTY.md). See [.cursor/rules/validation-honesty.mdc](validation-honesty.mdc).
 
 ## Optional / contrast gates
 
-- **Local grep / preflight** — owner-overridden to **optional hygiene**; not a mandatory review gate. Do **not** label local `rg` searches **"GrepLoop"** (reserved for external PR/MR review connectors).
-- **External PR/MR review connector loops** and **reviewer-finding loops** remain mandatory until **0 🔴** or user explicitly accepts/waives. Do not claim merge-ready while open 🔴 remain.
+- **Local grep / preflight** — mandatory hygiene, but do **not** label local `rg` searches **"GrepLoop"** (reserved for external PR/MR/CL AI review connectors).
+- **External PR/MR/CL review connector loops** and **reviewer-finding loops** remain mandatory until **0 🔴** or user explicitly accepts/waives. Do not claim merge-ready while open 🔴 remain.

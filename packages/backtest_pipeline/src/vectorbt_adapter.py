@@ -1355,27 +1355,6 @@ def _normalise_promoted_screening_row(
         "rejection_reason_or_null": reason,
     })
 
-    # VBT-4: determine replay eligibility from bridge evidence.
-    # Eligible when: screening_status == "pass", all four robustness statuses
-    # are "pass", staleness == "fresh", and surface_stability status == "pass".
-    if bridge_evidence:
-        surface_status = _screening_status_text(surface_stability_metrics)
-        all_robustness_pass = (
-            default_wfc_status == "pass"
-            and default_dsr_status == "pass"
-            and default_pbo_status == "pass"
-            and default_cscv_status == "pass"
-        )
-        staleness_text = _screening_status_text(default_staleness)
-        if (
-            row["screening_status"] == "pass"
-            and all_robustness_pass
-            and staleness_text == "fresh"
-            and surface_status == "pass"
-        ):
-            row["replay_eligibility_status"] = "eligible"
-            row["rejection_reason_or_null"] = None
-
     _apply_external_robustness_evidence(row, robustness_evidence)
     return row
 

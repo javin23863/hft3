@@ -172,6 +172,7 @@ REPLAY_ELIGIBILITY_REQUIRED_FIELDS = (
     "parameter_perturbation_or_not_run",
     "screening_status",
     "replay_eligibility_status",
+    "robustness_evidence_receipt",
     "rejection_reason_or_null",
 )
 REPLAY_ELIGIBILITY_PASS_STATUS_FIELDS = ("wfc_status", "dsr_status", "pbo_status", "cscv_status")
@@ -181,6 +182,7 @@ REPLAY_ELIGIBILITY_REQUIRED_MAPPING_FIELDS = (
     "walk_forward_metrics",
     "wfc_metrics",
     "surface_stability_metrics",
+    "robustness_evidence_receipt",
 )
 WALK_FORWARD_REQUIRED_EVIDENCE_FIELDS = (
     "fold_matrix",

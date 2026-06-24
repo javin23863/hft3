@@ -562,7 +562,7 @@ def _build_filter_result() -> Any:
 
 class TestIntegrationNormalisePromotedRow:
     def test_eligible_candidate_with_full_passing_robustness(self, monkeypatch):
-        """A candidate with full passing robustness_input → eligible."""
+        """Passing bridge evidence stays ineligible until the applicator writes a receipt."""
         # We need the surface_stability to pass too. Inject a flat grid.
         grid = _surface_stability_passing_grid()
         candidate = _build_promoted_candidate_with_robustness(
@@ -577,8 +577,9 @@ class TestIntegrationNormalisePromotedRow:
         assert row["pbo_status"] == "pass"
         assert row["cscv_status"] == "pass"
         assert row["robustness_artifact_staleness"] == "fresh"
-        assert row["replay_eligibility_status"] == "eligible"
-        assert row["rejection_reason_or_null"] is None
+        assert row["replay_eligibility_status"] == "not_eligible"
+        assert row["rejection_reason_or_null"] is not None
+        assert "robustness_evidence_receipt" not in row
 
     def test_not_eligible_without_robustness_input(self):
         """A candidate without robustness_input → not_eligible."""

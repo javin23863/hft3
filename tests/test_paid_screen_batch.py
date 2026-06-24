@@ -482,6 +482,50 @@ class TestArtifactProvenanceStamping:
             )
         assert not artifact_path.exists()
 
+    def test_write_screening_artifact_uses_unique_tmp_and_cleans_failed_replace(
+        self, monkeypatch, tmp_path
+    ):
+        ctx = make_context(repo_root=str(tmp_path))
+        unit = make_unit(model_id="SPREAD_BLOWOUT_RECOMPRESSION")
+        filter_result = _valid_filter_result(unit)
+        artifact_path = tmp_path / "scratch" / unit.unit_id / "screening_artifact.json"
+        fixed_tmp_path = Path(str(artifact_path) + ".tmp")
+        fixed_tmp_path.parent.mkdir(parents=True, exist_ok=True)
+        fixed_tmp_path.write_text("stale fixed tmp", encoding="utf-8")
+
+        model_entry = {"model_id": unit.model_id, "hyp_id": unit.hyp_id}
+        parsed = build_structured_parsed_hypothesis(unit, model_entry)
+        candidate = _build_candidate_model(unit, model_entry, tmp_path, parsed)
+        replace_calls = []
+
+        def fail_replace(src, dst):
+            replace_calls.append((Path(src), Path(dst)))
+            raise OSError("simulated replace failure")
+
+        monkeypatch.setattr(os, "replace", fail_replace)
+
+        with pytest.raises(OSError, match="simulated replace failure"):
+            _write_screening_artifact(
+                str(artifact_path),
+                filter_result,
+                unit,
+                model_entry,
+                ctx,
+                "deadbeef" * 4,
+                RunProfiler(),
+                candidate=candidate,
+            )
+
+        assert replace_calls
+        tmp_path_used, dst_path = replace_calls[0]
+        assert dst_path == artifact_path
+        assert tmp_path_used != fixed_tmp_path
+        assert tmp_path_used.name.startswith("screening_artifact.json.tmp.")
+        assert fixed_tmp_path.read_text(encoding="utf-8") == "stale fixed tmp"
+        assert not tmp_path_used.exists()
+        assert not artifact_path.exists()
+        assert not list(artifact_path.parent.glob("screening_artifact.json.tmp.*"))
+
     def test_candidate_and_artifact_carry_unit_context_metadata(self, tmp_path):
         ctx = make_context(
             repo_root=str(tmp_path),

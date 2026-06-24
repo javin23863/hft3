@@ -631,12 +631,21 @@ def _write_screening_artifact(
     serializable["screening_artifact_hash"] = compute_screening_artifact_hash(serializable)
     validate_screening_artifact(serializable)
 
-    # Write atomically
-    tmp_path = artifact_path + ".tmp"
+    # Write atomically. The tmp name must be per-write so concurrent/retried
+    # writers never race on the same intermediate path.
+    tmp_path = f"{artifact_path}.tmp.{os.getpid()}.{time.monotonic_ns()}"
     os.makedirs(os.path.dirname(artifact_path), exist_ok=True)
-    with open(tmp_path, "w") as f:
-        json.dump(serializable, f, indent=2, sort_keys=True)
-    os.replace(tmp_path, artifact_path)
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(serializable, f, indent=2, sort_keys=True)
+        os.replace(tmp_path, artifact_path)
+    except Exception:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
     from backtest_pipeline.src.research_pipeline_stages import annotate_promoted_screening_handoffs
 

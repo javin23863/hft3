@@ -108,6 +108,15 @@ def replay_eligible_promoted_candidate(
         "cscv_count_or_not_run": {"status": "pass", "n_partitions": 16, "n_configs": 8},
         "screening_status": "pass",
         "replay_eligibility_status": "eligible",
+        "robustness_evidence_receipt": {
+            "schema": "hft3_robustness_evidence_inputs_v1",
+            "binding": {"candidate_id": candidate_id},
+            "source_evidence": {
+                "fixture": "tests/backtest_pipeline/hft_screening_fixtures.py#sha256:"
+                + "c" * 64,
+            },
+            "evidence_entry_hash": "d" * 64,
+        },
         "rejection_reason_or_null": rejection_reason,
         **passing_section10_evidence_maps(candidate_id),
     }

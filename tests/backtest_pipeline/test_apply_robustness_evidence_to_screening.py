@@ -390,6 +390,39 @@ def test_wrong_evidence_binding_fails_closed_without_writing_output(tmp_path: Pa
     assert not out_path.exists()
 
 
+def test_unversioned_evidence_schema_fails_closed_without_writing_output(tmp_path: Path) -> None:
+    candidate_id = "cand_apply"
+    screening_path = tmp_path / "screening_artifact.json"
+    evidence_path = tmp_path / "robustness_evidence_unversioned.json"
+    out_path = tmp_path / "should_not_exist.json"
+    original = _screening_artifact(candidate_id)
+    evidence = _passing_evidence(original, candidate_id)
+    evidence.pop("schema")
+    _write_json(screening_path, original)
+    _write_json(evidence_path, evidence)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--screening-artifact",
+            str(screening_path),
+            "--robustness-evidence",
+            str(evidence_path),
+            "--out",
+            str(out_path),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "unsupported_robustness_evidence_schema" in result.stderr
+    assert not out_path.exists()
+
+
 def test_hbt_validator_rejection_blocks_output(tmp_path: Path, monkeypatch) -> None:
     candidate_id = "cand_apply"
     screening_path = tmp_path / "screening_artifact.json"

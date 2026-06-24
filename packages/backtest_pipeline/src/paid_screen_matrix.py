@@ -271,7 +271,9 @@ def run_vectorbt_simulation_matrix(
         rust_required and (not rust_available or not rust_runtime_proof)
     ):
         stop_reason = "vectorbt_unavailable_fail_closed"
-        if vectorbt_available and rust_required and not rust_available:
+        if rust_required and not vectorbt_available:
+            stop_reason = "rust_engine_required_unavailable_fail_closed"
+        elif vectorbt_available and rust_required and not rust_available:
             stop_reason = "rust_engine_required_unavailable_fail_closed"
         elif vectorbt_available and rust_required and not rust_runtime_proof:
             stop_reason = "rust_runtime_proof_missing_fail_closed"

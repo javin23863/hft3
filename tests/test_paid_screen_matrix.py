@@ -36,6 +36,7 @@ from backtest_pipeline.src.vectorbt_adapter import (
     DEFAULT_PARAM_GRID,
     _run_vectorbt_simulation,
     expand_parameter_grid,
+    validate_screening_artifact,
 )
 from research_pipeline.types import CandidateModel
 
@@ -647,6 +648,43 @@ class TestRunVectorbtSimulationMatrix:
         assert result.backend == "vectorbt_unavailable"
         assert all(r.reject_reason == "vectorbt_unavailable_fail_closed" for r in result.rejected)
         assert len(result.promoted) == 0
+
+    def test_paid_compute_without_vectorbt_uses_rust_required_fail_closed_reason(
+        self, monkeypatch, tmp_path
+    ):
+        """Paid-compute matrix artifacts validate when VectorBT itself is missing."""
+        monkeypatch.setattr(vectorbt_adapter, "_has_vectorbt", False)
+        monkeypatch.setattr(vectorbt_adapter, "_vectorbt_version", None)
+        monkeypatch.setattr(vectorbt_adapter, "_rust_engine_available", False)
+        ohlcv = _synthetic_ohlcv(40)
+
+        result = run_vectorbt_simulation_matrix(
+            ohlcv,
+            [_mock_candidate()],
+            parsed=None,
+            grid={
+                "signal_threshold": [0.1],
+                "holding_period_bars": [5],
+                "stop_loss_pct": [None],
+                "take_profit_pct": [None],
+            },
+            repo_root=tmp_path,
+            screening_scope="paid-compute",
+        )
+        artifact = result.to_dict()
+        validate_screening_artifact(artifact)
+
+        assert result.trials_run == 0
+        assert not result.promoted
+        assert artifact["screening_scope"] == "paid_compute"
+        assert artifact["vectorbt_engine"] == "unavailable"
+        assert artifact["rust_engine_required_for_scope"] is True
+        assert artifact["engine_parity_status"] == "rust_engine_required_unavailable_fail_closed"
+        assert artifact["stop_reasons"] == ["rust_engine_required_unavailable_fail_closed"]
+        assert (
+            artifact["rejected"][0]["rejection_reason_or_null"]
+            == "rust_engine_required_unavailable_fail_closed"
+        )
 
     def test_signal_failure_rejects_trial(self, monkeypatch, tmp_path):
         """A signal computer that raises rejects the trial, not the whole chunk."""

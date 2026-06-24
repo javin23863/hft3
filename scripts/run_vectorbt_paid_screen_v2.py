@@ -13,7 +13,8 @@ Compatibility flags from v1 (``--vectorbt-scope``, ``--workers``,
 ``--max-wall-clock-seconds``, ``--ready-gate-file``, ``--owner-waiver``,
 ``--dry-run``, ``--no-llm``, ``--repo-root``) are preserved. New v2 flags:
 ``--max-batches-before-recycle``, ``--cache-memory-limit-mb``,
-``--cache-max-entries``, ``--events-csv-hash``, ``--lake-manifest-hash``.
+``--cache-max-entries``, ``--events-csv-hash``, ``--lake-manifest-hash``,
+``--worker-affinity-cpus``.
 
 Launch hygiene: run **one** orchestrator per out-dir (``flock`` the manifest
 path on Linux, or a single tmux session on Vast). Duplicate launches leave
@@ -68,6 +69,49 @@ from backtest_pipeline.src.paid_screen_worker import worker_process_main
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+_PARENT_ONLY_WORKER_ARG_KEYS = frozenset({
+    "_worker_affinity_cpus",
+    "_worker_affinity_spawn_count",
+})
+
+
+def _parse_worker_affinity_cpus(raw: str | None) -> List[int]:
+    if raw is None:
+        return []
+    raw = raw.strip()
+    if not raw:
+        raise ValueError("worker affinity CPU list cannot be empty")
+
+    cpus: List[int] = []
+    for part in raw.split(","):
+        token = part.strip()
+        if not token:
+            raise ValueError(f"invalid worker affinity CPU list: {raw!r}")
+        if "-" in token:
+            bounds = [item.strip() for item in token.split("-")]
+            if len(bounds) != 2 or not bounds[0] or not bounds[1]:
+                raise ValueError(f"invalid worker affinity CPU range: {token!r}")
+            try:
+                start = int(bounds[0])
+                end = int(bounds[1])
+            except ValueError as exc:
+                raise ValueError(f"invalid worker affinity CPU range: {token!r}") from exc
+            if start < 0 or end < 0:
+                raise ValueError(f"invalid worker affinity CPU range: {token!r}")
+            if end < start:
+                raise ValueError(f"invalid worker affinity CPU range: {token!r}")
+            cpus.extend(range(start, end + 1))
+            continue
+        try:
+            cpu = int(token)
+        except ValueError as exc:
+            raise ValueError(f"invalid worker affinity CPU: {token!r}") from exc
+        if cpu < 0:
+            raise ValueError(f"invalid worker affinity CPU: {token!r}")
+        cpus.append(cpu)
+    return cpus
+
 
 def _load_units(path: Path) -> List[Dict[str, Any]]:
     """Load JSONL unit rows (same row format as v1 + the structured fields)."""
@@ -416,6 +460,9 @@ def _write_run_manifest(
         "aborted": aborted,
         "stop_reason": stop_reason,
     }
+    worker_affinity_cpus = getattr(args, "worker_affinity_cpus", None)
+    if worker_affinity_cpus:
+        manifest["worker_affinity_cpus"] = list(worker_affinity_cpus)
     if profiler_summaries is not None:
         manifest["worker_profiler_summaries"] = profiler_summaries
         if profiler_summaries:
@@ -611,10 +658,59 @@ def _spawn_paid_screen_worker(
 ) -> mp.Process:
     proc = ctx.Process(
         target=worker_process_main,
-        args=(worker_args, batch_queue, result_queue),
+        args=(_strip_parent_worker_args(worker_args), batch_queue, result_queue),
     )
     proc.start()
+    _apply_worker_affinity(proc, worker_args)
     return proc
+
+
+def _strip_parent_worker_args(worker_args: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        key: value
+        for key, value in worker_args.items()
+        if key not in _PARENT_ONLY_WORKER_ARG_KEYS
+    }
+
+
+def _terminate_started_process(proc: mp.Process) -> None:
+    terminate = getattr(proc, "terminate", None)
+    if callable(terminate):
+        try:
+            terminate()
+        except Exception:
+            pass
+    join = getattr(proc, "join", None)
+    if callable(join):
+        try:
+            join(timeout=1.0)
+        except Exception:
+            pass
+
+
+def _apply_worker_affinity(proc: mp.Process, worker_args: Dict[str, Any]) -> None:
+    cpus = worker_args.get("_worker_affinity_cpus") or []
+    if not cpus:
+        return
+    set_affinity = getattr(os, "sched_setaffinity", None)
+    if set_affinity is None:
+        _terminate_started_process(proc)
+        raise RuntimeError(
+            "worker CPU affinity requested but os.sched_setaffinity is unavailable"
+        )
+    pid = getattr(proc, "pid", None)
+    if pid is None:
+        _terminate_started_process(proc)
+        raise RuntimeError("worker CPU affinity requested but worker PID is unavailable")
+
+    spawn_count = int(worker_args.get("_worker_affinity_spawn_count", 0))
+    cpu = int(cpus[spawn_count % len(cpus)])
+    try:
+        set_affinity(pid, {cpu})
+    except Exception:
+        _terminate_started_process(proc)
+        raise
+    worker_args["_worker_affinity_spawn_count"] = spawn_count + 1
 
 
 def _maintain_worker_pool(
@@ -936,17 +1032,22 @@ def _pipelined_dispatch_and_drain(
         last_progress_log_mono = last_collect_mono
 
     def _maybe_recover_workers(now_mono: float) -> None:
-        nonlocal last_progress_log_mono
+        nonlocal last_progress_log_mono, stop_reason
         if not recover_worker_deaths:
             return
-        respawned = _maintain_worker_pool(
-            workers,
-            ctx=spawn_ctx,
-            worker_args=spawn_worker_args,
-            batch_queue=batch_queue,
-            result_queue=result_queue,
-            target_worker_count=target_worker_count,
-        )
+        try:
+            respawned = _maintain_worker_pool(
+                workers,
+                ctx=spawn_ctx,
+                worker_args=spawn_worker_args,
+                batch_queue=batch_queue,
+                result_queue=result_queue,
+                target_worker_count=target_worker_count,
+            )
+        except Exception as exc:
+            stop_reason = "worker_respawn_failed"
+            print(f"[pool] worker respawn failed: {exc}", flush=True)
+            return
         redispatched = 0
         if respawned > 0:
             redispatched = _redispatch_outstanding_batches(
@@ -1001,6 +1102,8 @@ def _pipelined_dispatch_and_drain(
             break
 
         _maybe_recover_workers(now_mono)
+        if stop_reason is not None:
+            break
 
         if not recover_worker_deaths:
             polled_failure = _failed_worker_stop_reason(workers)
@@ -1172,6 +1275,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="Path to events CSV for hash (default: DATA_SYSTEM_EVENTS_CSV or packages/data_system/config/events.csv)")
     parser.add_argument("--lake-manifest-hash", default=None,
                         help="Explicit lake manifest hash (required if HFT3_MANIFEST_PATH unset/missing)")
+    parser.add_argument(
+        "--worker-affinity-cpus",
+        default=None,
+        help="Linux CPU list/ranges for worker PID affinity, e.g. 2-11 or 2,3,4",
+    )
     parser.add_argument("--batch-timeout-seconds", type=float, default=1800.0,
                         help="Per-batch wall-clock timeout when draining results")
     parser.add_argument(
@@ -1181,6 +1289,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    try:
+        args.worker_affinity_cpus = _parse_worker_affinity_cpus(
+            args.worker_affinity_cpus
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
 
     repo_root = args.repo_root if args.repo_root.is_absolute() else _REPO / args.repo_root
     units_path = args.units_jsonl if args.units_jsonl.is_absolute() else repo_root / args.units_jsonl
@@ -1531,6 +1645,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         "scratch_root": str(_worker_scratch_root(repo_root, out_dir)),
         "native_threads": 1,
     }
+    if args.worker_affinity_cpus:
+        worker_args["_worker_affinity_cpus"] = list(args.worker_affinity_cpus)
+        worker_args["_worker_affinity_spawn_count"] = 0
     for env_key in ("HFT3_NPZ_ROOT", "HFT3_MANIFEST_PATH"):
         env_val = os.environ.get(env_key, "").strip()
         if env_val:
@@ -1542,10 +1659,22 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     num_workers = max(1, min(args.workers, len(batches)))
     workers: List[mp.Process] = []
-    for _ in range(num_workers):
-        workers.append(
-            _spawn_paid_screen_worker(ctx, worker_args, batch_queue, result_queue)
+    try:
+        for _ in range(num_workers):
+            workers.append(
+                _spawn_paid_screen_worker(ctx, worker_args, batch_queue, result_queue)
+            )
+    except Exception as exc:
+        _shutdown_workers(
+            workers,
+            batch_queue,
+            total_timeout_seconds=_POST_DRAIN_EXIT_BUDGET_SECONDS,
         )
+        _close_mp_queues(batch_queue, result_queue)
+        run_state["stop_reason"] = "worker_spawn_failed"
+        _flush_running_manifest(finished=datetime.now(timezone.utc), force=True)
+        print(f"[bootstrap] worker spawn failed: {exc}", flush=True)
+        return 1
 
     # Pipelined dispatch + drain (backpressure keeps result_queue bounded)
     collected, drain_stop_reason = _pipelined_dispatch_and_drain(
