@@ -13,6 +13,7 @@ from backtest_pipeline.src.hftbacktest_realism import (
 from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
 
 from hft_screening_fixtures import (
+    NATIVE_CPP_HOT_PATH_EVIDENCE,
     NATIVE_CPP_LATENCY_EVIDENCE,
     native_probe_latency_fields,
     screening_artifact_shell,
@@ -204,7 +205,7 @@ def test_write_artifacts_persists_latency_model_and_summary_fields(
         screening_artifact_path=screening_path,
         latency_model_path=latency_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt2_test",
     )
 

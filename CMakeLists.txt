@@ -149,7 +149,7 @@ if(pybind11_FOUND)
     message(STATUS "pybind11 found: ${pybind11_VERSION} at ${pybind11_DIR}")
 
     # Python extension module — same source as hft_features, same compilation flags.
-    pybind11_add_module(hft3_features_cpp
+    pybind11_add_module(hft3_features_cpp NO_EXTRAS
         packages/features_engine/cpp/bindings/py_features.cpp
         packages/features_engine/cpp/src/event_context.cpp
         packages/features_engine/cpp/src/feature_extractor.cpp

@@ -21,6 +21,8 @@
 #   HFT3_NPZ_ROOT  — directory to search for NPZ when --npz not given.
 #   BUILD_DIR      — override the default ./build directory.
 #   PYTHON_BIN     — Python interpreter used for pybind discovery/parity.
+#   CC / CXX       — C/C++ compilers used for CMake and syntax checks.
+#   CPP_LANE_REPORT_DIR — receipt output directory, default reports/cpp_lane.
 #
 # Exit code: nonzero on any failure.
 
@@ -29,6 +31,12 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$REPO/build}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+CC_BIN="${CC:-gcc}"
+CXX_BIN="${CXX:-g++}"
+CMAKE_COMPILER_ARGS=(-DCMAKE_C_COMPILER="$CC_BIN" -DCMAKE_CXX_COMPILER="$CXX_BIN")
+CPP_LANE_REPORT_DIR="${CPP_LANE_REPORT_DIR:-$REPO/reports/cpp_lane}"
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+HFT3_COMMIT="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || printf 'unknown')"
 FAILURES=()
 NPZ_PATH=""
 
@@ -43,6 +51,51 @@ done
 log_section() { echo; echo "=== $1 ==="; }
 pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1" >&2; FAILURES+=("$1"); }
+write_cpp_lane_receipts() {
+    mkdir -p "$CPP_LANE_REPORT_DIR"
+    "$PYTHON_BIN" - "$CPP_LANE_REPORT_DIR" "$RUN_ID" "$CC_BIN" "$CXX_BIN" "$BUILD_DIR" "${NPZ_PATH:-}" "$HFT3_COMMIT" <<'PY'
+import datetime as _dt
+import json
+import sys
+from pathlib import Path
+
+out_dir = Path(sys.argv[1])
+run_id, cc_bin, cxx_bin, build_dir, npz_path, hft3_commit = sys.argv[2:8]
+base = {
+    "schema": "hft3_cpp_lane_receipt_v1",
+    "run_id": run_id,
+    "status": "pass",
+    "created_at_utc": _dt.datetime.now(tz=_dt.timezone.utc).isoformat(),
+    "hft3_commit": hft3_commit,
+    "cc": cc_bin,
+    "cxx": cxx_bin,
+    "build_dir": build_dir,
+    "npz_path": npz_path or None,
+}
+receipts = {
+    "hft3_features_cpp_verify_cpp_parity": {
+        "evidence_class": "features",
+        "checks": ["hft3_features_cpp", "verify_cpp_parity.py"],
+    },
+    "risk_manager_atomic_stress_spsc_queue_stress_safety_poller_concurrent": {
+        "evidence_class": "risk_concurrency",
+        "checks": ["risk_manager_atomic_stress", "spsc_queue_stress", "safety_poller_concurrent"],
+    },
+    "test_decision_runtime_hardening_test_safety_failure_injection": {
+        "evidence_class": "decision_safety",
+        "checks": ["test_decision_runtime_hardening", "test_safety_failure_injection"],
+    },
+    "test_engine_loop_hft3_engine": {
+        "evidence_class": "engine_loop",
+        "checks": ["test_engine_loop", "hft3_engine"],
+    },
+}
+for name, payload in receipts.items():
+    path = out_dir / f"{run_id}_{name}.json"
+    path.write_text(json.dumps({**base, **payload}, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(f"receipt: {path}")
+PY
+}
 find_pybind_so() {
     find "$BUILD_DIR" -maxdepth 2 -type f -name 'hft3_features_cpp*.so' | sort | head -n 1
 }
@@ -74,7 +127,7 @@ if PYBIND_ARG="$(pybind11_cmake_arg)"; then
 else
     fail "pybind11 CMake dir unavailable — install pybind11 or set HFT3_PYBIND11_DIR"
 fi
-if cmake -B "$BUILD_DIR" -S "$REPO" -DCMAKE_BUILD_TYPE=Release \
+if cmake -B "$BUILD_DIR" -S "$REPO" -DCMAKE_BUILD_TYPE=Release "${CMAKE_COMPILER_ARGS[@]}" \
          -DPython3_EXECUTABLE="$PYTHON_BIN" "${PYBIND_ARGS[@]}" -Wno-dev 2>&1; then
     if cmake --build "$BUILD_DIR" --target hft3_features_cpp 2>&1; then
         PYD="$(find_pybind_so)"
@@ -140,7 +193,7 @@ for tu in "${TUS[@]}"; do
         fail "TU not found: $tu"
         continue
     fi
-    if g++ -std=c++20 -Wall -Wextra -Werror -fsyntax-only "${INCLUDES[@]}" "$full" 2>&1; then
+    if "$CXX_BIN" -std=c++20 -Wall -Wextra -Werror -fsyntax-only "${INCLUDES[@]}" "$full" 2>&1; then
         pass "-Wall clean: $tu"
     else
         fail "-Wall -Wextra -Werror failed for $tu"
@@ -153,7 +206,7 @@ done
 log_section "Row 1: ASan + UBSan build"
 ASAN_BUILD="$BUILD_DIR/asan_build"
 mkdir -p "$ASAN_BUILD"
-if cmake -B "$ASAN_BUILD" -S "$REPO" -DCMAKE_BUILD_TYPE=Asan -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+if cmake -B "$ASAN_BUILD" -S "$REPO" -DCMAKE_BUILD_TYPE=Asan "${CMAKE_COMPILER_ARGS[@]}" \
          -DPython3_EXECUTABLE="$PYTHON_BIN" "${PYBIND_ARGS[@]}" \
          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
@@ -193,7 +246,7 @@ fi
 log_section "Row 2: TSan build"
 TSAN_BUILD="$BUILD_DIR/tsan_build"
 mkdir -p "$TSAN_BUILD"
-if cmake -B "$TSAN_BUILD" -S "$REPO" -DCMAKE_BUILD_TYPE=Tsan -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+if cmake -B "$TSAN_BUILD" -S "$REPO" -DCMAKE_BUILD_TYPE=Tsan "${CMAKE_COMPILER_ARGS[@]}" \
          -DPython3_EXECUTABLE="$PYTHON_BIN" "${PYBIND_ARGS[@]}" \
          -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" \
          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" \
@@ -272,6 +325,7 @@ fi
 echo
 echo "=== C-LANE SUMMARY ==="
 if [[ ${#FAILURES[@]} -eq 0 ]]; then
+    write_cpp_lane_receipts
     echo "ALL CHECKS PASSED"
     exit 0
 else

@@ -45,6 +45,8 @@ from backtest_pipeline.src.fs_v1_screen_path import FS_V1_BAR_CONSTRUCTION_ID
 from backtest_pipeline.src.vectorbt_adapter import filter_candidates, persist_screening_artifact
 from data_system.src.feature_store import feature_store_root
 from backtest_pipeline.src.hftbacktest_realism import (
+    compute_robustness_evidence_receipt_hash,
+    validate_applied_robustness_evidence_receipt,
     validate_candidate_replay_eligibility,
     write_hftbacktest_realism_artifacts,
 )
@@ -799,7 +801,7 @@ def _strict_replay_eligible_ids(
         if not candidate_id or candidate_id not in promoted_ids:
             continue
         reasons = validate_candidate_replay_eligibility(row)
-        if row.get("robustness_evidence_receipt") in (None, "", {}):
+        if validate_applied_robustness_evidence_receipt(row, screening_artifact=screening_artifact):
             reasons.append("robustness_evidence_receipt_missing")
         if reasons:
             ineligible[candidate_id] = list(dict.fromkeys(str(reason) for reason in reasons))
@@ -809,6 +811,10 @@ def _strict_replay_eligible_ids(
     for candidate_id in missing_rows:
         ineligible[candidate_id] = ["candidate_metadata_missing_from_screening_artifact"]
     return eligible, ineligible
+
+
+def _canonical_hash(value: Any) -> str:
+    return compute_robustness_evidence_receipt_hash(value)
 
 
 def _main_impl(

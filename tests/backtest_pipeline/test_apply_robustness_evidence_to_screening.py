@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -192,10 +193,7 @@ def _passing_evidence(
             candidate_id: {
                 "binding": binding,
                 "source_evidence": {
-                    "wfc": {
-                        "path": "research_cards/robustness/wfc_apply_test.json",
-                        "sha256": "a" * 64,
-                    },
+                    "wfc": "research_cards/robustness/wfc_apply_test.json#sha256:" + "a" * 64,
                     "cscv": "research_cards/robustness/cscv_apply_test.json#sha256:"
                     + "b" * 64,
                 },
@@ -243,9 +241,25 @@ def test_passing_evidence_writes_valid_eligible_artifact_and_receipt(tmp_path: P
 
     updated = json.loads(out_path.read_text(encoding="utf-8"))
     validate_screening_artifact(updated)
+    row = updated["promoted"][0]
+    row_receipt_hash = hashlib.sha256(
+        json.dumps(
+            row["robustness_evidence_receipt"],
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
+    assert updated["robustness_evidence_receipt"] == {
+        "schema": "hft3_robustness_evidence_application_receipt_v1",
+        "input_screening_artifact_hash": original["screening_artifact_hash"],
+        "robustness_evidence_schema": "hft3_robustness_evidence_inputs_v1",
+        "matched_candidate_ids": [candidate_id],
+        "eligible_candidate_ids": [candidate_id],
+        "row_receipt_hashes": {candidate_id: row_receipt_hash},
+    }
     assert updated["screening_artifact_hash"] == compute_screening_artifact_hash(updated)
     assert updated["screening_artifact_hash"] != original["screening_artifact_hash"]
-    row = updated["promoted"][0]
     assert row["replay_eligibility_status"] == "eligible"
     assert row["rejection_reason_or_null"] is None
     assert row["wfc_status"] == "pass"
@@ -257,7 +271,9 @@ def test_passing_evidence_writes_valid_eligible_artifact_and_receipt(tmp_path: P
     receipt_row = row["robustness_evidence_receipt"]
     assert receipt_row["binding"]["screening_artifact_hash"] == original["screening_artifact_hash"]
     assert receipt_row["binding"]["parameter_values_hash"] == row["parameter_values_hash"]
-    assert receipt_row["source_evidence"]["wfc"]["sha256"] == "a" * 64
+    assert receipt_row["source_evidence"]["wfc"] == (
+        "research_cards/robustness/wfc_apply_test.json#sha256:" + "a" * 64
+    )
     assert len(receipt_row["evidence_entry_hash"]) == 64
     assert validate_candidate_replay_eligibility(row) == []
     assert receipt["screening_artifact_hash"] == updated["screening_artifact_hash"]
@@ -285,10 +301,7 @@ def test_incomplete_evidence_fails_closed_without_writing_output(tmp_path: Path)
                         "lake_manifest_hash": artifact["lake_manifest_hash"],
                     },
                     "source_evidence": {
-                        "wfc": {
-                            "path": "research_cards/robustness/wfc_apply_test.json",
-                            "sha256": "a" * 64,
-                        }
+                        "wfc": "research_cards/robustness/wfc_apply_test.json#sha256:" + "a" * 64
                     },
                     "robustness_input": {"per_event_expectancies": [0.01, 0.02]},
                     "surface_stability_metrics": _surface_pass(),

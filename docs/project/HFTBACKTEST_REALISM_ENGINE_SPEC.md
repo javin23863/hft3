@@ -249,6 +249,18 @@ named TSan stress targets). Source files, build products, and generic strings
 such as `scripts/run_c_lane.sh`, `build/hft3_engine`, `evidence.json`, or
 `risk_engine_fake_claim.json` are not sufficient.
 
+Strict source-lock pass requires complete native evidence classes, not one
+representative native artifact. The required classes are `latency`, `features`,
+`risk_concurrency`, `decision_safety`, and `engine_loop`. `scripts/run_c_lane.sh`
+writes hashable `reports/cpp_lane/` receipts for the feature, risk/concurrency,
+decision/safety, and engine-loop classes only after all C-lane checks pass.
+Those receipts must carry schema `hft3_cpp_lane_receipt_v1`, `status=pass`, the
+expected check names, and the current `hft3_commit`; source-lock validation reads
+the receipt content and rejects stale, mismatched, or filename-only evidence.
+Latency still comes from a CHI404 native Rithmic latency probe/latency report
+artifact whose content proves `hot_path_language=c++`, `wrapper=none`, and
+`rithmic_latency_probe` provenance.
+
 HBT-2 status precedence:
 
 ```text

@@ -13,6 +13,7 @@ from backtest_pipeline.src.fee_model import FeeModel
 from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
 
 from hft_screening_fixtures import (
+    NATIVE_CPP_HOT_PATH_EVIDENCE,
     NATIVE_CPP_LATENCY_EVIDENCE,
     NATIVE_CPP_LATENCY_EVIDENCE_HASH,
     native_probe_latency_fields,
@@ -348,7 +349,7 @@ def test_hbt4_valid_order_intent_writes_official_replay_and_can_pass(
         latency_model_path=latency_path,
         fill_queue_model_path=fill_queue_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt4_pass",
     )
 
@@ -439,7 +440,7 @@ def test_hbt4_non_rust_vectorbt_handoff_cannot_pass(
         latency_model_path=latency_path,
         fill_queue_model_path=fill_queue_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt4_non_rust_vectorbt",
     )
 
@@ -510,7 +511,7 @@ def test_hbt4_unsupported_official_replay_contract_fails_closed_before_submit(
         latency_model_path=latency_path,
         fill_queue_model_path=fill_queue_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt4_contract_mismatch",
     )
 
@@ -546,7 +547,7 @@ def test_hbt4_stale_robustness_handoff_fails_closed_even_with_official_replay(
         latency_model_path=latency_path,
         fill_queue_model_path=fill_queue_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt4_stale_robustness",
     )
 
@@ -587,7 +588,7 @@ def test_hbt4_status_only_robustness_evidence_fails_closed(
         latency_model_path=latency_path,
         fill_queue_model_path=fill_queue_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt4_status_only_robustness",
     )
 
@@ -622,7 +623,7 @@ def test_hbt4_missing_order_intent_fails_closed_without_official_pass(
         latency_model_path=latency_path,
         fill_queue_model_path=fill_queue_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt4_missing_intent",
     )
 

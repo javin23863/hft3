@@ -2060,6 +2060,138 @@ def test_run_pipeline_vectorbt_hftbacktest_opt_in_blocks_without_strict_replay_e
     ]
 
 
+def test_strict_replay_eligible_ids_requires_applied_robustness_receipt(monkeypatch):
+    import scripts.run_pipeline as run_pipeline
+
+    monkeypatch.setattr(run_pipeline, "validate_candidate_replay_eligibility", lambda _row: [])
+    artifact = {
+        "screening_artifact_hash": "9" * 64,
+        "data_manifest_hash": "d" * 64,
+        "lake_manifest_hash": "e" * 64,
+        "promoted_ids": ["cand_vbt"],
+        "robustness_evidence_receipt": {
+            "schema": "hft3_robustness_evidence_application_receipt_v1",
+            "input_screening_artifact_hash": "a" * 64,
+            "robustness_evidence_schema": "hft3_robustness_evidence_inputs_v1",
+            "matched_candidate_ids": ["cand_vbt"],
+            "eligible_candidate_ids": ["cand_vbt"],
+        },
+    }
+    valid_receipt = {
+        "schema": "hft3_robustness_evidence_inputs_v1",
+        "binding": {
+            "screening_artifact_hash": "a" * 64,
+            "candidate_id": "cand_vbt",
+            "parameter_values_hash": "b" * 64,
+            "feature_recipe_hash": "c" * 64,
+            "data_manifest_hash": artifact["data_manifest_hash"],
+            "lake_manifest_hash": artifact["lake_manifest_hash"],
+        },
+        "source_evidence": {
+            "wfc_rows": "research_cards/robustness/wfc_rows.json#sha256:" + "f" * 64,
+        },
+        "evidence_entry_hash": "b" * 64,
+    }
+    artifact["robustness_evidence_receipt"]["row_receipt_hashes"] = {
+        "cand_vbt": run_pipeline._canonical_hash(valid_receipt)
+    }
+    base_row = {
+        "candidate_id": "cand_vbt",
+        "parameter_values_hash": "b" * 64,
+        "feature_recipe_hash": "c" * 64,
+        "replay_eligibility_status": "eligible",
+    }
+
+    eligible, ineligible = run_pipeline._strict_replay_eligible_ids(
+        {**artifact, "promoted": [{**base_row, "robustness_evidence_receipt": valid_receipt}]}
+    )
+    assert eligible == ["cand_vbt"]
+    assert ineligible == {}
+
+    invalid_receipts = [
+        None,
+        {},
+        {"status": "pending"},
+        {**valid_receipt, "binding": {"candidate_id": "other"}},
+        {**valid_receipt, "binding": {**valid_receipt["binding"], "screening_artifact_hash": artifact["screening_artifact_hash"]}},
+        {**valid_receipt, "binding": {**valid_receipt["binding"], "parameter_values_hash": "9" * 64}},
+        {**valid_receipt, "binding": {**valid_receipt["binding"], "lake_manifest_hash": ""}},
+        {**valid_receipt, "source_evidence": {"wfc_rows": {"sha256": "f" * 64}}},
+        {
+            **valid_receipt,
+            "source_evidence": {
+                "wfc_rows": {
+                    "path": "research_cards/robustness/wfc_rows.json",
+                    "sha256": "sha256:" + "f" * 64,
+                }
+            },
+        },
+        {**valid_receipt, "source_evidence": {"wfc_rows": "research_cards/wfc.json#sha256:not-a-digest"}},
+        {**valid_receipt, "evidence_entry_hash": "not-a-digest"},
+    ]
+    for receipt in invalid_receipts:
+        eligible, ineligible = run_pipeline._strict_replay_eligible_ids(
+            {**artifact, "promoted": [{**base_row, "robustness_evidence_receipt": receipt}]}
+        )
+        assert eligible == []
+        assert ineligible == {"cand_vbt": ["robustness_evidence_receipt_missing"]}
+
+    invalid_artifacts = [
+        {key: value for key, value in artifact.items() if key != "robustness_evidence_receipt"},
+        {
+            **artifact,
+            "robustness_evidence_receipt": {
+                **artifact["robustness_evidence_receipt"],
+                "input_screening_artifact_hash": "8" * 64,
+            },
+        },
+        {
+            **artifact,
+            "robustness_evidence_receipt": {
+                **artifact["robustness_evidence_receipt"],
+                "input_screening_artifact_hash": "sha256:" + artifact["screening_artifact_hash"],
+            },
+        },
+        {
+            **artifact,
+            "robustness_evidence_receipt": {
+                **artifact["robustness_evidence_receipt"],
+                "robustness_evidence_schema": "wrong_schema",
+            },
+        },
+        {
+            **artifact,
+            "robustness_evidence_receipt": {
+                **artifact["robustness_evidence_receipt"],
+                "matched_candidate_ids": [],
+            },
+        },
+        {
+            **artifact,
+            "robustness_evidence_receipt": {
+                **artifact["robustness_evidence_receipt"],
+                "eligible_candidate_ids": [],
+            },
+        },
+        {
+            **artifact,
+            "robustness_evidence_receipt": {
+                **artifact["robustness_evidence_receipt"],
+                "row_receipt_hashes": {"cand_vbt": "0" * 64},
+            },
+        },
+    ]
+    for invalid_artifact in invalid_artifacts:
+        eligible, ineligible = run_pipeline._strict_replay_eligible_ids(
+            {
+                **invalid_artifact,
+                "promoted": [{**base_row, "robustness_evidence_receipt": valid_receipt}],
+            }
+        )
+        assert eligible == []
+        assert ineligible == {"cand_vbt": ["robustness_evidence_receipt_missing"]}
+
+
 def test_run_pipeline_vectorbt_hftbacktest_opt_in_no_promoted_does_not_call_writer(
     tmp_path, monkeypatch, capsys
 ):

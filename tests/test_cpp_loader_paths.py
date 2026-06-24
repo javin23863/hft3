@@ -189,5 +189,17 @@ def test_run_c_lane_uses_standard_cmake_python_hint() -> None:
 
     assert "-DPython3_EXECUTABLE=\"$PYTHON_BIN\"" in script
     assert "-DHFT3_PYTHON_EXECUTABLE=\"$PYTHON_BIN\"" not in script
+    assert "CC_BIN=\"${CC:-gcc}\"" in script
+    assert "CXX_BIN=\"${CXX:-g++}\"" in script
+    assert "-DCMAKE_CXX_COMPILER=\"$CXX_BIN\"" in script
+    assert "\"$CXX_BIN\" -std=c++20" in script
+    assert "CPP_LANE_REPORT_DIR=\"${CPP_LANE_REPORT_DIR:-$REPO/reports/cpp_lane}\"" in script
+    assert "HFT3_COMMIT=\"$(git -C \"$REPO\" rev-parse HEAD" in script
+    assert "\"status\": \"pass\"" in script
+    assert "\"hft3_commit\": hft3_commit" in script
+    assert "hft3_features_cpp_verify_cpp_parity" in script
+    assert "risk_manager_atomic_stress_spsc_queue_stress_safety_poller_concurrent" in script
+    assert "test_decision_runtime_hardening_test_safety_failure_injection" in script
+    assert "test_engine_loop_hft3_engine" in script
     assert "set(Python3_EXECUTABLE" in cmake
     assert "set(PYTHON_EXECUTABLE" in cmake

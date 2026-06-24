@@ -10,6 +10,7 @@ from backtest_pipeline.src import hftbacktest_realism as hbt5
 sys.path.append(str(Path(__file__).resolve().parent))
 
 from test_hftbacktest_realism_hbt4 import (  # noqa: E402
+    NATIVE_CPP_HOT_PATH_EVIDENCE,
     NATIVE_CPP_LATENCY_EVIDENCE,
     _constant_latency_model,
     _valid_l2_fill_queue_model,
@@ -92,7 +93,7 @@ def _run_hbt5(
         fill_queue_model_path=fill_queue_path,
         observation_artifact_path=observation_artifact_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt5",
     )
     return out_dir, payload

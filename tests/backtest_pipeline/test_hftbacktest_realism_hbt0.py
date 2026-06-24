@@ -20,6 +20,7 @@ from backtest_pipeline.src.hftbacktest_realism import (
 from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
 
 from hft_screening_fixtures import (
+    NATIVE_CPP_HOT_PATH_EVIDENCE,
     NATIVE_CPP_LATENCY_EVIDENCE,
     screening_artifact_shell,
 )
@@ -46,6 +47,84 @@ def _write_screening(path: Path, artifact: dict | None = None) -> Path:
     return path
 
 
+def _write_json_evidence(repo_root: Path, rel_path: str, payload: dict) -> str:
+    path = repo_root / rel_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return f"{rel_path}#sha256:{hbt0._sha256_file(path)}"
+
+
+def _cpp_receipt(evidence_class: str, checks: list[str], *, commit: str = "hft3sha") -> dict:
+    return {
+        "schema": "hft3_cpp_lane_receipt_v1",
+        "status": "pass",
+        "run_id": "test_cpp_lane",
+        "created_at_utc": "2026-06-24T00:00:00+00:00",
+        "hft3_commit": commit,
+        "cc": "gcc-12",
+        "cxx": "g++-12",
+        "build_dir": "build/test",
+        "npz_path": "data/npz/test.npz",
+        "evidence_class": evidence_class,
+        "checks": checks,
+    }
+
+
+def _native_latency_receipt() -> dict:
+    return {
+        "schema_version": "latency_baseline_summary_v1",
+        "primary_kpi": "tick_to_send_us",
+        "operating_profile": {
+            "host": "CHI404",
+            "hot_path_language": "c++",
+            "wrapper": "none",
+        },
+        "broker_artifacts": {
+            "probe": "rithmic_latency_probe",
+            "hot_path_language": "c++",
+            "wrapper": "none",
+        },
+    }
+
+
+def _content_backed_native_evidence(repo_root: Path, *, commit: str = "hft3sha") -> list[str]:
+    return [
+        _write_json_evidence(
+            repo_root,
+            "runtime/latency_reports/rithmic_latency_probe_latency_summary.json",
+            _native_latency_receipt(),
+        ),
+        _write_json_evidence(
+            repo_root,
+            "reports/cpp_lane/hft3_features_cpp_verify_cpp_parity.json",
+            _cpp_receipt("features", ["hft3_features_cpp", "verify_cpp_parity.py"], commit=commit),
+        ),
+        _write_json_evidence(
+            repo_root,
+            "reports/cpp_lane/risk_manager_atomic_stress_spsc_queue_stress_safety_poller_concurrent.json",
+            _cpp_receipt(
+                "risk_concurrency",
+                ["risk_manager_atomic_stress", "spsc_queue_stress", "safety_poller_concurrent"],
+                commit=commit,
+            ),
+        ),
+        _write_json_evidence(
+            repo_root,
+            "reports/cpp_lane/test_decision_runtime_hardening_test_safety_failure_injection.json",
+            _cpp_receipt(
+                "decision_safety",
+                ["test_decision_runtime_hardening", "test_safety_failure_injection"],
+                commit=commit,
+            ),
+        ),
+        _write_json_evidence(
+            repo_root,
+            "reports/cpp_lane/test_engine_loop_hft3_engine.json",
+            _cpp_receipt("engine_loop", ["test_engine_loop", "hft3_engine"], commit=commit),
+        ),
+    ]
+
+
 def _fake_hftbacktest_install(version: str = "2.4.2") -> dict[str, object]:
     return {
         "available": True,
@@ -63,7 +142,7 @@ def test_source_lock_schema_hash_and_required_fields(tmp_path: Path, monkeypatch
     lock = build_hftbacktest_source_lock(
         repo_root=tmp_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         native_hot_path_status="provided",
         created_at_utc="2026-06-16T00:00:00+00:00",
     )
@@ -103,7 +182,7 @@ def test_source_lock_fails_closed_on_empty_required_lists(
     lock = build_hftbacktest_source_lock(
         repo_root=tmp_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[hbt0.NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_ROOTS[0] + "order_ack_summary.json"],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         native_hot_path_status="provided",
     )
     lock["docs_pages_used"] = []
@@ -126,7 +205,7 @@ def test_source_lock_fails_closed_on_non_list_required_list_fields(
     lock = build_hftbacktest_source_lock(
         repo_root=tmp_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[hbt0.NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_ROOTS[0] + "order_ack_summary.json"],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         native_hot_path_status="provided",
     )
     lock["docs_pages_used"] = "https://hftbacktest.readthedocs.io"
@@ -201,10 +280,11 @@ def test_source_lock_accepts_hash_backed_c_lane_receipt_evidence(
         repo_root=tmp_path,
         upstream_ref="v2.4.2",
         native_hot_path_evidence=[
-            f"reports/cpp_lane/run_c_lane_summary.json#sha256:{'a' * 64}",
+            f"runtime/latency_reports/rithmic_latency_probe_latency_summary.json#sha256:{'a' * 64}",
             f"reports/cpp_lane/hft3_features_cpp_parity.json#sha256:{'b' * 64}",
             f"reports/cpp_lane/tsan_risk_manager_atomic_stress.json#sha256:{'c' * 64}",
-            f"reports/cpp_lane/test_engine_loop.json#sha256:{'d' * 64}",
+            f"reports/cpp_lane/test_decision_runtime_hardening_test_safety_failure_injection.json#sha256:{'d' * 64}",
+            f"reports/cpp_lane/test_engine_loop.json#sha256:{'e' * 64}",
         ],
         native_hot_path_status="provided",
     )
@@ -212,6 +292,112 @@ def test_source_lock_accepts_hash_backed_c_lane_receipt_evidence(
     reasons = validate_hftbacktest_source_lock(lock)
 
     assert "native_cpp_hot_path_evidence_unrecognized" not in reasons
+    assert not any(reason.startswith("native_cpp_hot_path_evidence_incomplete:") for reason in reasons)
+
+
+def test_source_lock_counts_whitelisted_latency_baseline_as_latency_evidence(
+    tmp_path: Path,
+) -> None:
+    lock = build_hftbacktest_source_lock(
+        repo_root=tmp_path,
+        upstream_ref="v2.4.2",
+        native_hot_path_evidence=[
+            f"reports/latency_baselines/order_ack_campaign_20260611T072116Z_summary.json#sha256:{'a' * 64}",
+            f"reports/cpp_lane/hft3_features_cpp_parity.json#sha256:{'b' * 64}",
+            f"reports/cpp_lane/tsan_risk_manager_atomic_stress.json#sha256:{'c' * 64}",
+            f"reports/cpp_lane/test_decision_runtime_hardening_test_safety_failure_injection.json#sha256:{'d' * 64}",
+            f"reports/cpp_lane/test_engine_loop.json#sha256:{'e' * 64}",
+        ],
+        native_hot_path_status="provided",
+    )
+
+    reasons = validate_hftbacktest_source_lock(lock)
+
+    assert "native_cpp_hot_path_evidence_unrecognized" not in reasons
+    assert not any(reason.startswith("native_cpp_hot_path_evidence_incomplete:") for reason in reasons)
+
+
+def test_source_lock_rejects_stale_cpp_receipt_content(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(hbt0, "_repo_commit", lambda _root: "hft3sha")
+    monkeypatch.setattr(hbt0, "_repo_dirty", lambda _root: False)
+    monkeypatch.setattr(hbt0, "detect_hftbacktest_installation", _fake_hftbacktest_install)
+
+    lock = build_hftbacktest_source_lock(
+        repo_root=tmp_path,
+        upstream_ref="v2.4.2",
+        native_hot_path_evidence=_content_backed_native_evidence(tmp_path, commit="oldsha"),
+        native_hot_path_status="provided",
+    )
+
+    reasons = validate_hftbacktest_source_lock(lock)
+
+    assert any(
+        reason.startswith("native_cpp_hot_path_evidence_receipt_invalid:")
+        for reason in reasons
+    )
+    assert any(
+        "cpp_receipt_hft3_commit_mismatch" in error
+        for check in lock["native_hot_path_evidence_receipt_checks"]
+        for error in check.get("errors", [])
+    )
+
+
+def test_source_lock_rejects_latency_path_without_native_rithmic_content(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(hbt0, "_repo_commit", lambda _root: "hft3sha")
+    monkeypatch.setattr(hbt0, "_repo_dirty", lambda _root: False)
+    monkeypatch.setattr(hbt0, "detect_hftbacktest_installation", _fake_hftbacktest_install)
+    evidence = _content_backed_native_evidence(tmp_path)
+    bad_latency = _write_json_evidence(
+        tmp_path,
+        "runtime/latency_reports/rithmic_latency_probe_latency_summary.json",
+        {"schema_version": "latency_baseline_summary_v1", "note": "python-generated"},
+    )
+    evidence[0] = bad_latency
+
+    lock = build_hftbacktest_source_lock(
+        repo_root=tmp_path,
+        upstream_ref="v2.4.2",
+        native_hot_path_evidence=evidence,
+        native_hot_path_status="provided",
+    )
+
+    reasons = validate_hftbacktest_source_lock(lock)
+
+    assert any(
+        reason.startswith("native_cpp_hot_path_evidence_receipt_invalid:")
+        for reason in reasons
+    )
+    assert any(
+        "latency_receipt_not_chi404_native_rithmic_cpp" in error
+        for check in lock["native_hot_path_evidence_receipt_checks"]
+        for error in check.get("errors", [])
+    )
+
+
+def test_source_lock_rejects_latency_only_native_hot_path_evidence(
+    tmp_path: Path,
+) -> None:
+    lock = build_hftbacktest_source_lock(
+        repo_root=tmp_path,
+        upstream_ref="v2.4.2",
+        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_status="provided",
+    )
+
+    reasons = validate_hftbacktest_source_lock(lock)
+
+    assert (
+        "native_cpp_hot_path_evidence_incomplete:"
+        "features,risk_concurrency,decision_safety,engine_loop"
+    ) in reasons
 
 
 @pytest.mark.parametrize(
@@ -250,6 +436,9 @@ def test_source_lock_rejects_receipt_shaped_native_evidence_without_valid_hash(
         "build/hft3_engine#sha256:" + "b" * 64,
         "engine/src/hft3_engine_main.cpp#sha256:" + "c" * 64,
         "reports/cpp_lane/evidence.json#sha256:" + "d" * 64,
+        "reports/latency_baselines/blocker_capability.json#sha256:" + "f" * 64,
+        "reports/latency_baselines/fake_summary.json#sha256:" + "f" * 64,
+        "reports/latency_baselines/ccfake_summary.json#sha256:" + "f" * 64,
     ],
 )
 def test_source_lock_rejects_source_or_binary_native_hot_path_claims(
@@ -286,7 +475,7 @@ def test_unavailable_hftbacktest_package_fails_closed(
     lock = build_hftbacktest_source_lock(
         repo_root=tmp_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         native_hot_path_status="provided",
     )
     reasons = validate_hftbacktest_source_lock(lock)
@@ -313,7 +502,7 @@ def test_source_lock_unverified_upstream_ref_is_not_self_reported_valid(
     lock = build_hftbacktest_source_lock(
         repo_root=tmp_path,
         upstream_ref="not-a-real-hbt-ref",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         native_hot_path_status="provided",
     )
     reasons = validate_hftbacktest_source_lock(lock)
@@ -342,7 +531,7 @@ def test_source_lock_verified_upstream_ref_matches_installed_hftbacktest_version
     lock = build_hftbacktest_source_lock(
         repo_root=tmp_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         native_hot_path_status="provided",
     )
 
@@ -476,7 +665,7 @@ def test_replay_pass_is_forbidden_even_with_valid_source_lock(
     lock = build_hftbacktest_source_lock(
         repo_root=tmp_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         native_hot_path_status="provided",
     )
     summary = {
@@ -505,7 +694,7 @@ def test_replay_pass_with_fail_closed_reasons_is_refused(
     lock = build_hftbacktest_source_lock(
         repo_root=tmp_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         native_hot_path_status="provided",
     )
     summary = {
@@ -539,7 +728,7 @@ def test_hbt0_writes_source_lock_and_fail_closed_summary(
         out_dir=tmp_path / "research_cards" / "hftbacktest_realism" / "hbt0_test",
         screening_artifact_path=screening_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt0_test",
     )
 
@@ -570,7 +759,7 @@ def test_hbt0_refuses_screening_artifact_hash_mismatch(tmp_path: Path) -> None:
         out_dir=tmp_path / "out",
         screening_artifact_path=screening_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt0_hash_mismatch",
     )
 
@@ -587,7 +776,7 @@ def test_hbt0_refuses_missing_terminal_screening_hash(tmp_path: Path) -> None:
         out_dir=tmp_path / "out",
         screening_artifact_path=screening_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt0_missing_screening_hash",
     )
 
@@ -609,7 +798,7 @@ def test_hbt0_refuses_malformed_nonterminal_screening_artifact(tmp_path: Path) -
         out_dir=tmp_path / "out",
         screening_artifact_path=screening_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt0_malformed_screening",
     )
 
@@ -632,7 +821,7 @@ def test_hbt0_refuses_required_non_rust_screening_artifact(tmp_path: Path) -> No
         screening_artifact_path=screening_path,
         data_npz_path=tmp_path / "not_a_valid_npz.npz",
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt0_non_rust_screening",
     )
 
@@ -662,7 +851,7 @@ def test_hbt0_derives_rust_requirement_from_broad_screening_scope(
         out_dir=tmp_path / "out",
         screening_artifact_path=screening_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt0_broad_scope_non_rust",
     )
 
@@ -683,7 +872,7 @@ def test_hbt0_requires_promoted_ids_even_when_candidate_id_is_supplied(tmp_path:
         screening_artifact_path=screening_path,
         candidate_id="cand_hbt0",
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt0_no_promoted_ids",
     )
 
@@ -700,7 +889,7 @@ def test_hbt0_missing_screening_artifact_path_still_writes_fail_closed_summary(
         out_dir=tmp_path / "out",
         screening_artifact_path=tmp_path / "missing.json",
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt0_missing_screening",
     )
 
@@ -742,7 +931,11 @@ def test_hbt0_cli_writes_fail_closed_artifacts(tmp_path: Path, monkeypatch: pyte
     assert module.main() == 2
     assert (out_root / "cli_hbt0" / "hftbacktest_source_lock.json").is_file()
     summary = json.loads((out_root / "cli_hbt0" / "replay_summary.json").read_text(encoding="utf-8"))
-    assert summary["replay_realism_status"] == "research_only"
+    assert summary["replay_realism_status"] == "fail"
+    assert (
+        "native_cpp_hot_path_evidence_incomplete:"
+        "features,risk_concurrency,decision_safety,engine_loop"
+    ) in summary["fail_closed_reasons"]
 
 
 def test_hbt0_code_does_not_name_retired_replay_entrypoints() -> None:

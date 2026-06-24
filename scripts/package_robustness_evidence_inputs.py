@@ -104,6 +104,13 @@ def _is_sha256(value: Any) -> bool:
     return len(text) == 64 and all(ch in "0123456789abcdefABCDEF" for ch in text)
 
 
+def _is_exact_hash_bound_source(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    path, sep, digest = value.rpartition("#sha256:")
+    return bool(path) and sep == "#sha256:" and "#" not in path and _is_sha256(digest)
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -132,7 +139,7 @@ def _normalise_source_evidence(
         if isinstance(payload, str):
             if "#sha256:" in payload:
                 digest = payload.rsplit("#sha256:", 1)[-1]
-                if not _is_sha256(digest):
+                if not _is_sha256(digest) or not _is_exact_hash_bound_source(payload):
                     raise ValueError(f"source_evidence_hash_invalid:{label}")
                 normalised[label] = payload
                 continue
@@ -154,10 +161,10 @@ def _normalise_source_evidence(
             resolved = _resolve_source_path(source_root, str(entry["path"]))
             if not resolved.is_file():
                 raise ValueError(f"source_evidence_hash_missing:{label}")
-            entry["sha256"] = _sha256_file(resolved)
+            digest = _sha256_file(resolved)
         elif not _is_sha256(digest):
             raise ValueError(f"source_evidence_hash_invalid:{label}")
-        normalised[label] = entry
+        normalised[label] = f"{source_path}#sha256:{str(digest).removeprefix('sha256:')}"
     return normalised
 
 

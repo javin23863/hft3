@@ -9,6 +9,7 @@ from backtest_pipeline.src import hftbacktest_realism as hbt3
 from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
 
 from hft_screening_fixtures import (
+    NATIVE_CPP_HOT_PATH_EVIDENCE,
     NATIVE_CPP_LATENCY_EVIDENCE,
     native_probe_latency_fields,
     screening_artifact_shell,
@@ -118,7 +119,7 @@ def test_valid_l3_fill_queue_model_artifact_passes_and_persists_summary_fields(
         latency_model_path=latency_path,
         fill_queue_model_path=fill_queue_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt3_test",
     )
 
@@ -331,7 +332,7 @@ def test_missing_fill_queue_model_path_remains_research_only_not_certifying(
         latency_model_path=latency_path,
         fill_queue_model_path=None,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt3_missing_fill_queue",
     )
 
@@ -381,7 +382,7 @@ def test_broad_non_rust_vectorbt_screening_artifact_fails_closed_through_hbt3_wr
         latency_model_path=latency_path,
         fill_queue_model_path=fill_queue_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id=f"hbt3_{screening_scope}_non_rust_screening",
     )
 

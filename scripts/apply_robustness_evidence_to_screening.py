@@ -32,6 +32,7 @@ from backtest_pipeline.src.vectorbt_adapter import (
 )
 
 EVIDENCE_SCHEMA = "hft3_robustness_evidence_inputs_v1"
+APPLICATION_RECEIPT_SCHEMA = "hft3_robustness_evidence_application_receipt_v1"
 REPLAY_STATUS_FIELDS = (
     "wfc_status",
     "dsr_status",
@@ -122,6 +123,13 @@ def _is_sha256(value: Any) -> bool:
     return len(text) == 64 and all(ch in "0123456789abcdefABCDEF" for ch in text)
 
 
+def _is_exact_hash_bound_source(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    path, sep, digest = value.rpartition("#sha256:")
+    return bool(path) and sep == "#sha256:" and "#" not in path and _is_sha256(digest)
+
+
 def _source_evidence_errors(entry: Any) -> list[str]:
     if not isinstance(entry, Mapping):
         return ["evidence_entry_must_be_object"]
@@ -131,18 +139,12 @@ def _source_evidence_errors(entry: Any) -> list[str]:
     errors: list[str] = []
     for name, payload in source_evidence.items():
         label = str(name)
-        if isinstance(payload, str):
-            if "#sha256:" not in payload:
-                errors.append(f"source_evidence_hash_missing:{label}")
-            elif not _is_sha256(payload.rsplit("#sha256:", 1)[-1]):
-                errors.append(f"source_evidence_hash_invalid:{label}")
-            continue
-        if not isinstance(payload, Mapping):
+        if not isinstance(payload, str):
             errors.append(f"source_evidence_malformed:{label}")
             continue
-        if not str(payload.get("path") or payload.get("uri") or payload.get("source") or ""):
-            errors.append(f"source_evidence_path_missing:{label}")
-        if not _is_sha256(payload.get("sha256") or payload.get("hash")):
+        if "#sha256:" not in payload:
+            errors.append(f"source_evidence_hash_missing:{label}")
+        elif not _is_exact_hash_bound_source(payload):
             errors.append(f"source_evidence_hash_invalid:{label}")
     return errors
 
@@ -317,6 +319,7 @@ def apply_robustness_evidence(
     matched_ids: list[str] = []
     eligible_ids: list[str] = []
     ineligible_reasons: dict[str, list[str]] = {}
+    row_receipt_hashes: dict[str, str] = {}
 
     for row in promoted:
         if not isinstance(row, dict):
@@ -336,6 +339,9 @@ def apply_robustness_evidence(
         )
         if eligible:
             eligible_ids.append(candidate_id)
+            receipt = row.get("robustness_evidence_receipt")
+            if isinstance(receipt, Mapping):
+                row_receipt_hashes[candidate_id] = _evidence_entry_hash(receipt)
         else:
             ineligible_reasons[candidate_id] = reasons
 
@@ -347,6 +353,14 @@ def apply_robustness_evidence(
             f"eligible_count={len(eligible_ids)}:min_eligible={min_eligible}"
         )
 
+    updated["robustness_evidence_receipt"] = {
+        "schema": APPLICATION_RECEIPT_SCHEMA,
+        "input_screening_artifact_hash": str(artifact.get("screening_artifact_hash") or ""),
+        "robustness_evidence_schema": EVIDENCE_SCHEMA,
+        "matched_candidate_ids": matched_ids,
+        "eligible_candidate_ids": eligible_ids,
+        "row_receipt_hashes": row_receipt_hashes,
+    }
     updated["screening_artifact_hash"] = compute_screening_artifact_hash(updated)
     validate_screening_artifact(updated)
     persist_screening_artifact(updated, out_path)
