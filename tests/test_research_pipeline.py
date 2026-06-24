@@ -651,6 +651,29 @@ def test_aggregate_evaluation_results_applies_risk_gates():
     assert aggregate.passes_all_gates() is False
 
 
+def test_aggregate_tail_loss_normalizes_legacy_positive_magnitudes():
+    from research_pipeline.evaluation import aggregate_evaluation_results
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    candidate = CandidateModel(
+        candidate_id="cand_tail_legacy",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis="cross-event",
+    )
+    gates = GateThresholds(min_trades=0, max_tail_loss=-5.0)
+    per_event = [
+        EvaluationResult(candidate, "CPI_2024_09_11_TIGHT", 10.0, 5, 0.6, 2.0, 2.0, gates),
+        EvaluationResult(candidate, "NFP_2024_10_04", 5.0, 5, 0.6, 1.0, 7.0, gates),
+    ]
+
+    aggregate = aggregate_evaluation_results(candidate, per_event, gates=gates)
+
+    assert aggregate.tail_loss == -7.0
+    assert [event["tail_loss"] for event in aggregate.event_results] == [-2.0, -7.0]
+    assert aggregate.passes_all_gates() is False
+
+
 def test_sortino_single_downside_event_does_not_bypass_gate():
     from research_pipeline.evaluation import aggregate_evaluation_results
     from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
@@ -798,7 +821,9 @@ def test_tail_loss_gate_uses_signed_tail_pnl_floor():
     gates = GateThresholds(min_trades=0, max_tail_loss=-2.0)
 
     assert gates.passes(1.0, 1, -1.0, 1.0)
+    assert gates.passes(1.0, 1, 1.0, 1.0)
     assert not gates.passes(1.0, 1, -5.0, 1.0)
+    assert not gates.passes(1.0, 1, 5.0, 1.0)
 
 
 def test_tail_loss_gate_accepts_legacy_positive_loss_magnitude_cap():
@@ -3681,6 +3706,44 @@ def test_evaluate_model_smoke():
     )
     assert result.error is None
     assert result.num_trades >= 0
+
+
+def test_evaluate_model_normalizes_workbench_tail_loss_magnitude(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    from research_pipeline.evaluation import evaluate_model
+    from research_pipeline.types import CandidateModel, GateThresholds
+
+    class FakeWorkbenchEngine:
+        def __init__(self, repo_root):
+            self.repo_root = repo_root
+
+        def run(self, *args, **kwargs):
+            return {
+                "report": {"net_pnl": 10.0, "num_trades": 5, "expectancy": 2.0},
+                "diagnostics": {"win_rate": 1.0, "tail_loss": 5.0},
+            }
+
+    fake_engine_module = types.ModuleType("workbench.src.run.engine")
+    fake_engine_module.WorkbenchEngine = FakeWorkbenchEngine
+    monkeypatch.setitem(sys.modules, "workbench.src.run.engine", fake_engine_module)
+
+    result = evaluate_model(
+        CandidateModel(
+            candidate_id="cand_tail_workbench",
+            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+            strategy_params={},
+            thesis="tail gate",
+        ),
+        "CPI_2024_09_11_TIGHT",
+        tmp_path,
+        gates=GateThresholds(min_trades=0, max_tail_loss=-2.0),
+    )
+
+    assert result.error is None
+    assert result.tail_loss == -5.0
+    assert result.passes_all_gates() is False
 
 
 def test_vendor_submodules_present():

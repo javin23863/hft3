@@ -9,7 +9,12 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from features_engine.src.model_registry import resolve_model_id
 
-from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+from research_pipeline.types import (
+    CandidateModel,
+    EvaluationResult,
+    GateThresholds,
+    signed_tail_loss_value,
+)
 
 
 def parse_event_ids(values: str | Sequence[str]) -> list[str]:
@@ -60,7 +65,15 @@ def aggregate_evaluation_results(
     ]
     date_keys = [date_key for date_key, _, _ in dated_results if date_key is not None]
     risk_metrics_gateable = len(date_keys) == len(results)
-    duplicate_date_warning = risk_metrics_gateable and len(set(date_keys)) != len(date_keys)
+    duplicate_date_keys = (
+        {
+            date_key
+            for date_key in date_keys
+            if date_keys.count(date_key) > 1
+        }
+        if risk_metrics_gateable
+        else set()
+    )
     ordered_results = [
         result
         for _, _, result in sorted(dated_results, key=lambda item: (item[0], item[1]))
@@ -81,11 +94,13 @@ def aggregate_evaluation_results(
             "num_trades": result.num_trades,
             "win_rate": result.win_rate,
             "expectancy": result.expectancy,
-            "tail_loss": result.tail_loss,
+            "tail_loss": signed_tail_loss_value(result.tail_loss),
             "error": result.error,
             "passes": _passes_basic_event_gates(result, gates),
             "risk_metric_warning": (
-                "same_date_event_window" if duplicate_date_warning else None
+                "same_date_event_window"
+                if _event_date_key(result.event_id) in duplicate_date_keys
+                else None
             ),
         }
         for result in ordered_results
@@ -127,7 +142,7 @@ def _event_date_key(event_id: str) -> tuple[int, int, int] | None:
 
 
 def _worst_signed_tail_pnl(results: Sequence[EvaluationResult]) -> float:
-    return min(float(result.tail_loss) for result in results)
+    return min(signed_tail_loss_value(result.tail_loss) for result in results)
 
 
 def _passes_basic_event_gates(result: EvaluationResult, gates: GateThresholds) -> bool:
@@ -226,7 +241,7 @@ def evaluate_model(
     num_trades = int(report.get("num_trades", diag.get("num_trades", 0)))
     win_rate = float(diag.get("win_rate", 0.0))
     expectancy = float(diag.get("expectancy", report.get("expectancy", 0.0)))
-    tail_loss = float(diag.get("tail_loss", 0.0))
+    tail_loss = signed_tail_loss_value(float(diag.get("tail_loss", 0.0)))
 
     return EvaluationResult(
         candidate=candidate,
@@ -273,8 +288,6 @@ def _sortino(pnls: Sequence[float]) -> float:
     if not downside:
         if mean > 0.0:
             return 1e9
-        if mean < 0.0:
-            return -1e9
         return 0.0
     downside_std = _stddev(downside)
     if downside_std == 0.0:

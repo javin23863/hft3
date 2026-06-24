@@ -7,6 +7,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 
+def signed_tail_loss_value(tail_loss: float) -> float:
+    """Normalize tail loss to signed tail-PnL, accepting legacy positive loss magnitudes."""
+    value = float(tail_loss)
+    return -value if value > 0.0 else value
+
+
 @dataclass
 class ParsedHypothesis:
     thesis: str
@@ -58,7 +64,7 @@ class GateThresholds:
     def signed_tail_loss_floor(self) -> float:
         """Return the signed tail-PnL floor used for gate comparisons."""
         threshold = float(self.max_tail_loss)
-        return -threshold if threshold > 0.0 else threshold
+        return signed_tail_loss_value(threshold)
 
     def passes(
         self,
@@ -76,7 +82,7 @@ class GateThresholds:
             return False
         if num_trades < self.min_trades:
             return False
-        if tail_loss < self.signed_tail_loss_floor():
+        if signed_tail_loss_value(tail_loss) < self.signed_tail_loss_floor():
             return False
         if win_rate < self.min_win_rate:
             return False
