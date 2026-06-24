@@ -80,7 +80,7 @@ def aggregate_evaluation_results(
             "expectancy": result.expectancy,
             "tail_loss": result.tail_loss,
             "error": result.error,
-            "passes": result.passes_all_gates(),
+            "passes": _passes_basic_event_gates(result, gates),
         }
         for result in ordered_results
     ]
@@ -122,6 +122,18 @@ def _event_date_key(event_id: str) -> tuple[int, int, int] | None:
 
 def _worst_signed_tail_pnl(results: Sequence[EvaluationResult]) -> float:
     return min(float(result.tail_loss) for result in results)
+
+
+def _passes_basic_event_gates(result: EvaluationResult, gates: GateThresholds) -> bool:
+    if result.error:
+        return False
+    return gates.passes(
+        result.net_pnl,
+        result.num_trades,
+        result.tail_loss,
+        result.win_rate,
+        include_risk_metrics=False,
+    )
 
 
 def evaluate_candidate_events(
@@ -251,15 +263,17 @@ def _sharpe(pnls: Sequence[float]) -> float:
 
 def _sortino(pnls: Sequence[float]) -> float:
     downside = [value for value in pnls if value < 0.0]
-    downside_std = _stddev(downside)
-    if downside_std == 0.0:
-        mean = _mean(pnls)
+    mean = _mean(pnls)
+    if not downside:
         if mean > 0.0:
             return 1e9
         if mean < 0.0:
             return -1e9
         return 0.0
-    return _mean(pnls) / downside_std
+    downside_std = _stddev(downside)
+    if downside_std == 0.0:
+        return mean / abs(downside[0])
+    return mean / downside_std
 
 
 def _max_drawdown(pnls: Sequence[float]) -> float:

@@ -624,6 +624,51 @@ def test_aggregate_evaluation_results_applies_risk_gates():
     assert aggregate.passes_all_gates() is False
 
 
+def test_sortino_single_downside_event_does_not_bypass_gate():
+    from research_pipeline.evaluation import aggregate_evaluation_results
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    candidate = CandidateModel(
+        candidate_id="cand_sortino_single_downside",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis="cross-event",
+    )
+    gates = GateThresholds(min_trades=0, min_sortino=1e8)
+    per_event = [
+        EvaluationResult(candidate, "CPI_2024_09_11_TIGHT", 10.0, 5, 0.6, 2.0, -1.0, gates),
+        EvaluationResult(candidate, "NFP_2024_10_04", -1.0, 5, 0.4, -0.2, -1.0, gates),
+        EvaluationResult(candidate, "FOMC_2024_11_07", 5.0, 5, 0.6, 1.0, -0.5, gates),
+    ]
+
+    aggregate = aggregate_evaluation_results(candidate, per_event, gates=gates)
+
+    assert aggregate.sortino < 1e8
+    assert aggregate.passes_all_gates() is False
+
+
+def test_event_payload_passes_uses_basic_gates_under_risk_gates():
+    from research_pipeline.evaluation import aggregate_evaluation_results
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    candidate = CandidateModel(
+        candidate_id="cand_event_payload_passes",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis="cross-event",
+    )
+    gates = GateThresholds(min_trades=1, min_sortino=0.0)
+    per_event = [
+        EvaluationResult(candidate, "CPI_2024_09_11_TIGHT", 10.0, 5, 0.6, 2.0, -1.0, gates),
+        EvaluationResult(candidate, "NFP_2024_10_04", 5.0, 5, 0.6, 1.0, -1.0, gates),
+    ]
+
+    aggregate = aggregate_evaluation_results(candidate, per_event, gates=gates)
+
+    assert [payload["passes"] for payload in aggregate.event_results] == [True, True]
+    assert aggregate.passes_all_gates() is True
+
+
 def test_cross_event_risk_metrics_fail_closed_without_dated_event_order():
     from research_pipeline.evaluation import aggregate_evaluation_results
     from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
@@ -731,8 +776,8 @@ def test_sortino_no_downside_positive_mean_uses_large_sentinel():
     assert _sharpe([2.0]) == 0.0
     assert _sortino([1.0, 2.0, 3.0]) == 1e9
     assert _sortino([0.0, 0.0]) == 0.0
-    assert _sortino([-1.0, 3.0, 3.0]) == 1e9
-    assert _sortino([-3.0, 1.0]) == -1e9
+    assert _sortino([-1.0, 3.0, 3.0]) == pytest.approx(5.0 / 3.0)
+    assert _sortino([-3.0, 1.0]) == pytest.approx(-1.0 / 3.0)
     assert _sortino([-1.0, 1.0]) == 0.0
     assert _max_drawdown([-10.0, 5.0]) == 10.0
     assert _max_drawdown([-5.0, -3.0]) == 8.0
