@@ -18,7 +18,8 @@ def _last_json_object(stdout: str) -> dict:
     else:
         start += 1
     assert start != -1, stdout
-    return json.loads(stdout[start:])
+    payload, _ = json.JSONDecoder().raw_decode(stdout[start:])
+    return payload
 
 
 def test_hftbacktest_realism_preflight_requires_source_lock_and_native_evidence():
@@ -133,6 +134,97 @@ def test_parse_hypothesis_heuristic_spread():
     assert "MES" in parsed.instrument_universe
 
 
+@pytest.mark.parametrize(
+    ("thesis", "expected_symbol"),
+    [
+        ("trade micro NQ futures after CPI", "MNQ"),
+        ("GOLD breakout after claims", "GC"),
+        ("WTI liquidity vacuum after EIA", "CL"),
+        ("10Y queue imbalance during macro shock", "ZN"),
+    ],
+)
+def test_parse_hypothesis_detects_symbol_aliases(thesis, expected_symbol):
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis(thesis, use_llm=False)
+
+    assert expected_symbol in parsed.instrument_universe
+
+
+def test_parse_hypothesis_does_not_seed_mes_when_other_symbol_present():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("GOLD breakout after claims", use_llm=False)
+
+    assert parsed.instrument_universe == ["GC"]
+    assert "MES" not in parsed.instrument_universe
+
+
+def test_parse_hypothesis_prefers_longest_symbol_alias():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("trade micro NQ futures and micro GOLD after CPI", use_llm=False)
+
+    assert "MNQ" in parsed.instrument_universe
+    assert "MGC" in parsed.instrument_universe
+    assert "NQ" not in parsed.instrument_universe
+    assert "GC" not in parsed.instrument_universe
+
+
+def test_parse_hypothesis_uses_model_alias_and_registry_ranges():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("Run a blowout fade on GOLD after CPI", use_llm=False)
+
+    assert parsed.primary_model_id == "SPREAD_BLOWOUT_RECOMPRESSION"
+    assert parsed.param_ranges["signal_threshold"] == [0.02, 0.15]
+    assert parsed.param_ranges["stop_loss"] == [0.05, 0.30]
+    assert parsed.metadata["volatility_regime"] == "high_volatility"
+    assert parsed.metadata["instrument_universe_compatibility"] == "unsupported_instruments"
+    assert parsed.metadata["unsupported_instruments"] == ["GC"]
+
+
+def test_parse_hypothesis_packet_accepts_enriched_fields(monkeypatch):
+    import sys
+    import types
+
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    request = {"request_id": "req_parse_enriched"}
+
+    packet_runner = types.ModuleType("data_layer.llm.packet_runner")
+    packet_runner.run_llm_on_hypothesis_request = (
+        lambda *a, **k: {
+            "llm_status": "ok",
+            "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+            "target_instruments": ["GOLD"],
+            "entry_rule": "fade spread when book imbalance normalizes",
+            "exit_rule": "exit after recompression",
+            "indicative_stop_loss": 0.12,
+            "expected_holding_period": 5,
+        }
+    )
+    data_layer = types.ModuleType("data_layer")
+    llm_pkg = types.ModuleType("data_layer.llm")
+    monkeypatch.setitem(sys.modules, "data_layer", data_layer)
+    monkeypatch.setitem(sys.modules, "data_layer.llm", llm_pkg)
+    monkeypatch.setitem(sys.modules, "data_layer.llm.packet_runner", packet_runner)
+
+    parsed = parse_hypothesis(
+        "Fade GOLD blowout after CPI",
+        pipeline_request=request,
+        repo_root=REPO,
+    )
+
+    assert parsed.instrument_universe == ["GC"]
+    assert parsed.entry_rules == ["fade spread when book imbalance normalizes"]
+    assert parsed.exit_rules == ["exit after recompression"]
+    assert parsed.param_ranges["signal_threshold"] == [0.02, 0.15]
+    assert parsed.metadata["indicative_stop_loss"] == 0.12
+    assert parsed.metadata["expected_holding_period"] == 5
+    assert parsed.metadata["instrument_universe_compatibility"] == "unsupported_instruments"
+
+
 def test_generate_candidates_respects_max():
     from research_pipeline.hypothesis_parser import parse_hypothesis
     from research_pipeline.model_generation import generate_candidates
@@ -140,7 +232,956 @@ def test_generate_candidates_respects_max():
     parsed = parse_hypothesis("spread recompression", use_llm=False)
     cands = list(generate_candidates(parsed, max_candidates=2))
     assert len(cands) == 2
-    assert cands[0].strategy_params["signal_threshold"] != cands[1].strategy_params["signal_threshold"]
+    assert cands[0].strategy_params != cands[1].strategy_params
+    assert "stop_loss_pct" in cands[0].strategy_params
+    assert "take_profit_pct" in cands[0].strategy_params
+
+
+def test_parameter_search_grid_and_vectorbt_ranges_are_deterministic():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+    from research_pipeline.parameter_search import parameter_grid, select_parameters
+
+    parsed = parse_hypothesis("Run a blowout fade on MES after CPI", use_llm=False)
+    base_grid = parameter_grid(parsed)
+    grid = parameter_grid(parsed, expand_for_vectorbt=True)
+    selected = select_parameters(grid, max_candidates=4, search_method="grid")
+
+    assert "holding_period_bars" not in base_grid
+    assert base_grid["stop_loss_pct"] == [None, 0.05, 0.175, 0.3]
+    assert base_grid["take_profit_pct"] == [None, 0.05, 0.175, 0.3]
+    assert grid["signal_threshold"] == [0.02, 0.085, 0.15]
+    assert grid["holding_period_bars"] == [1, 6, 10]
+    assert grid["stop_loss_pct"] == [None, 0.05, 0.175, 0.3]
+    assert grid["take_profit_pct"] == [None, 0.05, 0.175, 0.3]
+    assert [item.params for item in selected] == [item.params for item in select_parameters(grid, max_candidates=4)]
+    assert selected[0].metadata["method_status"] == "ok"
+    assert selected[0].metadata["grid_size"] == 144
+
+
+def test_parameter_search_seeded_and_unavailable_methods_are_explicit():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+    from research_pipeline.parameter_search import parameter_grid, select_parameters
+
+    parsed = parse_hypothesis("Run a blowout fade on MES after CPI", use_llm=False)
+    grid = parameter_grid(parsed, expand_for_vectorbt=True)
+    seeded_a = select_parameters(grid, max_candidates=3, search_method="seeded", seed=9)
+    seeded_b = select_parameters(grid, max_candidates=3, search_method="seeded", seed=9)
+    fallback = select_parameters(grid, max_candidates=3, search_method="bayesian", seed=9)
+
+    assert [item.params for item in seeded_a] == [item.params for item in seeded_b]
+    assert fallback[0].metadata["method_status"] == "method_unavailable"
+    assert fallback[0].metadata["fallback_method"] == "seeded"
+    assert [item.params for item in fallback] == [item.params for item in seeded_a]
+
+
+def test_generate_candidates_records_search_metadata_and_hybrid_limit():
+    from research_pipeline.types import ParsedHypothesis
+    from research_pipeline.model_generation import generate_candidates
+
+    parsed = ParsedHypothesis(
+        thesis="hybrid test",
+        instrument_universe=["MES"],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=[],
+        feature_list=["SECOND_WAVE_CONTINUATION", "STOP_RUN_EXHAUSTION_FADE"],
+        param_ranges={"signal_threshold": [0.1, 0.3]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+
+    cands = list(generate_candidates(parsed, max_candidates=4, hybrid=True, search_method="hybrid", search_seed=3))
+
+    assert len(cands) == 4
+    model_ids = {cand.model_id for cand in cands}
+    assert "SPREAD_BLOWOUT_RECOMPRESSION" in model_ids
+    assert model_ids & {"SECOND_WAVE_CONTINUATION", "STOP_RUN_EXHAUSTION_FADE"}
+    assert all(cand.metadata["parameter_search"]["search_method"] == "hybrid" for cand in cands)
+    assert cands[0].metadata["parameter_search"]["max_candidates"] == 4
+
+
+def test_run_pipeline_dry_run_exposes_search_metadata(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "event_ids": kwargs.get("event_ids"),
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_test_search")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_response",
+        lambda report, request, **kwargs: {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "parsed": {"primary_model_id": report.parsed.primary_model_id},
+        },
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Run a blowout fade on MES after CPI",
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--dry-run",
+        "--no-llm",
+        "--max-candidates",
+        "2",
+        "--search-method",
+        "bayesian",
+        "--search-seed",
+        "9",
+    ])
+
+    assert run_pipeline.main() == 0
+    payload = _last_json_object(capsys.readouterr().out)
+
+    search_meta = payload["candidates"][0]["metadata"]["parameter_search"]
+    assert search_meta["method_status"] == "method_unavailable"
+    assert search_meta["fallback_method"] == "seeded"
+
+
+def test_parse_event_ids_supports_repeated_and_comma_separated_values():
+    from research_pipeline.evaluation import parse_event_ids
+
+    assert parse_event_ids(["CPI_1,NFP_1", "CPI_1", "FOMC_1"]) == ["CPI_1", "NFP_1", "FOMC_1"]
+
+
+def test_aggregate_evaluation_results_applies_risk_gates():
+    from research_pipeline.evaluation import aggregate_evaluation_results
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    candidate = CandidateModel(
+        candidate_id="cand_cross",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis="cross-event",
+    )
+    permissive = GateThresholds(min_trades=0)
+    strict = GateThresholds(min_trades=0, max_drawdown=4.0)
+    per_event = [
+        EvaluationResult(candidate, "CPI_1", 10.0, 5, 0.6, 2.0, -1.0, permissive),
+        EvaluationResult(candidate, "NFP_1", -5.0, 5, 0.4, -1.0, -5.0, permissive),
+        EvaluationResult(candidate, "FOMC_1", 20.0, 10, 0.7, 2.0, -0.5, permissive),
+    ]
+
+    aggregate = aggregate_evaluation_results(candidate, per_event, gates=strict)
+
+    assert aggregate.event_id == "CPI_1,NFP_1,FOMC_1"
+    assert aggregate.net_pnl == 25.0
+    assert aggregate.num_trades == 20
+    assert aggregate.win_rate == pytest.approx(0.6)
+    assert aggregate.tail_loss == -5.0
+    assert aggregate.max_drawdown == 5.0
+    assert aggregate.risk_metrics_source == "cross_event_net_pnl_input_order_diagnostic"
+    assert aggregate.risk_metrics_gateable is False
+    assert aggregate.event_results[1]["event_id"] == "NFP_1"
+    assert aggregate.passes_all_gates() is False
+
+
+def test_cross_event_tail_loss_threshold_requires_gateable_metrics():
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    result = EvaluationResult(
+        candidate=CandidateModel(
+            candidate_id="cand_tail",
+            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+            strategy_params={},
+            thesis="tail gate",
+        ),
+        event_id="CPI_1,NFP_1",
+        net_pnl=10.0,
+        num_trades=5,
+        win_rate=1.0,
+        expectancy=2.0,
+        tail_loss=-5.0,
+        gates=GateThresholds(min_trades=0, max_tail_loss=-2.0),
+        risk_metrics_gateable=False,
+    )
+
+    assert result.passes_all_gates() is False
+
+
+def test_run_pipeline_passes_multi_event_set_to_evaluator(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import EvaluationResult, GateThresholds
+
+    captured = {}
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    def fake_eval(candidate, event_ids, repo_root, **kwargs):
+        captured["event_ids"] = list(event_ids)
+        return EvaluationResult(
+            candidate=candidate,
+            event_id=",".join(event_ids),
+            net_pnl=1.0,
+            num_trades=1,
+            win_rate=1.0,
+            expectancy=1.0,
+            tail_loss=0.0,
+            gates=kwargs.get("gates") or GateThresholds(),
+            sharpe=0.5,
+            sortino=0.5,
+            max_drawdown=0.0,
+        )
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_test_cross_event")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(run_pipeline, "evaluate_candidate_events", fake_eval)
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Run a blowout fade on MES after CPI",
+        "--event-id",
+        "CPI_1,NFP_1",
+        "--event-id",
+        "FOMC_1",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--max-candidates",
+        "1",
+    ])
+
+    assert run_pipeline.main() == 0
+    payload = _last_json_object(capsys.readouterr().out)
+
+    assert captured["event_ids"] == ["CPI_1", "NFP_1", "FOMC_1"]
+    assert payload["report"]["event_id"] == "CPI_1"
+    assert payload["report"]["event_ids"] == ["CPI_1", "NFP_1", "FOMC_1"]
+    assert payload["response_packet"]["event_id"] == "CPI_1"
+    assert payload["response_packet"]["event_ids"] == ["CPI_1", "NFP_1", "FOMC_1"]
+    assert payload["response_packet"]["results"][0]["sharpe"] == 0.5
+
+
+def test_run_pipeline_rejects_multi_event_vectorbt(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Run a blowout fade on MES after CPI",
+        "--event-id",
+        "CPI_1,NFP_1",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--vectorbt",
+    ])
+
+    assert run_pipeline.main() == 2
+    assert "multi-event VectorBT/HftBacktest screening is not implemented" in capsys.readouterr().err
+
+
+def test_run_pipeline_rejects_multi_event_autoresearch(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Run a blowout fade on MES after CPI",
+        "--event-id",
+        "CPI_1,NFP_1",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--autoresearch",
+    ])
+
+    assert run_pipeline.main() == 2
+    assert "--autoresearch accepts exactly one event id" in capsys.readouterr().err
+
+
+def test_run_pipeline_rejects_cli_symbol_mismatch(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "event_ids": kwargs.get("event_ids"),
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_symbol_mismatch")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Trade micro NQ futures after CPI",
+        "--event-id",
+        "CPI_1",
+        "--symbol",
+        "MES",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--dry-run",
+    ])
+
+    assert run_pipeline.main() == 2
+    assert "--symbol MES is not compatible" in capsys.readouterr().err
+
+
+def test_run_pipeline_derives_target_symbol_from_parsed_instrument(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "event_ids": kwargs.get("event_ids"),
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_symbol_derived")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Trade micro NQ futures after CPI",
+        "--event-id",
+        "CPI_1",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--dry-run",
+    ])
+
+    assert run_pipeline.main() == 0
+    payload = _last_json_object(capsys.readouterr().out)
+    assert payload["candidates"][0]["target_symbol"] == "MNQ"
+
+
+def test_run_pipeline_rejects_unsupported_parsed_symbol(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "event_ids": kwargs.get("event_ids"),
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_symbol_unsupported")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Fade spread blowout after CPI on GOLD",
+        "--event-id",
+        "CPI_1",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--dry-run",
+    ])
+
+    assert run_pipeline.main() == 2
+    assert "not compatible with model SPREAD_BLOWOUT_RECOMPRESSION" in capsys.readouterr().err
+
+
+def test_run_pipeline_rejects_model_without_valid_instrument_universe():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+    from research_pipeline.types import ParsedHypothesis
+
+    parsed = parse_hypothesis("Aggressor deceleration fade on MES after CPI", use_llm=False)
+    manual = ParsedHypothesis(
+        thesis="manual",
+        instrument_universe=["MES"],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=[],
+        feature_list=[],
+        param_ranges={},
+        primary_model_id="AGGRESSOR_DECELERATION_FADE",
+    )
+
+    assert parsed.primary_model_id == "AGGRESSOR_DECELERATION_FADE"
+    assert parsed.metadata["instrument_universe_compatibility"] == "missing_valid_instrument_universe"
+    with pytest.raises(ValueError, match="does not declare valid_instrument_universe"):
+        run_pipeline._resolve_target_symbol(parsed, None)
+    with pytest.raises(ValueError, match="does not declare valid_instrument_universe"):
+        run_pipeline._resolve_target_symbol(manual, None)
+
+
+def _rl_rows() -> list[dict[str, float]]:
+    return [
+        {"order_book_imbalance": -0.4, "queue_imbalance": -0.2, "reward": -0.03},
+        {"order_book_imbalance": 0.6, "queue_imbalance": 0.3, "reward": 0.08},
+        {"order_book_imbalance": 0.2, "queue_imbalance": 0.4, "reward": 0.04},
+        {"order_book_imbalance": -0.5, "queue_imbalance": -0.1, "reward": -0.02},
+        {"order_book_imbalance": 0.7, "queue_imbalance": 0.5, "reward": 0.10},
+    ]
+
+
+def test_train_rl_agent_deterministic_and_research_blocked():
+    from research_pipeline.rl_agents import train_rl_agent
+
+    artifact_a = train_rl_agent(
+        _rl_rows(),
+        ["order_book_imbalance", "queue_imbalance"],
+        seed=7,
+        episodes=3,
+        max_steps_per_episode=4,
+        epsilon=0.0,
+    )
+    artifact_b = train_rl_agent(
+        _rl_rows(),
+        ["order_book_imbalance", "queue_imbalance"],
+        seed=7,
+        episodes=3,
+        max_steps_per_episode=4,
+        epsilon=0.0,
+    )
+
+    assert artifact_a == artifact_b
+    assert artifact_a["status"] == "trained_research_only"
+    assert artifact_a["promotion_status"] == "blocked_downstream_validation_required"
+    assert artifact_a["promotable"] is False
+    assert artifact_a["training_budget"]["updates_used"] > 0
+    assert artifact_a["metrics"]["audit_status"] == "chronology_not_audited"
+    assert artifact_a["q_table"]
+    assert artifact_a["policy"]
+
+
+def test_train_rl_agent_audits_monotonic_timestamps():
+    from research_pipeline.rl_agents import train_rl_agent
+
+    rows = [
+        {**row, "timestamp_ns": idx + 1}
+        for idx, row in enumerate(_rl_rows())
+    ]
+    artifact = train_rl_agent(
+        rows,
+        ["order_book_imbalance", "queue_imbalance"],
+        seed=7,
+        episodes=2,
+    )
+
+    assert artifact["train_eval_split"]["chronology_status"] == "monotonic_timestamp"
+    assert artifact["metrics"]["audit_status"] == "chronology_audited"
+
+
+def test_train_rl_agent_rejects_non_monotonic_timestamps():
+    from research_pipeline.rl_agents import train_rl_agent
+
+    rows = [
+        {**row, "timestamp_ns": timestamp}
+        for row, timestamp in zip(_rl_rows(), [1, 2, 2, 4, 5])
+    ]
+
+    with pytest.raises(ValueError, match="strictly increasing"):
+        train_rl_agent(rows, ["order_book_imbalance", "queue_imbalance"])
+
+
+def test_train_rl_agent_rejects_malformed_feature_input():
+    from research_pipeline.rl_agents import train_rl_agent
+
+    rows = _rl_rows()
+    del rows[1]["queue_imbalance"]
+
+    with pytest.raises(ValueError, match="missing feature 'queue_imbalance'"):
+        train_rl_agent(rows, ["order_book_imbalance", "queue_imbalance"])
+
+
+def test_train_rl_agent_rejects_label_like_feature_names():
+    from research_pipeline.rl_agents import train_rl_agent
+
+    rows = [
+        {"future_return": 0.1, "order_book_imbalance": 0.2, "reward": 0.01},
+        {"future_return": -0.2, "order_book_imbalance": -0.1, "reward": -0.01},
+    ]
+
+    with pytest.raises(ValueError, match="non-PIT or label-like"):
+        train_rl_agent(rows, ["future_return"])
+
+
+@pytest.mark.parametrize(
+    "feature_name",
+    ["futureReturn", "nextMid", "targetLabel", "pnlNet", "PnLNet", "PNLNet"],
+)
+def test_train_rl_agent_rejects_camel_case_label_like_feature_names(feature_name):
+    from research_pipeline.rl_agents import train_rl_agent
+
+    rows = [
+        {feature_name: 0.1, "order_book_imbalance": 0.2, "reward": 0.01},
+        {feature_name: -0.2, "order_book_imbalance": -0.1, "reward": -0.01},
+    ]
+
+    with pytest.raises(ValueError, match="non-PIT or label-like"):
+        train_rl_agent(rows, [feature_name])
+
+
+def test_train_rl_agent_does_not_wrap_training_rows():
+    from research_pipeline.rl_agents import train_rl_agent
+
+    transitions = []
+
+    def reward(row, action, next_row, step_index):
+        transitions.append(
+            (
+                row["order_book_imbalance"],
+                None if next_row is None else next_row["order_book_imbalance"],
+            )
+        )
+        return 0.0
+
+    rows = [
+        {"order_book_imbalance": -2.0, "reward": 0.0},
+        {"order_book_imbalance": -1.0, "reward": 0.0},
+        {"order_book_imbalance": 0.0, "reward": 0.0},
+        {"order_book_imbalance": 1.0, "reward": 0.0},
+        {"order_book_imbalance": 2.0, "reward": 0.0},
+    ]
+    train_rl_agent(
+        rows,
+        ["order_book_imbalance"],
+        reward_function=reward,
+        seed=3,
+        episodes=12,
+        max_steps_per_episode=4,
+        train_fraction=0.8,
+    )
+
+    assert (1.0, -2.0) not in transitions
+    assert all(next_value is None or next_value >= value for value, next_value in transitions)
+
+
+def test_train_rl_agent_records_budget_exhaustion():
+    from research_pipeline.rl_agents import train_rl_agent
+
+    artifact = train_rl_agent(
+        _rl_rows(),
+        ["order_book_imbalance", "queue_imbalance"],
+        seed=11,
+        episodes=5,
+        max_steps_per_episode=4,
+        max_updates=3,
+    )
+
+    assert artifact["training_budget"]["updates_used"] == 3
+    assert artifact["training_budget"]["budget_exhausted"] is True
+
+
+def test_validate_rl_artifact_rejects_promotable_policy():
+    from research_pipeline.rl_agents import train_rl_agent, validate_rl_artifact
+
+    artifact = train_rl_agent(
+        _rl_rows(),
+        ["order_book_imbalance", "queue_imbalance"],
+        seed=7,
+        episodes=2,
+        max_steps_per_episode=3,
+    )
+    artifact["promotable"] = True
+
+    with pytest.raises(ValueError, match="non-promotable"):
+        validate_rl_artifact(artifact)
+
+
+def test_run_pipeline_dry_run_rl_writes_policy_artifact(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    rows_path = tmp_path / "rl_rows.jsonl"
+    rows_path.write_text(
+        "\n".join(json.dumps(row) for row in _rl_rows()) + "\n",
+        encoding="utf-8",
+    )
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_test_rl")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_response",
+        lambda report, request, **kwargs: {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "parsed": {"primary_model_id": report.parsed.primary_model_id},
+        },
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Fade spread blowout after CPI",
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--dry-run",
+        "--no-llm",
+        "--max-candidates",
+        "2",
+        "--rl",
+        "--rl-training-data",
+        str(rows_path),
+        "--rl-feature",
+        "order_book_imbalance",
+        "--rl-feature",
+        "queue_imbalance",
+        "--rl-seed",
+        "7",
+    ])
+
+    assert run_pipeline.main() == 0
+    payload = json.loads(capsys.readouterr().out)
+    artifact = payload["rl_policy_artifact"]
+    artifact_path = (
+        tmp_path
+        / "research_cards"
+        / "pipeline_runs"
+        / "pipeline_test_rl"
+        / "rl_policy_artifact.json"
+    )
+
+    assert artifact["status"] == "trained_research_only"
+    assert artifact["promotion_status"] == "blocked_downstream_validation_required"
+    assert artifact["promotable"] is False
+    assert artifact_path.is_file()
+
+
+def test_run_pipeline_rl_blocked_stops_before_vectorbt(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_test_rl_blocked")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(
+        run_pipeline,
+        "filter_candidates",
+        lambda *args, **kwargs: pytest.fail("blocked RL should stop before VectorBT"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Fade spread blowout after CPI",
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--vectorbt-only",
+        "--rl",
+    ])
+
+    assert run_pipeline.main() == 2
+    payload = _last_json_object(capsys.readouterr().out)
+
+    assert payload["status"] == "blocked_rl_research_process"
+    assert payload["rl_policy_artifact"]["status"] == "blocked"
+    assert payload["rl_policy_artifact"]["failure_reasons"] == ["missing_training_data"]
+
+
+def test_run_pipeline_trained_rl_stops_before_deploy(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    rows_path = tmp_path / "rl_rows.jsonl"
+    rows_path.write_text(
+        "\n".join(json.dumps(row) for row in _rl_rows()) + "\n",
+        encoding="utf-8",
+    )
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_test_rl_research_only")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(
+        run_pipeline,
+        "evaluate_candidate_events",
+        lambda *args, **kwargs: pytest.fail("research-only RL should stop before evaluation"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Fade spread blowout after CPI",
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--rl",
+        "--rl-training-data",
+        str(rows_path),
+        "--rl-feature",
+        "order_book_imbalance",
+        "--rl-feature",
+        "queue_imbalance",
+    ])
+
+    assert run_pipeline.main() == 2
+    payload = _last_json_object(capsys.readouterr().out)
+
+    assert payload["status"] == "rl_research_artifact_written"
+    assert payload["rl_policy_artifact"]["status"] == "trained_research_only"
+    assert payload["rl_policy_artifact"]["promotable"] is False
+
+
+def test_run_pipeline_trained_rl_stops_before_vectorbt(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    rows_path = tmp_path / "rl_rows.jsonl"
+    rows_path.write_text(
+        "\n".join(json.dumps(row) for row in _rl_rows()) + "\n",
+        encoding="utf-8",
+    )
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_test_rl_vectorbt_stop")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(
+        run_pipeline,
+        "filter_candidates",
+        lambda *args, **kwargs: pytest.fail("research-only RL should stop before VectorBT"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Fade spread blowout after CPI",
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--vectorbt-only",
+        "--rl",
+        "--rl-training-data",
+        str(rows_path),
+        "--rl-feature",
+        "order_book_imbalance",
+        "--rl-feature",
+        "queue_imbalance",
+    ])
+
+    assert run_pipeline.main() == 2
+    payload = _last_json_object(capsys.readouterr().out)
+
+    assert payload["status"] == "rl_research_artifact_written"
+    assert payload["rl_policy_artifact"]["status"] == "trained_research_only"
+
+
+def test_run_pipeline_dry_run_trained_rl_skips_vectorbt_flag(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    rows_path = tmp_path / "rl_rows.jsonl"
+    rows_path.write_text(
+        "\n".join(json.dumps(row) for row in _rl_rows()) + "\n",
+        encoding="utf-8",
+    )
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_test_rl_dry_vectorbt_skip")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_response",
+        lambda report, request, **kwargs: {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "parsed": {"primary_model_id": report.parsed.primary_model_id},
+        },
+    )
+    monkeypatch.setattr(
+        run_pipeline,
+        "filter_candidates",
+        lambda *args, **kwargs: pytest.fail("RL dry-run artifact inspection should skip VectorBT"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Fade spread blowout after CPI",
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--dry-run",
+        "--no-llm",
+        "--vectorbt-only",
+        "--rl",
+        "--rl-training-data",
+        str(rows_path),
+        "--rl-feature",
+        "order_book_imbalance",
+        "--rl-feature",
+        "queue_imbalance",
+    ])
+
+    assert run_pipeline.main() == 0
+    payload = _last_json_object(capsys.readouterr().out)
+
+    assert "vectorbt_filter" not in payload
+    assert payload["rl_policy_artifact"]["status"] == "trained_research_only"
+
+
+def test_run_pipeline_autoresearch_rl_rejected(monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_request",
+        lambda **kwargs: pytest.fail("--autoresearch --rl should fail before artifact writes"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Fade spread blowout after CPI",
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--autoresearch",
+        "--rl",
+    ])
+
+    assert run_pipeline.main() == 2
+    assert "--rl is implemented for single pipeline runs" in capsys.readouterr().err
 
 
 def _idea_packet():
@@ -262,6 +1303,175 @@ def test_idea_static_filter_rejects_invalid_and_orders_queue():
     }
 
 
+def test_parsed_from_idea_canonicalizes_instrument_aliases():
+    from research_pipeline.idea_generation import parsed_from_idea
+
+    packet = _idea_packet()
+    idea = packet["ideas"][1]
+    idea["instrument_ids"] = ["MICRO ES"]
+
+    parsed = parsed_from_idea(idea)
+
+    assert parsed.instrument_universe == ["MES"]
+    assert parsed.metadata["instrument_universe_compatibility"] == "compatible"
+
+
+def test_idea_set_cli_threads_search_controls_to_generated_candidates(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "event_ids": kwargs.get("event_ids"),
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    packet = _idea_packet()
+    packet["ideas"] = [packet["ideas"][0]]
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_idea_search_controls")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: packet)
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Trade book pressure after CPI",
+        "--event-id",
+        "CPI_1",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--dry-run",
+        "--idea-set",
+        "--max-candidates",
+        "2",
+        "--search-method",
+        "bayesian",
+        "--search-seed",
+        "17",
+        "--no-hybrid",
+    ])
+
+    assert run_pipeline.main() == 0
+    payload = _last_json_object(capsys.readouterr().out)
+    assert [candidate["target_symbol"] for candidate in payload["candidates"]] == ["MES", "MES"]
+    search_meta = [
+        candidate["metadata"]["parameter_search"]
+        for candidate in payload["candidates"]
+    ]
+    assert {meta["search_method"] for meta in search_meta} == {"bayesian"}
+    assert {meta["method_status"] for meta in search_meta} == {"method_unavailable"}
+    assert {meta["fallback_method"] for meta in search_meta} == {"seeded"}
+    assert {meta["seed"] for meta in search_meta} == {17}
+
+
+def test_idea_set_cli_rejects_mixed_symbol_candidates_before_dedup(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "event_ids": kwargs.get("event_ids"),
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    packet = _idea_packet()
+    base = packet["ideas"][0]
+    idea_mes = json.loads(json.dumps(base))
+    idea_mnq = json.loads(json.dumps(base))
+    idea_mes["idea_id"] = "idea_mes"
+    idea_mes["instrument_ids"] = ["MES"]
+    idea_mnq["idea_id"] = "idea_mnq"
+    idea_mnq["instrument_ids"] = ["MNQ"]
+    packet["ideas"] = [idea_mes, idea_mnq]
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_idea_mixed_symbols")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: packet)
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Trade book pressure after CPI",
+        "--event-id",
+        "CPI_1",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--dry-run",
+        "--idea-set",
+        "--max-candidates",
+        "2",
+        "--no-hybrid",
+    ])
+
+    assert run_pipeline.main() == 2
+    assert "--idea-set produced multiple target symbols" in capsys.readouterr().err
+
+
+def test_idea_set_cli_rejects_unsupported_instrument(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "event_ids": kwargs.get("event_ids"),
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    packet = _idea_packet()
+    packet["ideas"] = [packet["ideas"][1]]
+    packet["ideas"][0]["instrument_ids"] = ["GC"]
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_idea_bad_symbol")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: packet)
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Fade spread blowout after CPI",
+        "--event-id",
+        "CPI_1",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--dry-run",
+        "--idea-set",
+    ])
+
+    assert run_pipeline.main() == 2
+    assert "not compatible with model SPREAD_BLOWOUT_RECOMPRESSION" in capsys.readouterr().err
+
+
 def test_idea_feature_ids_do_not_expand_candidate_model_families():
     from research_pipeline.idea_generation import candidates_from_ideas, parsed_from_idea
     from research_pipeline.model_generation import generate_candidates
@@ -375,47 +1585,9 @@ def test_idea_vectorbt_reject_all_marks_queued_ideas_tested_fail():
     assert by_id["idea_bad"]["status"] == "static_reject"
 
 
-def test_idea_set_deployment_requires_passing_existing_gate():
+def test_idea_set_full_run_requires_prefilter():
     import scripts.run_pipeline as run_pipeline
-    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
 
-    gate = GateThresholds(min_net_pnl=0.0, min_trades=1)
-    failing = EvaluationResult(
-        candidate=CandidateModel(
-            candidate_id="c_fail",
-            model_id="BOOK_PRESSURE",
-            strategy_params={},
-            thesis="x",
-            metadata={"idea_id": "idea_low"},
-        ),
-        event_id="CPI_2024_09_11_TIGHT",
-        net_pnl=-1.0,
-        num_trades=2,
-        win_rate=0.0,
-        expectancy=-1.0,
-        tail_loss=0.0,
-        gates=gate,
-    )
-    passing = EvaluationResult(
-        candidate=CandidateModel(
-            candidate_id="c_pass",
-            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
-            strategy_params={},
-            thesis="x",
-            metadata={"idea_id": "idea_high"},
-        ),
-        event_id="CPI_2024_09_11_TIGHT",
-        net_pnl=1.0,
-        num_trades=2,
-        win_rate=1.0,
-        expectancy=1.0,
-        tail_loss=0.0,
-        gates=gate,
-    )
-
-    assert run_pipeline._deployment_allowed(False, [failing]) is True
-    assert run_pipeline._deployment_allowed(True, [failing]) is False
-    assert run_pipeline._deployment_allowed(True, [failing, passing]) is True
     assert run_pipeline._idea_set_missing_prefilter(
         idea_set_enabled=True,
         dry_run=False,
@@ -433,6 +1605,87 @@ def test_idea_set_deployment_requires_passing_existing_gate():
         dry_run=True,
         vectorbt=False,
         vectorbt_only=False,
+    )
+
+
+def test_deploy_best_does_not_fallback_to_failing_result(tmp_path):
+    from research_pipeline.deployment import deploy_best
+    from research_pipeline.types import (
+        CandidateModel,
+        EvaluationResult,
+        GateThresholds,
+        ParsedHypothesis,
+        PipelineReport,
+    )
+
+    parsed = ParsedHypothesis(
+        thesis="x",
+        instrument_universe=["MES"],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=[],
+        feature_list=[],
+        param_ranges={},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+    candidate = CandidateModel(
+        candidate_id="c_fail",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={},
+        thesis="x",
+    )
+    result = EvaluationResult(
+        candidate=candidate,
+        event_id="CPI_1",
+        net_pnl=10.0,
+        num_trades=0,
+        win_rate=0.0,
+        expectancy=0.0,
+        tail_loss=0.0,
+        gates=GateThresholds(min_trades=1),
+    )
+    report = PipelineReport(
+        run_id="pipeline_no_deploy",
+        thesis="x",
+        event_id="CPI_1",
+        parsed=parsed,
+        candidates_tested=1,
+        results=[result],
+        selected=None,
+        artifact_dir=None,
+    )
+
+    assert result.passes_all_gates() is False
+    assert deploy_best(tmp_path, report) is None
+    assert report.selected is None
+
+
+def test_deployment_packet_is_non_promotable_without_downstream_authority(tmp_path):
+    from research_pipeline.deployment import _build_packet
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    candidate = CandidateModel(
+        candidate_id="c_pass",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={},
+        thesis="x",
+    )
+    result = EvaluationResult(
+        candidate=candidate,
+        event_id="CPI_1",
+        net_pnl=10.0,
+        num_trades=1,
+        win_rate=1.0,
+        expectancy=10.0,
+        tail_loss=0.0,
+        gates=GateThresholds(min_trades=1),
+    )
+
+    assert result.passes_all_gates() is True
+    packet = _build_packet("run", "CPI_1", candidate, result, tmp_path)
+    assert packet["latency_authority"]["promote_candidate"] is False
+    assert packet["latency_authority"]["promotion_blocked_reason"] == (
+        "research_pipeline_requires_downstream_screening_realism"
     )
 
 
@@ -655,15 +1908,9 @@ def test_run_pipeline_vectorbt_only_promoted_exits_before_hftbacktest(
     monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
     monkeypatch.setattr(
         run_pipeline,
-        "evaluate_model",
+        "evaluate_candidate_events",
         lambda *args, **kwargs: pytest.fail("vectorbt-only called HftBacktest evaluate"),
     )
-    monkeypatch.setattr(
-        run_pipeline,
-        "deploy_best",
-        lambda *args, **kwargs: pytest.fail("vectorbt-only called deploy_best"),
-    )
-
     argv = [
         "run_pipeline.py",
         "--thesis",
@@ -811,7 +2058,7 @@ def test_run_pipeline_accepts_rust_required_vectorbt_scope_aliases(
     monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
     monkeypatch.setattr(
         run_pipeline,
-        "evaluate_model",
+        "evaluate_candidate_events",
         lambda *args, **kwargs: pytest.fail("vectorbt-only called HftBacktest evaluate"),
     )
     monkeypatch.setattr(sys, "argv", [
@@ -950,7 +2197,7 @@ def test_run_pipeline_vectorbt_full_requires_hftbacktest_opt_in(tmp_path, monkey
     monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
     monkeypatch.setattr(
         run_pipeline,
-        "evaluate_model",
+        "evaluate_candidate_events",
         lambda *args, **kwargs: pytest.fail("full vectorbt called Workbench evaluation before explicit HftBacktest opt-in"),
     )
     monkeypatch.setattr(
@@ -1335,6 +2582,57 @@ def test_hypothesis_packet_strict_mock(monkeypatch):
     )
     assert out["llm_status"] == "ok"
     assert out["primary_model_id"] == "SPREAD_BLOWOUT_RECOMPRESSION"
+
+
+def test_hypothesis_packet_accepts_enriched_fields(monkeypatch):
+    from data_layer.llm import openai_compatible_client as llm_client
+    from data_layer.llm.packet_runner import run_llm_on_hypothesis_request
+    from research_pipeline.packets import build_pipeline_request
+
+    request = build_pipeline_request(
+        request_id="req_hyp_enriched",
+        thesis="Fade GOLD blowout after CPI",
+        event_id="CPI_2024_09_11_TIGHT",
+        repo_root=REPO,
+        max_candidates=3,
+    )
+    mock_body = json.dumps(
+        {
+            "schema_version": "1",
+            "request_id": "req_hyp_enriched",
+            "llm_model": "mock-gpt55",
+            "llm_status": "ok",
+            "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+            "instrument_universe": ["GC"],
+            "entry_rules": [],
+            "exit_rules": [],
+            "indicators": ["spread"],
+            "feature_list": ["SPREAD_BLOWOUT_RECOMPRESSION"],
+            "param_ranges": {"signal_threshold": [0.02, 0.15]},
+            "entry_rule": "fade spread after blowout",
+            "exit_rule": "exit on recompression",
+            "target_instruments": ["GOLD"],
+            "indicative_stop_loss": 0.12,
+            "expected_holding_period": 5,
+        }
+    )
+    monkeypatch.setattr(llm_client, "llm_available", lambda **kw: True)
+    monkeypatch.setattr(
+        llm_client,
+        "generate",
+        lambda *a, **k: llm_client.GenerateResult(mock_body, model="mock-gpt55", elapsed_s=0.1),
+    )
+
+    out = run_llm_on_hypothesis_request(
+        request,
+        "Fade GOLD blowout after CPI",
+        allowed_model_ids=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        repo_root=REPO,
+    )
+
+    assert out["llm_status"] == "ok"
+    assert out["entry_rule"] == "fade spread after blowout"
+    assert out["target_instruments"] == ["GOLD"]
 
 
 def test_idea_generation_llm_uses_sampling_controls(monkeypatch):

@@ -14,13 +14,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages"), str(REPO / "apps")]
 
-from research_pipeline.deployment import deploy_best
+from features_engine.src.model_registry import load_model_registry
 from research_pipeline.document_ingestion import (
     build_knowledge_graph,
     extract_text,
     summarise_text,
 )
-from research_pipeline.evaluation import evaluate_model
+from research_pipeline.evaluation import evaluate_candidate_events, parse_event_ids
 from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.knowledge_graph import persist_graph_slice
 from research_pipeline.model_generation import generate_candidates
@@ -42,7 +42,13 @@ from research_pipeline.packets import (
     build_pipeline_response,
     write_pipeline_packets,
 )
-from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds, PipelineReport, ParsedHypothesis
+from research_pipeline.rl_agents import (
+    blocked_rl_artifact,
+    load_training_rows,
+    train_rl_agent,
+    write_rl_artifact,
+)
+from research_pipeline.types import CandidateModel, GateThresholds, PipelineReport, ParsedHypothesis
 from data_layer.llm.openai_compatible_client import DEFAULT_MODEL_DEVELOPMENT_MODEL
 
 
@@ -81,8 +87,69 @@ def _optional_float(value: str | None) -> float | None:
     return float(value)
 
 
-def _deployment_allowed(idea_set_enabled: bool, results: list[EvaluationResult]) -> bool:
-    return (not idea_set_enabled) or any(r.passes_all_gates() for r in results)
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def _resolve_target_symbol(parsed: ParsedHypothesis, cli_symbol: str | None) -> str:
+    parsed_symbols = [str(symbol).upper() for symbol in (parsed.instrument_universe or [])]
+    compatibility = str(
+        parsed.metadata.get("instrument_universe_compatibility") or "not_declared"
+    )
+    registry_entry = load_model_registry().get("models", {}).get(parsed.primary_model_id, {})
+    registry_valid = [
+        str(symbol).upper()
+        for symbol in (registry_entry.get("valid_instrument_universe") or [])
+    ]
+    if compatibility == "not_declared" and registry_valid:
+        unsupported = [symbol for symbol in parsed_symbols if symbol not in registry_valid]
+        if unsupported:
+            raise ValueError(
+                f"parsed instruments {unsupported} are not compatible with model {parsed.primary_model_id}"
+            )
+        compatible = [symbol for symbol in parsed_symbols if symbol in registry_valid]
+        allowed = compatible
+    elif (
+        compatibility == "not_declared"
+        and registry_entry.get("kind") == "hypothesis"
+        and not registry_valid
+    ):
+        raise ValueError(
+            f"model {parsed.primary_model_id} does not declare valid_instrument_universe"
+        )
+    else:
+        compatible = [
+            str(symbol).upper()
+            for symbol in (parsed.metadata.get("compatible_instrument_universe") or [])
+        ]
+        allowed = parsed_symbols if compatibility == "not_declared" else compatible
+    if compatibility == "missing_valid_instrument_universe":
+        raise ValueError(
+            f"model {parsed.primary_model_id} does not declare valid_instrument_universe"
+        )
+    unsupported = [
+        str(symbol).upper()
+        for symbol in (parsed.metadata.get("unsupported_instruments") or [])
+    ]
+    if unsupported:
+        raise ValueError(
+            f"parsed instruments {unsupported} are not compatible with model {parsed.primary_model_id}"
+        )
+    if parsed_symbols and not allowed:
+        raise ValueError(
+            f"parsed instruments {parsed_symbols} are not compatible with model {parsed.primary_model_id}"
+        )
+    if cli_symbol:
+        requested = str(cli_symbol).upper()
+        if allowed and requested not in allowed:
+            raise ValueError(
+                f"--symbol {requested} is not compatible with parsed instruments {allowed}"
+            )
+        return requested
+    return (compatible or parsed_symbols or ["MES"])[0]
 
 
 def _idea_set_missing_prefilter(
@@ -112,17 +179,162 @@ def _optional_resolved_path(path: Path | None) -> Path | None:
     return path.resolve() if path is not None else None
 
 
+def _run_rl_process(
+    *,
+    args: argparse.Namespace,
+    artifact_dir: Path,
+) -> dict | None:
+    if not args.rl:
+        return None
+
+    feature_names = list(args.rl_feature or [])
+    artifact_path = artifact_dir / "rl_policy_artifact.json"
+    if args.rl_training_data is None:
+        artifact = blocked_rl_artifact(
+            reason="missing_training_data",
+            feature_names=feature_names,
+            seed=args.rl_seed,
+            episodes=args.rl_episodes,
+            max_steps_per_episode=args.rl_max_steps_per_episode,
+            max_updates=args.rl_max_updates,
+        )
+        write_rl_artifact(artifact_path, artifact)
+        return artifact
+
+    try:
+        rows = load_training_rows(args.rl_training_data)
+        if not feature_names:
+            raise ValueError("feature_names must be declared with --rl-feature")
+        artifact = train_rl_agent(
+            rows,
+            feature_names,
+            seed=args.rl_seed,
+            episodes=args.rl_episodes,
+            max_steps_per_episode=args.rl_max_steps_per_episode,
+            max_updates=args.rl_max_updates,
+        )
+    except Exception as exc:
+        artifact = blocked_rl_artifact(
+            reason=f"invalid_training_data:{exc}",
+            feature_names=feature_names,
+            seed=args.rl_seed,
+            episodes=args.rl_episodes,
+            max_steps_per_episode=args.rl_max_steps_per_episode,
+            max_updates=args.rl_max_updates,
+        )
+    write_rl_artifact(artifact_path, artifact)
+    return artifact
+
+
+def _attach_rl_payload(
+    payload: dict,
+    *,
+    rl_artifact: dict | None,
+    artifact_dir: Path,
+) -> None:
+    if rl_artifact is None:
+        return
+    payload["rl_policy_artifact"] = rl_artifact
+    paths = payload.setdefault("paths", {})
+    paths.setdefault("rl_policy_artifact_path", str(artifact_dir / "rl_policy_artifact.json"))
+
+
+def _candidate_payload(candidates: list[CandidateModel]) -> list[dict]:
+    return [
+        {
+            "candidate_id": c.candidate_id,
+            "model_id": c.model_id,
+            "params": c.strategy_params,
+            "target_symbol": c.target_symbol,
+            "metadata": c.metadata,
+        }
+        for c in candidates
+    ]
+
+
+def _rl_artifact_blocked(rl_artifact: dict | None) -> bool:
+    return bool(rl_artifact and rl_artifact.get("status") != "trained_research_only")
+
+
+def _rl_research_only(rl_artifact: dict | None) -> bool:
+    return bool(rl_artifact and rl_artifact.get("promotion_status") == "blocked_downstream_validation_required")
+
+
+def _rl_blocked_payload(
+    *,
+    run_id: str,
+    artifact_dir: Path,
+    parsed: ParsedHypothesis,
+    candidates: list[CandidateModel],
+    rl_artifact: dict,
+) -> dict:
+    payload = {
+        "run_id": run_id,
+        "artifact_dir": str(artifact_dir),
+        "status": "blocked_rl_research_process",
+        "detail": (
+            "RL was requested, but the RL research artifact is blocked. "
+            "No VectorBT, HftBacktest, or deployment path was run."
+        ),
+        "parsed": {
+            "primary_model_id": parsed.primary_model_id,
+            "source": parsed.source,
+            "param_ranges": parsed.param_ranges,
+        },
+        "candidates": _candidate_payload(candidates),
+    }
+    _attach_rl_payload(payload, rl_artifact=rl_artifact, artifact_dir=artifact_dir)
+    return payload
+
+
+def _rl_research_only_payload(
+    *,
+    run_id: str,
+    artifact_dir: Path,
+    parsed: ParsedHypothesis,
+    candidates: list[CandidateModel],
+    rl_artifact: dict,
+) -> dict:
+    payload = {
+        "run_id": run_id,
+        "artifact_dir": str(artifact_dir),
+        "status": "rl_research_artifact_written",
+        "detail": (
+            "RL policy training completed, but RL output is research-only and "
+            "cannot enter deployment until downstream validation gates are wired."
+        ),
+        "parsed": {
+            "primary_model_id": parsed.primary_model_id,
+            "source": parsed.source,
+            "param_ranges": parsed.param_ranges,
+        },
+        "candidates": _candidate_payload(candidates),
+    }
+    _attach_rl_payload(payload, rl_artifact=rl_artifact, artifact_dir=artifact_dir)
+    return payload
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Autoresearch pipeline")
     parser.add_argument("--thesis", required=True, help="Natural-language trading thesis")
     parser.add_argument("--doc", type=Path, help="Optional research document (PDF/DOCX/URL)")
-    parser.add_argument("--event-id", required=True, help="Explicit catalog event id from events.csv")
+    parser.add_argument("--event-id", action="append", required=True, help="Catalog event id; repeat or comma-separate for cross-event evaluation")
     parser.add_argument(
         "--symbol",
-        default="MES",
-        help="Target symbol for feature-store fs_v1 VectorBT path (default MES)",
+        default=None,
+        help="Target symbol for feature-store fs_v1 VectorBT path (default: first parsed compatible symbol, else MES)",
     )
     parser.add_argument("--max-candidates", type=int, default=5)
+    parser.add_argument(
+        "--search-method",
+        choices=["grid", "seeded", "hybrid", "bayesian", "evolutionary"],
+        default="grid",
+        help="Candidate parameter search method; unavailable advanced methods fall back explicitly",
+    )
+    parser.add_argument("--search-seed", type=int, default=42)
+    parser.set_defaults(hybrid=True)
+    parser.add_argument("--hybrid", dest="hybrid", action="store_true", help="Include adjacent model-family ids in candidate search")
+    parser.add_argument("--no-hybrid", dest="hybrid", action="store_false", help="Disable adjacent model-family ids")
     parser.add_argument("--chi404-summary", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true", help="Parse and generate only")
     parser.add_argument("--no-llm", action="store_true", help="Heuristic hypothesis parse only")
@@ -189,7 +401,29 @@ def main() -> int:
     parser.add_argument("--campaign-id", default=None, help="Autoresearch campaign id (required with --resume)")
     parser.add_argument("--max-generations", type=int, default=None, help="Override config max_generations")
     parser.add_argument("--stop-file", type=Path, default=None, help="Stop autoresearch loop when this file exists")
+    parser.add_argument("--rl", action="store_true", help="Run the mandatory RL research process and write an artifact")
+    parser.add_argument("--rl-training-data", type=Path, default=None, help="JSON/JSONL rows for RL research training")
+    parser.add_argument("--rl-feature", action="append", default=[], help="Numeric feature name for RL state; repeatable")
+    parser.add_argument("--rl-seed", type=int, default=42)
+    parser.add_argument("--rl-episodes", type=_positive_int, default=4)
+    parser.add_argument("--rl-max-steps-per-episode", type=_positive_int, default=128)
+    parser.add_argument("--rl-max-updates", type=_positive_int, default=None)
     args = parser.parse_args()
+    event_ids = parse_event_ids(args.event_id)
+    primary_event_id = event_ids[0]
+
+    if args.autoresearch and args.rl:
+        print(
+            "Error: --rl is implemented for single pipeline runs; autoresearch RL integration is not wired yet.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.autoresearch and len(event_ids) > 1:
+        print(
+            "Error: --autoresearch accepts exactly one event id; multi-event autoresearch is not wired yet.",
+            file=sys.stderr,
+        )
+        return 2
 
     if args.autoresearch:
         from research_pipeline.generation_loop import (
@@ -212,7 +446,7 @@ def main() -> int:
         code, report = run_autoresearch_loop(
             repo_root=repo_root,
             thesis=args.thesis,
-            event_id=args.event_id,
+            event_id=primary_event_id,
             cfg=cfg,
             campaign_id=args.campaign_id,
             resume=bool(args.resume),
@@ -244,6 +478,12 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+    if len(event_ids) > 1 and (args.vectorbt or args.vectorbt_only or args.hftbacktest_realism):
+        print(
+            "Error: multi-event VectorBT/HftBacktest screening is not implemented; run one event per screening pass.",
+            file=sys.stderr,
+        )
+        return 2
     if args.doc and not args.dry_run and not (args.vectorbt or args.vectorbt_only):
         print(
             "Error: --doc without --vectorbt/--vectorbt-only is dry-run only; add --dry-run or use the VectorBT/HftBacktest handoff.",
@@ -259,7 +499,8 @@ def main() -> int:
     request = build_pipeline_request(
         request_id=run_id,
         thesis=args.thesis,
-        event_id=args.event_id,
+        event_id=primary_event_id,
+        event_ids=event_ids,
         repo_root=repo_root,
         max_candidates=args.max_candidates,
         document_ref=doc_ref,
@@ -303,14 +544,39 @@ def main() -> int:
                 else _optional_float(os.environ.get("HFT3_IDEA_TOP_P")) or 0.95
             ),
         )
-        candidates = candidates_from_ideas(
-            idea_packet,
-            max_candidates=args.max_candidates,
-            expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
-        )
-        idea_candidates_count = len(candidates)
         queued = [idea for idea in idea_packet.get("ideas", []) if idea.get("status") == "queued_for_test"]
         parsed = parsed_from_idea(queued[0]) if queued else parse_hypothesis(args.thesis, use_llm=False)
+        try:
+            target_symbol = _resolve_target_symbol(parsed, args.symbol)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        try:
+            candidates = candidates_from_ideas(
+                idea_packet,
+                max_candidates=args.max_candidates,
+                expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+                target_event_id=primary_event_id,
+                target_symbol_resolver=lambda idea_parsed: _resolve_target_symbol(
+                    idea_parsed, args.symbol
+                ),
+                search_method=args.search_method,
+                hybrid=args.hybrid,
+                search_seed=args.search_seed,
+            )
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        idea_candidates_count = len(candidates)
+        candidate_symbols = {candidate.target_symbol for candidate in candidates}
+        if len(candidate_symbols) > 1:
+            print(
+                f"Error: --idea-set produced multiple target symbols {sorted(candidate_symbols)}; run one symbol per screening pass.",
+                file=sys.stderr,
+            )
+            return 2
+        if candidate_symbols:
+            target_symbol = next(iter(candidate_symbols))
         (artifact_dir / "review_memory.json").write_text(
             json.dumps(
                 {
@@ -342,13 +608,46 @@ def main() -> int:
             pipeline_request=request,
             repo_root=repo_root,
         )
+        try:
+            target_symbol = _resolve_target_symbol(parsed, args.symbol)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
         candidates = list(generate_candidates(
             parsed,
             max_candidates=args.max_candidates,
             expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
-            target_event_id=args.event_id,
-            target_symbol=args.symbol,
+            target_event_id=primary_event_id,
+            target_symbol=target_symbol,
+            search_method=args.search_method,
+            hybrid=args.hybrid,
+            search_seed=args.search_seed,
         ))
+
+    rl_artifact = _run_rl_process(args=args, artifact_dir=artifact_dir)
+    if _rl_artifact_blocked(rl_artifact):
+        payload = _rl_blocked_payload(
+            run_id=run_id,
+            artifact_dir=artifact_dir,
+            parsed=parsed,
+            candidates=candidates,
+            rl_artifact=rl_artifact,
+        )
+        _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
+        return 2
+    if _rl_research_only(rl_artifact) and not args.dry_run:
+        payload = _rl_research_only_payload(
+            run_id=run_id,
+            artifact_dir=artifact_dir,
+            parsed=parsed,
+            candidates=candidates,
+            rl_artifact=rl_artifact,
+        )
+        _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
+        return 2
+    if _rl_research_only(rl_artifact) and args.dry_run:
+        args.vectorbt = False
+        args.vectorbt_only = False
 
     if args.vectorbt or args.vectorbt_only:
         print(f"Running VectorBT filter on {len(candidates)} candidates x grid...")
@@ -374,13 +673,13 @@ def main() -> int:
         filter_result = filter_candidates(
             candidates=candidates,
             parsed=parsed,
-            event_id=args.event_id,
+            event_id=primary_event_id,
             repo_root=repo_root,
             gates=vbt_gates,
             screening_scope=args.vectorbt_scope,
             run_budget=run_budget or None,
             feature_store_root=feature_store_root(repo_root),
-            symbol=args.symbol,
+            symbol=target_symbol,
         )
         vectorbt_artifact = filter_result.to_dict()
         print(
@@ -439,6 +738,8 @@ def main() -> int:
                         "asset_class": p.asset_class,
                         "symbol": p.symbol,
                     },
+                    target_symbol=p.symbol,
+                    target_event_id=primary_event_id,
                 )
                 for p in filter_result.promoted
             ]
@@ -471,7 +772,8 @@ def main() -> int:
             report = PipelineReport(
                 run_id=run_id,
                 thesis=args.thesis,
-                event_id=args.event_id,
+                event_id=primary_event_id,
+                event_ids=event_ids,
                 parsed=parsed,
                 candidates_tested=int(filter_result.total_candidates),
                 results=[],
@@ -508,19 +810,13 @@ def main() -> int:
                     "source": parsed.source,
                     "param_ranges": parsed.param_ranges,
                 },
-                "candidates": [
-                    {
-                        "candidate_id": c.candidate_id,
-                        "model_id": c.model_id,
-                        "params": c.strategy_params,
-                    }
-                    for c in candidates
-                ],
+                "candidates": _candidate_payload(candidates),
                 "document_summary": doc_summary,
             }
             if idea_packet:
                 payload["idea_summary"] = idea_summary
                 payload["idea_set_packet"] = idea_packet
+            _attach_rl_payload(payload, rl_artifact=rl_artifact, artifact_dir=artifact_dir)
             _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 0 if candidates else 1
         paths = {
@@ -540,6 +836,7 @@ def main() -> int:
                 "screening_artifact": vectorbt_artifact,
                 "paths": paths,
             }
+            _attach_rl_payload(payload, rl_artifact=rl_artifact, artifact_dir=artifact_dir)
             _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 2
         promoted_ids = list(vectorbt_artifact.get("promoted_ids") or [])
@@ -560,6 +857,7 @@ def main() -> int:
                 "replay_summary": replay_summary,
                 "paths": paths,
             }
+            _attach_rl_payload(payload, rl_artifact=rl_artifact, artifact_dir=artifact_dir)
             _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 2
         missing_hbt_inputs = _missing_hftbacktest_realism_inputs(args)
@@ -583,6 +881,7 @@ def main() -> int:
                 "replay_summary": replay_summary,
                 "paths": paths,
             }
+            _attach_rl_payload(payload, rl_artifact=rl_artifact, artifact_dir=artifact_dir)
             _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 2
 
@@ -625,6 +924,7 @@ def main() -> int:
             "replay_summary": replay_summary,
             "paths": paths,
         }
+        _attach_rl_payload(payload, rl_artifact=rl_artifact, artifact_dir=artifact_dir)
         _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
         return 0 if replay_summary.get("replay_realism_status") == "pass" else 2
 
@@ -637,7 +937,8 @@ def main() -> int:
         report = PipelineReport(
             run_id=run_id,
             thesis=args.thesis,
-            event_id=args.event_id,
+            event_id=primary_event_id,
+            event_ids=event_ids,
             parsed=parsed,
             candidates_tested=0,
             results=[],
@@ -672,15 +973,13 @@ def main() -> int:
                 "source": parsed.source,
                 "param_ranges": parsed.param_ranges,
             },
-            "candidates": [
-                {"candidate_id": c.candidate_id, "model_id": c.model_id, "params": c.strategy_params}
-                for c in candidates
-            ],
+            "candidates": _candidate_payload(candidates),
             "document_summary": doc_summary,
         }
         if idea_packet:
             payload["idea_summary"] = idea_summary
             payload["idea_set_packet"] = idea_packet
+        _attach_rl_payload(payload, rl_artifact=rl_artifact, artifact_dir=artifact_dir)
         print(json.dumps(payload, indent=2))
         return 0
 
@@ -696,7 +995,7 @@ def main() -> int:
     for cand in candidates:
         print(f"Evaluating {cand.model_id} threshold={cand.strategy_params.get('signal_threshold')}...")
         results.append(
-            evaluate_model(cand, args.event_id, repo_root, chi404_summary=chi404, gates=gates)
+            evaluate_candidate_events(cand, event_ids, repo_root, chi404_summary=chi404, gates=gates)
         )
 
     if idea_packet:
@@ -708,7 +1007,8 @@ def main() -> int:
     report = PipelineReport(
         run_id=run_id,
         thesis=args.thesis,
-        event_id=args.event_id,
+        event_id=primary_event_id,
+        event_ids=event_ids,
         parsed=parsed,
         candidates_tested=len(results),
         results=results,
@@ -717,11 +1017,10 @@ def main() -> int:
         document_summary=doc_summary,
     )
 
-    artifact = None
-    if _deployment_allowed(args.idea_set, results):
-        artifact = deploy_best(repo_root, report)
-    if artifact is None:
-        print("Note: deploy_best returned None (no passing candidates)", file=sys.stderr)
+    print(
+        "Note: Workbench-only evaluation is research-only; deployment requires downstream screening/realism gates.",
+        file=sys.stderr,
+    )
     llm_status = (
         str(idea_packet.get("llm_status"))
         if idea_packet
@@ -743,12 +1042,13 @@ def main() -> int:
         ),
     )
     write_pipeline_packets(artifact_dir, request, response)
-    print(json.dumps({"report": report.to_dict(), "response_packet": response}, indent=2))
-    if artifact:
-        print(f"Artifacts: {artifact}")
-    else:
-        print("No candidate deployed.", file=sys.stderr)
-        return 1
+    payload = {
+        "report": report.to_dict(),
+        "response_packet": response,
+        "deployment_status": "blocked_downstream_screening_required",
+    }
+    _attach_rl_payload(payload, rl_artifact=rl_artifact, artifact_dir=artifact_dir)
+    print(json.dumps(payload, indent=2))
     return 0
 
 

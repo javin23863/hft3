@@ -1,0 +1,76 @@
+# Canonical CME futures aliases for autoresearch thesis parsing.
+# Ambiguous text aliases stay conservative; e.g. "OIL" maps to CL only because
+# this repo is CME-focused and does not trade equities/ETFs from hft3 core.
+
+MES:
+  - MES
+  - MICRO ES
+  - MICRO EMINI S&P
+  - MICRO E-MINI S&P
+ES:
+  - ES
+  - EMINI S&P
+  - E-MINI S&P
+  - S&P FUTURES
+MNQ:
+  - MNQ
+  - MICRO NQ
+  - MICRO NASDAQ
+NQ:
+  - NQ
+  - NASDAQ FUTURES
+  - NASDAQ 100 FUTURES
+MYM:
+  - MYM
+  - MICRO YM
+YM:
+  - YM
+  - DOW FUTURES
+M2K:
+  - M2K
+  - MICRO RTY
+RTY:
+  - RTY
+  - RUSSELL FUTURES
+CL:
+  - CL
+  - OIL
+  - WTI
+  - CRUDE
+MCL:
+  - MCL
+  - MICRO WTI
+NG:
+  - NG
+  - NATGAS
+  - NATURAL GAS
+GC:
+  - GC
+  - GOLD
+MGC:
+  - MGC
+  - MICRO GOLD
+SI:
+  - SI
+  - SILVER
+HG:
+  - HG
+  - COPPER
+ZN:
+  - ZN
+  - 10Y
+  - 10 YEAR
+  - TEN YEAR
+ZB:
+  - ZB
+  - 30Y
+  - 30 YEAR
+  - THIRTY YEAR
+ZF:
+  - ZF
+  - 5Y
+  - 5 YEAR
+ZT:
+  - ZT
+  - 2Y
+  - 2 YEAR

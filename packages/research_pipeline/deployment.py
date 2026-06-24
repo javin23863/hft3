@@ -45,7 +45,8 @@ def _build_packet(
             "lane_required": "research",
             "breakeven_us": None,
             "lane_pass": True,
-            "promote_candidate": eval_result.passes_all_gates(),
+            "promote_candidate": False,
+            "promotion_blocked_reason": "research_pipeline_requires_downstream_screening_realism",
             "net_pnl": eval_result.net_pnl,
         },
         "config": {
@@ -129,8 +130,6 @@ def deploy_best(
     live_deploy: bool = False,
 ) -> Optional[Path]:
     passing = [r for r in report.results if r.passes_all_gates()]
-    if not passing and report.results:
-        passing = [max(report.results, key=lambda r: r.net_pnl)]
     if not passing:
         return None
     best = max(passing, key=lambda r: r.net_pnl)

@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Tuple
 
 from features_engine.src.model_registry import all_slugs, load_model_registry
 
 from data_layer.llm.packet_runner import run_llm_on_idea_generation_request
 from data_layer.packet.validate import validate_pipeline_idea_set
-from research_pipeline.hypothesis_parser import parse_hypothesis
+from research_pipeline.hypothesis_parser import (
+    _canonicalize_instrument,
+    _model_metadata,
+    _with_instrument_compatibility,
+    parse_hypothesis,
+)
+from research_pipeline.feature_recipe import candidate_identity_hash
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.review_memory import (
     build_review_memory,
@@ -260,9 +266,17 @@ def parsed_from_idea(idea: Dict[str, Any]) -> ParsedHypothesis:
     param_ranges = dict(idea.get("param_ranges") or {})
     if "signal_threshold" not in param_ranges:
         param_ranges["signal_threshold"] = [0.05, 0.35]
+    instrument_universe = [
+        _canonicalize_instrument(str(symbol))
+        for symbol in (idea.get("instrument_ids") or ["MES"])
+    ]
+    metadata = _with_instrument_compatibility(
+        _model_metadata(model_id),
+        [str(symbol) for symbol in instrument_universe],
+    )
     return ParsedHypothesis(
         thesis=str(idea.get("thesis_code") or ""),
-        instrument_universe=list(idea.get("instrument_ids") or ["MES"]),
+        instrument_universe=instrument_universe,
         entry_rules=list(idea.get("entry_rule_codes") or []),
         exit_rules=list(idea.get("exit_rule_codes") or []),
         indicators=feature_ids or [model_id],
@@ -271,6 +285,7 @@ def parsed_from_idea(idea: Dict[str, Any]) -> ParsedHypothesis:
         primary_model_id=model_id,
         source="idea_set",
         llm_status=str(idea.get("status") or ""),
+        metadata=metadata,
     )
 
 
@@ -279,20 +294,39 @@ def candidates_from_ideas(
     *,
     max_candidates: int,
     expand_for_vectorbt: bool = False,
+    target_event_id: str | None = None,
+    target_symbol_resolver: Callable[[ParsedHypothesis], str] | None = None,
+    search_method: str = "grid",
+    hybrid: bool = True,
+    search_seed: int = 42,
 ) -> List[CandidateModel]:
     queued = static_filter_ideas(packet)
     candidates: List[CandidateModel] = []
     seen: set[str] = set()
+    parsed_rows: List[tuple[Dict[str, Any], ParsedHypothesis, str]] = []
+    for idea in queued:
+        parsed = parsed_from_idea(idea)
+        target_symbol = (
+            target_symbol_resolver(parsed)
+            if target_symbol_resolver is not None
+            else "MES"
+        )
+        parsed_rows.append((idea, parsed, target_symbol))
     generators = [
         (
             idea,
             generate_candidates(
-                parsed_from_idea(idea),
+                parsed,
                 max_candidates=max_candidates,
                 expand_for_vectorbt=expand_for_vectorbt,
+                target_event_id=target_event_id,
+                target_symbol=target_symbol,
+                search_method=search_method,
+                hybrid=hybrid,
+                search_seed=search_seed,
             ),
         )
-        for idea in queued
+        for idea, parsed, target_symbol in parsed_rows
     ]
     while generators and len(candidates) < max_candidates:
         next_round = []
@@ -301,10 +335,11 @@ def candidates_from_ideas(
                 candidate = next(generator)
             except StopIteration:
                 continue
-            if candidate.candidate_id in seen:
+            identity_key = candidate_identity_hash(candidate)
+            if identity_key in seen:
                 next_round.append((idea, generator))
                 continue
-            seen.add(candidate.candidate_id)
+            seen.add(identity_key)
             candidate.metadata.update(
                 {
                     "idea_id": idea.get("idea_id"),

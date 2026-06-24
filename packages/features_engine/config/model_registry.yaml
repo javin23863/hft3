@@ -8,6 +8,18 @@ models:
     legacy_id: HYP_1
     display_name: Second-wave continuation
     class: SecondWaveContinuation
+    aliases: ["second wave", "continuation", "post event continuation"]
+    default_param_ranges:
+      signal_threshold: [0.08, 0.35]
+      stop_loss: [0.10, 0.50]
+      take_profit: [0.10, 0.80]
+      holding_bars: [5, 60]
+    recommended_horizon_bars: [15, 60]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM"]
+    volatility_regime: any
+    risk_metrics:
+      primary: sharpe
+      guardrails: ["max_drawdown", "trade_count"]
 
   STOP_RUN_EXHAUSTION_FADE:
     kind: hypothesis
@@ -15,6 +27,18 @@ models:
     legacy_id: HYP_2
     display_name: Stop-run exhaustion fade
     class: StopRunExhaustionFade
+    aliases: ["stop run fade", "stop-run fade", "exhaustion fade"]
+    default_param_ranges:
+      signal_threshold: [0.05, 0.25]
+      stop_loss: [0.05, 0.35]
+      take_profit: [0.05, 0.45]
+      holding_bars: [3, 30]
+    recommended_horizon_bars: [5, 30]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM"]
+    volatility_regime: high_volatility
+    risk_metrics:
+      primary: max_drawdown
+      guardrails: ["sharpe", "trade_count"]
 
   LIQUIDITY_VACUUM_CONTINUATION:
     kind: hypothesis
@@ -22,6 +46,18 @@ models:
     legacy_id: HYP_3
     display_name: Liquidity vacuum continuation
     class: LiquidityVacuumContinuation
+    aliases: ["liquidity vacuum", "thin book continuation"]
+    default_param_ranges:
+      signal_threshold: [0.12, 0.45]
+      stop_loss: [0.10, 0.60]
+      take_profit: [0.15, 0.90]
+      holding_bars: [5, 45]
+    recommended_horizon_bars: [10, 45]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "CL", "MCL", "GC", "MGC"]
+    volatility_regime: high_volatility
+    risk_metrics:
+      primary: sortino
+      guardrails: ["max_drawdown", "trade_count"]
 
   DEPTH_REFILL_IMBALANCE:
     kind: hypothesis
@@ -29,6 +65,18 @@ models:
     legacy_id: HYP_4
     display_name: Depth-refill imbalance
     class: DepthRefillImbalance
+    aliases: ["depth refill", "refill imbalance", "queue refill"]
+    default_param_ranges:
+      signal_threshold: [0.03, 0.20]
+      stop_loss: [0.05, 0.25]
+      take_profit: [0.05, 0.35]
+      holding_bars: [1, 20]
+    recommended_horizon_bars: [1, 20]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "ZN", "ZB"]
+    volatility_regime: any
+    risk_metrics:
+      primary: sharpe
+      guardrails: ["max_drawdown", "trade_count"]
 
   SPREAD_BLOWOUT_RECOMPRESSION:
     kind: hypothesis
@@ -36,6 +84,18 @@ models:
     legacy_id: HYP_5
     display_name: Spread blowout/recompression
     class: SpreadBlowoutRecompression
+    aliases: ["spread blowout", "blowout fade", "squeeze fade", "spread recompression"]
+    default_param_ranges:
+      signal_threshold: [0.02, 0.15]
+      stop_loss: [0.05, 0.30]
+      take_profit: [0.05, 0.30]
+      holding_bars: [1, 10]
+    recommended_horizon_bars: [1, 10]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM"]
+    volatility_regime: high_volatility
+    risk_metrics:
+      primary: sharpe
+      guardrails: ["max_drawdown", "trade_count"]
 
   AGGRESSOR_DECELERATION_FADE:
     kind: hypothesis
@@ -57,6 +117,18 @@ models:
     legacy_id: HYP_8
     display_name: False breakout trap
     class: FalseBreakoutTrap
+    aliases: ["false breakout", "breakout trap", "trap breakout"]
+    default_param_ranges:
+      signal_threshold: [0.05, 0.30]
+      stop_loss: [0.08, 0.35]
+      take_profit: [0.08, 0.50]
+      holding_bars: [3, 30]
+    recommended_horizon_bars: [5, 30]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "RTY", "M2K"]
+    volatility_regime: any
+    risk_metrics:
+      primary: sharpe
+      guardrails: ["max_drawdown", "trade_count"]
 
   CANCEL_STORM_BEFORE_MOVE:
     kind: hypothesis
@@ -71,6 +143,18 @@ models:
     legacy_id: HYP_10
     display_name: Queue depletion trigger
     class: QueueDepletionTrigger
+    aliases: ["queue depletion", "queue imbalance", "queue pull"]
+    default_param_ranges:
+      signal_threshold: [0.03, 0.18]
+      stop_loss: [0.05, 0.25]
+      take_profit: [0.05, 0.35]
+      holding_bars: [1, 15]
+    recommended_horizon_bars: [1, 15]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "ZN", "ZB"]
+    volatility_regime: any
+    risk_metrics:
+      primary: sharpe
+      guardrails: ["max_drawdown", "trade_count"]
 
   BOOK_SLOPE_COLLAPSE:
     kind: hypothesis
@@ -357,6 +441,18 @@ models:
     legacy_id: PDF_MODEL_1
     display_name: Limit Order Book Pressure
     class: BookPressureModel
+    aliases: ["book pressure", "order book pressure", "ofi", "mlofi"]
+    default_param_ranges:
+      signal_threshold: [0.03, 0.25]
+      stop_loss: [0.05, 0.30]
+      take_profit: [0.05, 0.45]
+      holding_bars: [1, 20]
+    recommended_horizon_bars: [1, 20]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "ZN", "ZB", "CL", "GC"]
+    volatility_regime: any
+    risk_metrics:
+      primary: sharpe
+      guardrails: ["max_drawdown", "trade_count"]
 
   CROSS_ASSET_LEAD_LAG:
     kind: pdf_structural

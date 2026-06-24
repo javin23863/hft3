@@ -38,6 +38,11 @@
         "maxItems": 2
       }
     },
+    "entry_rule": { "type": "string" },
+    "exit_rule": { "type": "string" },
+    "target_instruments": { "type": "array", "items": { "type": "string" } },
+    "indicative_stop_loss": { "type": "number" },
+    "expected_holding_period": { "type": "number" },
     "llm_error": { "type": "string" }
   },
   "additionalProperties": false

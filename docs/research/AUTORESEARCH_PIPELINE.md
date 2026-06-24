@@ -15,7 +15,10 @@ Workstation-only NL → hypothesis → backtest → artifact pipeline. Does **no
 | `knowledge_graph.py` | `packages/research_pipeline/knowledge_graph.py` → `data_layer/kg/` |
 | Slow relationship reasoning | `packages/research_pipeline/relationship_reasoning/` candidate → evidence → proof trace → non-authoritative promotion record |
 | `model_generation.py` | `packages/research_pipeline/model_generation.py` |
+| Deterministic parameter search | `packages/research_pipeline/parameter_search.py` |
 | `evaluation.py` | `packages/research_pipeline/evaluation.py` → `WorkbenchEngine` |
+| RL research process | `packages/research_pipeline/rl_agents.py` |
+| Research microstructure features | `packages/features_engine/feature_sets.py` |
 | `deployment.py` | `packages/research_pipeline/deployment.py` → `research_cards/pipeline_runs/` |
 | CLI | `scripts/run_pipeline.py` |
 
@@ -41,6 +44,47 @@ python scripts/run_pipeline.py \
 python scripts/run_pipeline.py --thesis "..." --event-id CPI_2024_09_11_TIGHT --dry-run
 ```
 
+Deterministic search controls:
+
+```bash
+python scripts/run_pipeline.py \
+  --thesis "Fade spread blowout after CPI surprise" \
+  --event-id CPI_2024_09_11_TIGHT \
+  --max-candidates 12 \
+  --search-method seeded \
+  --search-seed 42 \
+  --dry-run
+```
+
+`--search-method grid` is the default. `seeded` samples deterministically from
+the declared grid. Hybrid candidate expansion is on by default and combines the
+primary model with up to two adjacent model ids from the parsed feature list; use
+`--no-hybrid` to disable it. `bayesian` and `evolutionary` currently fall back
+explicitly to seeded search with `method_status=method_unavailable`; they do not
+add dependencies or run hidden optimizers.
+
+Cross-event evaluation:
+
+```bash
+python scripts/run_pipeline.py \
+  --thesis "Fade spread blowout after CPI surprise" \
+  --event-id CPI_2024_09_11_TIGHT,NFP_2024_09_06 \
+  --event-id FOMC_2024_09_18 \
+  --max-candidates 5
+```
+
+The single-event path is preserved. Repeated or comma-separated `--event-id`
+values are aggregated in `packages/research_pipeline/evaluation.py`. Packet
+`event_id` remains the primary catalog event, and `event_ids` records the full
+evaluation set. Aggregate Sharpe, Sortino, maximum drawdown, and worst tail
+fields are diagnostics over per-event net PnL totals and are marked
+`risk_metrics_gateable=false`. Drawdown is labeled
+`cross_event_net_pnl_input_order_diagnostic` because it is path-dependent on the
+caller-supplied event order until catalog chronology is wired. Configured risk
+thresholds fail closed until a timestamped equity/return series supplies
+gateable metrics. VectorBT and HftBacktest realism reject multi-event screening
+until they can produce per-event screening evidence.
+
 Optional research document:
 
 ```bash
@@ -59,6 +103,55 @@ After-action reports use the same GPT-5.5 XHIGH runtime via `packet_runner`. See
 Relationship reasoning is not a packet LLM output surface. It may hold slow/offline candidate links across defined contexts only, but those candidates are non-authoritative until evidence and proof trace validation passes.
 
 Optional pre-run idea generation (`--idea-set`) emits `schema_pipeline_idea_set_v1` machine packets. Ideas expand the candidate queue only after static validation; full idea-set runs require VectorBT prefiltering and still must pass workbench gates. Ideas do not select models, tune parameters, or promote candidates. AAR-derived review memory is compacted into advisory fact codes for ideation context only.
+
+## Advanced Research Surfaces
+
+Parser and registry metadata:
+
+- Symbol aliases are declared in `packages/features_engine/config/symbol_aliases.yaml`.
+- CLI `--symbol` is optional; when omitted the pipeline uses the first parsed
+  compatible instrument, falling back to `MES` only when no symbol is parsed.
+  An explicit incompatible `--symbol` fails closed.
+- Model aliases, parameter ranges, valid instruments, volatility regime, and risk
+  metric metadata are declared in `packages/features_engine/config/model_registry.yaml`.
+- The hypothesis parser records instrument compatibility metadata; unsupported
+  target instruments are visible but do not silently become compatible. If a
+  routable model does not declare `valid_instrument_universe`, CLI candidate
+  routing fails closed instead of assuming compatibility.
+
+Microstructure feature library:
+
+- `packages/features_engine/feature_sets.py` implements research-only
+  order-book imbalance, queue imbalance, micro-price, VAMP, and weighted-depth
+  price functions.
+- These functions consume one point-in-time depth snapshot at decision time `t`.
+- Cross-side micro-price and VAMP return `0.0` when either side of book is
+  missing; same-side weighted depth remains available for a declared side.
+- Non-positive depth and non-finite price/quantity inputs are rejected.
+- They do not modify `FeatureIndex`, C++ feature slots, or live execution paths.
+
+RL research process:
+
+- `--rl` runs a deterministic tabular Q-learning research process and writes
+  `rl_policy_artifact.json`.
+- RL requires explicit `--rl-feature` fields; label-like or non-PIT feature names
+  such as future/next/target/reward/return/PNL fields are rejected.
+- If monotonic decision timestamps are present, RL records
+  `audit_status=chronology_audited`; without timestamps, metrics are marked
+  `chronology_not_audited`.
+- Missing or malformed RL input writes a blocked artifact and stops before
+  VectorBT, HftBacktest, evaluation, or deployment.
+- Trained RL artifacts are research-only with
+  `promotion_status=blocked_downstream_validation_required`; they cannot reach
+  VectorBT, HftBacktest, evaluation, or deployment except ordinary `--dry-run`
+  artifact inspection.
+
+Deployment:
+
+- Workbench-only evaluation is research-only and emits packets without calling
+  `deploy_best`.
+- `deploy_best` itself returns `None` unless at least one result passes all
+  gates; it does not fall back to highest net PnL.
 
 ## Relationship Data Sources
 

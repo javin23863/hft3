@@ -56,3 +56,30 @@ Derivative files such as `VBT_RESEARCH_PRODUCT_SCOPE.md` are not canonical
 feature authority unless they explicitly defer to those three documents and
 this matrix. The implementation source remains the vault ontology, cited repo
 specs, and paper notes, not a newly invented agent organizing frame.
+
+## 2026-06-24 Autoresearch Advanced Models Update
+
+The advanced autoresearch branch adds research-pipeline support for:
+
+- symbol/model aliases and registry-scoped parameter ranges;
+- deterministic, seeded, and explicitly-fallback parameter search metadata;
+- repeated/comma-separated event ids with aggregate Sharpe, Sortino, and maximum
+  drawdown receipts on the Workbench evaluation path;
+- research-only microstructure feature formulas in
+  `packages/features_engine/feature_sets.py`;
+- mandatory RL research artifacts in `packages/research_pipeline/rl_agents.py`.
+
+Traceability impact:
+
+- F001 remains `PARTIALLY_SUPPORTED`: the pipeline emits richer artifacts, but
+  autonomous research still requires review and PR gates.
+- F002 remains `PARTIALLY_SUPPORTED`: deterministic search improves the tested
+  parameter universe, but this branch does not claim full model-universe
+  completion.
+- F004 remains `EXPERIMENTAL`: microstructure formulas are point-in-time
+  research helpers and do not prove context-feature uplift or hot-path
+  consumption.
+- F006 remains `SUPPORTED`: RL and search outputs cannot bypass robustness or
+  promotion gates.
+- F010 remains `SUPPORTED`: unsupported symbols, unavailable search methods, and
+  RL promotion attempts fail closed with explicit artifact status.
