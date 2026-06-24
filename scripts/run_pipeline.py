@@ -626,7 +626,7 @@ def main() -> int:
                 "Error: --idea-set full runs require --vectorbt so generated ideas pass the prefilter before evaluation.",
                 file=sys.stderr,
             )
-            return 1
+            return 2
     else:
         parsed = parse_hypothesis(
             args.thesis,

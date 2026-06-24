@@ -2238,6 +2238,53 @@ def test_idea_set_cli_rejects_unsupported_instrument(tmp_path, monkeypatch, caps
     assert "not compatible with model SPREAD_BLOWOUT_RECOMPRESSION" in capsys.readouterr().err
 
 
+def test_idea_set_full_run_missing_prefilter_returns_configuration_error(
+    tmp_path, monkeypatch, capsys
+):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "event_ids": kwargs.get("event_ids"),
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    packet = _idea_packet()
+    packet["ideas"] = [packet["ideas"][0]]
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_idea_missing_prefilter")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: packet)
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Trade book pressure after CPI",
+        "--event-id",
+        "CPI_1",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--idea-set",
+        "--max-candidates",
+        "1",
+        "--no-hybrid",
+    ])
+
+    assert run_pipeline.main() == 2
+    assert "--idea-set full runs require --vectorbt" in capsys.readouterr().err
+
+
 def test_idea_feature_ids_do_not_expand_candidate_model_families():
     from research_pipeline.idea_generation import candidates_from_ideas, parsed_from_idea
     from research_pipeline.model_generation import generate_candidates
