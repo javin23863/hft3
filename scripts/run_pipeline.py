@@ -257,7 +257,7 @@ def _rl_artifact_blocked(rl_artifact: dict | None) -> bool:
 
 
 def _rl_research_only(rl_artifact: dict | None) -> bool:
-    return bool(rl_artifact and rl_artifact.get("promotion_status") == "blocked_downstream_validation_required")
+    return bool(rl_artifact and rl_artifact.get("status") == "trained_research_only")
 
 
 def _rl_blocked_payload(

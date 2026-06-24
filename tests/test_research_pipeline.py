@@ -933,6 +933,17 @@ def test_run_pipeline_dry_run_rl_writes_policy_artifact(tmp_path, monkeypatch, c
     assert artifact_path.is_file()
 
 
+def test_rl_research_only_does_not_match_blocked_artifact():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.rl_agents import blocked_rl_artifact
+
+    blocked = blocked_rl_artifact(reason="missing_training_data")
+
+    assert run_pipeline._rl_artifact_blocked(blocked) is True
+    assert run_pipeline._rl_research_only(blocked) is False
+    assert run_pipeline._rl_research_only({"status": "trained_research_only"}) is True
+
+
 def test_run_pipeline_rl_blocked_stops_before_vectorbt(tmp_path, monkeypatch, capsys):
     import sys
 
