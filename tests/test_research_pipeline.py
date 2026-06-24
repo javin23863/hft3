@@ -418,6 +418,15 @@ def test_cross_event_tail_loss_threshold_requires_gateable_metrics():
     assert result.passes_all_gates() is False
 
 
+def test_tail_loss_gate_uses_signed_tail_pnl_floor():
+    from research_pipeline.types import GateThresholds
+
+    gates = GateThresholds(min_trades=0, max_tail_loss=-2.0)
+
+    assert gates.passes(1.0, 1, -1.0, 1.0)
+    assert not gates.passes(1.0, 1, -5.0, 1.0)
+
+
 def test_sortino_no_downside_positive_mean_uses_large_sentinel():
     from research_pipeline.evaluation import _sortino
 

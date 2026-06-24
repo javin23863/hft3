@@ -41,7 +41,8 @@ class GateThresholds:
     """Default thresholds are maximally permissive — pass everything unless customized."""
     min_net_pnl: float = -1e9
     min_trades: int = 0
-    max_tail_loss: float = 1e9
+    # Historical name; value is a signed tail-PnL floor, so lower is worse.
+    max_tail_loss: float = -1e9
     min_win_rate: float = 0.0
     min_sharpe: float = -1e9
     min_sortino: float = -1e9
@@ -51,7 +52,7 @@ class GateThresholds:
         return (
             self.min_sharpe > -1e9
             or self.min_sortino > -1e9
-            or self.max_tail_loss < 1e9
+            or self.max_tail_loss > -1e9
             or self.max_drawdown < 1e9
         )
 
@@ -71,7 +72,7 @@ class GateThresholds:
             return False
         if num_trades < self.min_trades:
             return False
-        if tail_loss > self.max_tail_loss:
+        if tail_loss < self.max_tail_loss:
             return False
         if win_rate < self.min_win_rate:
             return False

@@ -78,7 +78,7 @@ def aggregate_evaluation_results(
         num_trades=total_trades,
         win_rate=win_rate,
         expectancy=expectancy,
-        tail_loss=min(float(result.tail_loss) for result in results),
+        tail_loss=_worst_signed_tail_pnl(results),
         gates=gates,
         sharpe=sharpe,
         sortino=sortino,
@@ -88,6 +88,10 @@ def aggregate_evaluation_results(
         event_results=event_payloads,
         error=";".join(errors) if errors else None,
     )
+
+
+def _worst_signed_tail_pnl(results: Sequence[EvaluationResult]) -> float:
+    return min(float(result.tail_loss) for result in results)
 
 
 def evaluate_candidate_events(
