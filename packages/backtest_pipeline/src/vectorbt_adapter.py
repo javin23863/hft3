@@ -522,13 +522,6 @@ class ScreeningArtifactError(ValueError):
     """Raised when a VectorBT screening artifact fails validation."""
 
 
-def validate_screening_artifact(artifact: Mapping[str, Any]) -> list[str]:
-    """Public screening artifact validator for cockpit and HftBacktest handoff."""
-    from backtest_pipeline.src.hftbacktest_realism import _validate_screening_artifact_hash
-
-    return _validate_screening_artifact_hash(artifact)
-
-
 def _parameter_values_hash(values: Mapping[str, Any]) -> str:
     return _hash_payload(dict(values))
 
@@ -1361,27 +1354,6 @@ def _normalise_promoted_screening_row(
         "replay_eligibility_status": "not_eligible",
         "rejection_reason_or_null": reason,
     })
-
-    # VBT-4: determine replay eligibility from bridge evidence.
-    # Eligible when: screening_status == "pass", all four robustness statuses
-    # are "pass", staleness == "fresh", and surface_stability status == "pass".
-    if bridge_evidence:
-        surface_status = _screening_status_text(surface_stability_metrics)
-        all_robustness_pass = (
-            default_wfc_status == "pass"
-            and default_dsr_status == "pass"
-            and default_pbo_status == "pass"
-            and default_cscv_status == "pass"
-        )
-        staleness_text = _screening_status_text(default_staleness)
-        if (
-            row["screening_status"] == "pass"
-            and all_robustness_pass
-            and staleness_text == "fresh"
-            and surface_status == "pass"
-        ):
-            row["replay_eligibility_status"] = "eligible"
-            row["rejection_reason_or_null"] = None
 
     _apply_external_robustness_evidence(row, robustness_evidence)
     return row
@@ -2388,10 +2360,24 @@ _VBT_GATE_REQUIRED_STATS = (
     "Max Drawdown [%]",
 )
 _VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS = (
+    "wf_consistency",
     "turnover_mean_pct",
     "param_stability_score",
     "slippage_sensitivity",
 )
+_VBT_PAID_COMPUTE_SKIPPED_UNMEASURED_GATE_FIELDS = tuple(
+    field
+    for field in _VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS
+    if field != "wf_consistency"
+)
+_VBT_PAID_COMPUTE_EXEMPT_GATE_FAILURES = {
+    "missing_turnover_mean_pct",
+    "turnover_above_threshold",
+    "missing_param_stability_score",
+    "param_stability_below_threshold",
+    "missing_slippage_sensitivity",
+    "slippage_sensitivity_above_threshold",
+}
 
 
 def _finite_float(value: Any) -> Optional[float]:
@@ -2412,6 +2398,19 @@ def _stats_float(stats: Mapping[str, Any], *names: str) -> Optional[float]:
         if value is not None:
             return value
     return None
+
+
+def _optional_official_stats_or_not_run(
+    stats: Mapping[str, Any],
+    metric_name: str,
+    *names: str,
+) -> Any:
+    value = _stats_float(stats, *names)
+    if value is None:
+        return _screening_not_run(
+            f"official_vectorbt_{metric_name}_missing_or_non_finite"
+        )
+    return value
 
 
 def _normalise_vectorbt_stats_for_gate(vbt_stats: Mapping[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
@@ -2448,9 +2447,15 @@ def _normalise_vectorbt_stats_for_gate(vbt_stats: Mapping[str, Any]) -> Tuple[Di
         "num_trades": total_trades_i,
         "trade_count": total_trades_i,
         "max_drawdown_pct": round(max_drawdown_pct, 8),
-        "profit_factor": _stats_float(vbt_stats, "Profit Factor"),
-        "sharpe": _stats_float(vbt_stats, "Sharpe Ratio"),
-        "sortino": _stats_float(vbt_stats, "Sortino Ratio"),
+        "profit_factor": _optional_official_stats_or_not_run(
+            vbt_stats, "profit_factor", "Profit Factor"
+        ),
+        "sharpe": _optional_official_stats_or_not_run(
+            vbt_stats, "sharpe", "Sharpe Ratio"
+        ),
+        "sortino": _optional_official_stats_or_not_run(
+            vbt_stats, "sortino", "Sortino Ratio"
+        ),
         "gate_metric_authority": "official_vectorbt_portfolio_stats",
         "gate_metric_non_stats_status": {
             field_name: "not_measured_not_used_by_vbt2_pilot_gate"
@@ -2469,9 +2474,25 @@ def _hydrate_walk_forward_gate_metrics(metrics: Dict[str, Any]) -> None:
             metrics[key] = aux_wf[key]
 
 
+def _apply_vbt2_pilot_official_stats_gate_surface(metrics: Dict[str, Any]) -> None:
+    """Keep the VBT2 pilot gate on official Portfolio.stats() fields only."""
+    expectancy = metrics.get("expectancy")
+    if expectancy is not None:
+        metrics["oos_expectancy"] = expectancy
+    metrics.pop("wf_consistency", None)
+    non_stats_status = metrics.setdefault("gate_metric_non_stats_status", {})
+    if isinstance(non_stats_status, dict):
+        for field_name in _VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS:
+            non_stats_status[field_name] = "not_measured_not_used_by_vbt2_pilot_gate"
+
+
 def _is_vbt2_pilot_exempt_gate_failure(failure_code: str) -> bool:
     """Official VectorBT stats do not measure turnover/stability/slippage yet."""
     exempt_by_field = {
+        "wf_consistency": (
+            "missing_wf_consistency",
+            "wf_consistency_below_threshold",
+        ),
         "turnover_mean_pct": ("missing_turnover_mean_pct", "turnover_above_threshold"),
         "param_stability_score": (
             "missing_param_stability_score",
@@ -2890,6 +2911,76 @@ def _resolve_research_clock(candidates: List[CandidateModel]) -> str:
     return RESEARCH_CLOCK_SCHEDULED_EVENT
 
 
+def _candidate_feature_recipe_hash(candidate: CandidateModel) -> str:
+    metadata = candidate.metadata or {}
+    return str(
+        getattr(candidate, "feature_recipe_hash", None)
+        or metadata.get("feature_recipe_hash")
+        or ""
+    ).strip()
+
+
+def _promoted_feature_recipe_hash(candidate: PromotedCandidate) -> str:
+    metrics = candidate.vectorbt_results or {}
+    metadata = metrics.get("base_candidate_metadata")
+    return str(
+        metrics.get("feature_recipe_hash")
+        or (metadata.get("feature_recipe_hash") if isinstance(metadata, Mapping) else "")
+        or ""
+    ).strip()
+
+
+def _is_pilot_handoff_scope(screening_scope: str) -> bool:
+    return _normalise_screening_scope(screening_scope) in {"pilot", "pilot_scope"}
+
+
+def apply_filter_result_provenance_metadata(
+    result: FilterResult,
+    candidates: List[CandidateModel],
+    *,
+    screening_scope: str,
+    repo_root: Path,
+    stamp_handoff_status: bool = True,
+) -> None:
+    from backtest_pipeline.src.paid_screen_profiling import (
+        resolve_events_csv_hash,
+        resolve_lake_manifest_hash,
+    )
+
+    try:
+        result.lake_manifest_hash = resolve_lake_manifest_hash(
+            explicit_hash=None,
+            repo_root=repo_root,
+        )
+    except (OSError, ValueError):
+        pass
+    try:
+        result.events_csv_hash_or_not_applicable = resolve_events_csv_hash(
+            explicit_hash=None,
+            events_csv=None,
+            repo_root=repo_root,
+        )
+    except (OSError, ValueError):
+        pass
+    promoted_recipe_hash = ""
+    for prom in result.promoted:
+        promoted_recipe_hash = _promoted_feature_recipe_hash(prom)
+        if promoted_recipe_hash:
+            break
+    candidate_recipe_hash = ""
+    for cand in candidates:
+        candidate_recipe_hash = _candidate_feature_recipe_hash(cand)
+        if candidate_recipe_hash:
+            break
+    if promoted_recipe_hash:
+        result.feature_recipe_hash = promoted_recipe_hash
+    elif candidate_recipe_hash:
+        result.feature_recipe_hash = candidate_recipe_hash
+    if stamp_handoff_status and _is_pilot_handoff_scope(screening_scope):
+        result.hftbacktest_handoff_status = (
+            "recipe_hash_handoff_ready" if promoted_recipe_hash else ""
+        )
+
 def _apply_fs_v1_screen_metadata(
     result: FilterResult,
     ctx: Any,
@@ -2959,38 +3050,6 @@ def _apply_fs_v1_screen_metadata(
         "fs_v1_row_loop_visible_index_j_with_ts[j]<=ts[i]-feature_latency_ns;"
         " signals shifted one executable bar before VectorBT portfolio simulation"
     )
-    from backtest_pipeline.src.paid_screen_profiling import (
-        resolve_events_csv_hash,
-        resolve_lake_manifest_hash,
-    )
-
-    try:
-        result.lake_manifest_hash = resolve_lake_manifest_hash(
-            explicit_hash=None,
-            repo_root=repo_root,
-        )
-    except (OSError, ValueError):
-        pass
-    try:
-        result.events_csv_hash_or_not_applicable = resolve_events_csv_hash(
-            explicit_hash=None,
-            events_csv=None,
-            repo_root=repo_root,
-        )
-    except (OSError, ValueError):
-        pass
-    for cand in candidates:
-        recipe_hash = str(
-            getattr(cand, "feature_recipe_hash", None)
-            or cand.metadata.get("feature_recipe_hash")
-            or ""
-        ).strip()
-        if recipe_hash:
-            result.feature_recipe_hash = recipe_hash
-            break
-    scope = str(screening_scope or "").lower()
-    if scope in {"pilot", "pilot-scope", "pilot_scope"} and result.feature_recipe_hash:
-        result.hftbacktest_handoff_status = "recipe_hash_handoff_ready"
 
 
 def filter_candidates(
@@ -3189,13 +3248,20 @@ def filter_candidates(
             screening_scope=screening_scope,
             repo_root=repo_root,
         )
-    return apply_promotion_gates(
+    result = apply_promotion_gates(
         result,
         screening_scope=screening_scope,
         gates=gates,
         repo_root=repo_root,
         persist_promotions=persist_promotions,
     )
+    apply_filter_result_provenance_metadata(
+        result,
+        candidates,
+        screening_scope=screening_scope,
+        repo_root=repo_root,
+    )
+    return result
 
 
 def apply_promotion_gates(
@@ -3223,19 +3289,39 @@ def apply_promotion_gates(
         prom.seed = 42
         prom.timestamp_utc = datetime.now(timezone.utc).isoformat()
 
-        _hydrate_walk_forward_gate_metrics(prom.vectorbt_results)
-        gate_failures = gates.evaluate_failures(prom)
-        if (
+        official_stats_gate = (
             prom.vectorbt_results.get("gate_metric_authority")
             == "official_vectorbt_portfolio_stats"
-            and scope in ("pilot", "paid_compute")
-        ):
+        )
+        if official_stats_gate and scope == "pilot":
+            _apply_vbt2_pilot_official_stats_gate_surface(prom.vectorbt_results)
+        else:
+            _hydrate_walk_forward_gate_metrics(prom.vectorbt_results)
+        gate_failures = gates.evaluate_failures(prom)
+        if official_stats_gate and scope == "pilot":
             gate_failures = [
                 code
                 for code in gate_failures
                 if not _is_vbt2_pilot_exempt_gate_failure(code)
             ]
             prom.vectorbt_results["pilot_gate_evaluation"] = {
+                "scope": "vbt2_pilot_official_vectorbt_stats_only",
+                "used_fields": {
+                    "oos_expectancy": "Expectancy",
+                    "max_drawdown_pct": "Max Drawdown [%]",
+                    "num_trades": "Total Trades",
+                },
+                "skipped_unmeasured_fields": list(_VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS),
+                "failure_semantics": "screening_only_not_replay_or_robustness_eligible",
+                "failures": gate_failures,
+            }
+        elif official_stats_gate and scope == "paid_compute":
+            gate_failures = [
+                code
+                for code in gate_failures
+                if code not in _VBT_PAID_COMPUTE_EXEMPT_GATE_FAILURES
+            ]
+            prom.vectorbt_results["paid_compute_gate_evaluation"] = {
                 "scope": scope,
                 "screening_scope": scope,
                 "metric_authority": "official_vectorbt_stats_with_walk_forward_oos",
@@ -3245,7 +3331,7 @@ def apply_promotion_gates(
                     "max_drawdown_pct": "Max Drawdown [%]",
                     "num_trades": "Total Trades",
                 },
-                "skipped_unmeasured_fields": list(_VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS),
+                "skipped_unmeasured_fields": list(_VBT_PAID_COMPUTE_SKIPPED_UNMEASURED_GATE_FIELDS),
                 "failure_semantics": "screening_only_not_replay_or_robustness_eligible",
                 "failures": gate_failures,
             }

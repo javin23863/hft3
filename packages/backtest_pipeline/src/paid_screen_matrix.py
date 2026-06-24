@@ -76,6 +76,31 @@ DEFAULT_MATRIX_CHUNK_SIZE = 256
 ALLOWED_MATRIX_CHUNK_SIZES = (128, 256, 512, 1024)
 
 
+def _finalize_matrix_result(
+    result: FilterResult,
+    candidates: List[CandidateModel],
+) -> FilterResult:
+    if not result.feature_recipe_hash:
+        promoted_recipe_hash = next(
+            (
+                str(prom.vectorbt_results.get("feature_recipe_hash") or "").strip()
+                for prom in result.promoted
+                if str(prom.vectorbt_results.get("feature_recipe_hash") or "").strip()
+            ),
+            "",
+        )
+        candidate_recipe_hash = next(
+            (
+                str(getattr(candidate, "feature_recipe_hash", "") or "").strip()
+                for candidate in candidates
+                if str(getattr(candidate, "feature_recipe_hash", "") or "").strip()
+            ),
+            "",
+        )
+        result.feature_recipe_hash = promoted_recipe_hash or candidate_recipe_hash
+    return result
+
+
 def _chunk_parameter_trials(
     trials: Sequence[Dict[str, Any]], chunk_size: int
 ) -> Iterator[List[Dict[str, Any]]]:
@@ -246,7 +271,9 @@ def run_vectorbt_simulation_matrix(
         rust_required and (not rust_available or not rust_runtime_proof)
     ):
         stop_reason = "vectorbt_unavailable_fail_closed"
-        if vectorbt_available and rust_required and not rust_available:
+        if rust_required and not vectorbt_available:
+            stop_reason = "rust_engine_required_unavailable_fail_closed"
+        elif vectorbt_available and rust_required and not rust_available:
             stop_reason = "rust_engine_required_unavailable_fail_closed"
         elif vectorbt_available and rust_required and not rust_runtime_proof:
             stop_reason = "rust_runtime_proof_missing_fail_closed"
@@ -285,7 +312,10 @@ def run_vectorbt_simulation_matrix(
                     },
                 )
             )
-        return result
+        return _finalize_matrix_result(
+            result,
+            candidates,
+        )
 
     import vectorbt as vbt  # type: ignore[no-redef]
 
@@ -353,7 +383,10 @@ def run_vectorbt_simulation_matrix(
                     first_param_index,
                     reason="WALL_CLOCK_BUDGET_REACHED",
                 )
-                return result
+                return _finalize_matrix_result(
+                    result,
+                    candidates,
+                )
             # Trial-count budget check.
             remaining_budget = trial_budget - result.trials_run
             if remaining_budget <= 0:
@@ -365,7 +398,10 @@ def run_vectorbt_simulation_matrix(
                     candidate_index,
                     first_param_index,
                 )
-                return result
+                return _finalize_matrix_result(
+                    result,
+                    candidates,
+                )
 
             # Build the merged param dicts + candidate IDs for this chunk
             # (identical to the loop mode's per-trial merge).  We may need to
@@ -471,7 +507,10 @@ def run_vectorbt_simulation_matrix(
                         candidate_index,
                         first_param_index,
                     )
-                    return result
+                    return _finalize_matrix_result(
+                        result,
+                        candidates,
+                    )
                 continue
 
             # Build [bars, n_surviving] matrices with per-column shift +
@@ -506,23 +545,35 @@ def run_vectorbt_simulation_matrix(
                         f"{name} length {arr_len} != matrix columns {n_cols}"
                     )
 
-            close_matrix = np.broadcast_to(
-                np.asarray(close, dtype=float).reshape(-1, 1),
-                (n_bars, n_cols),
-            ).copy()
+            single_column = n_cols == 1
+            if single_column:
+                close_arg = np.asarray(close, dtype=float)
+                entries_arg = entries_matrix[:, 0] > 0
+                exits_arg = exits_matrix[:, 0] < 0
+                sl_arg = sl_arr[0] if sl_arr else None
+                tp_arg = tp_arr[0] if tp_arr else None
+            else:
+                close_arg = np.broadcast_to(
+                    np.asarray(close, dtype=float).reshape(-1, 1),
+                    (n_bars, n_cols),
+                ).copy()
+                entries_arg = entries_matrix > 0
+                exits_arg = exits_matrix < 0
+                sl_arg = sl_stop
+                tp_arg = tp_stop
 
             # --- One matrix Portfolio.from_signals call ------------------------------
             counters.portfolio_call_count += 1
             counters.trials_per_portfolio_call.append(len(surviving_trials))
             try:
                 pf = vbt.Portfolio.from_signals(
-                    close_matrix,
-                    entries=entries_matrix > 0,
-                    exits=exits_matrix < 0,
+                    close_arg,
+                    entries=entries_arg,
+                    exits=exits_arg,
                     init_cash=10000.0,
                     freq="1min",
-                    sl_stop=sl_stop,
-                    tp_stop=tp_stop,
+                    sl_stop=sl_arg,
+                    tp_stop=tp_arg,
                     engine=portfolio_engine,
                 )
             except Exception as exc:
@@ -568,8 +619,11 @@ def run_vectorbt_simulation_matrix(
                 # a flat Index (tuple keys require MultiIndex).
                 vbt_stats: Dict[str, Any] = {}
                 try:
-                    col_label = pf.wrapper.columns[col]
-                    vbt_stats = dict(pf.stats(column=col_label))
+                    if single_column:
+                        vbt_stats = dict(pf.stats())
+                    else:
+                        col_label = pf.wrapper.columns[col]
+                        vbt_stats = dict(pf.stats(column=col_label))
                 except Exception as exc:
                     logger.warning(
                         "VectorBT column stats failed for %s: %s", cand_id, exc
@@ -670,7 +724,13 @@ def run_vectorbt_simulation_matrix(
                     candidate_index,
                     first_param_index,
                 )
-                return result
+                return _finalize_matrix_result(
+                    result,
+                    candidates,
+                )
 
     counters.finalize_signal_reuse()
-    return result
+    return _finalize_matrix_result(
+        result,
+        candidates,
+    )

@@ -10,7 +10,7 @@ The following configurations are defined by the redesign spec and the v2 orchest
 
 | Configuration | Description | Command flag |
 |---------------|-------------|--------------|
-| **C1 — v1 baseline** | Retired subprocess-per-unit | `scripts/run_vectorbt_paid_screen.py` (**deleted 2026-06**) |
+| **C1 — v1 baseline** | Retired subprocess-per-unit | retired v1 runner (**deleted 2026-06**) |
 | **C2 — v2 long-lived workers, no cache** | Long-lived workers, cache disabled (max_entries=1) | `--cache-max-entries 1 --cache-memory-limit-mb 1` |
 | **C3 — v2 + event-data cache** | Cache NPZ→events→bars per event_id | `--cache-max-entries 1000 --cache-memory-limit-mb 4096` |
 | **C4 — v2 + feature cache** | Cache features per (event_id, feature_set_hash) | C3 + feature-cache path wired |

@@ -79,20 +79,26 @@ class PaidScreenWorker:
             import vectorbt as vbt
             vbt_version = vbt.__version__
 
-            # Run Rust runtime proof once for paid scopes
-            if self.screening_scope in ("paid-compute", "paid_compute", "screen",
-                                         "refine", "broad", "broad_screen"):
-                try:
-                    from backtest_pipeline.src.vectorbt_adapter import (
-                        _establish_vectorbt_rust_runtime_proof,
-                        _screening_engine_metadata,
-                    )
+            try:
+                from backtest_pipeline.src.vectorbt_adapter import (
+                    _establish_vectorbt_rust_runtime_proof,
+                    _screening_engine_metadata,
+                )
+                meta = _screening_engine_metadata(self.screening_scope)
+                rust_required = bool(meta.get("rust_engine_required_for_scope", False))
+                rust_proof = bool(meta.get("vectorbt_engine_runtime_proof", False))
+                if (
+                    rust_required
+                    and bool(meta.get("rust_engine_available", False))
+                    and not rust_proof
+                ):
                     rust_proof = _establish_vectorbt_rust_runtime_proof()
                     meta = _screening_engine_metadata(self.screening_scope)
-                    engine = meta.get("vectorbt_engine", "rust" if rust_proof else "numba")
-                except Exception:
-                    engine = "numba"
-                    rust_proof = False
+                engine = meta.get("vectorbt_engine", "rust" if rust_proof else "numba")
+                rust_proof = bool(meta.get("vectorbt_engine_runtime_proof", rust_proof))
+            except Exception:
+                engine = "numba"
+                rust_proof = False
         except ImportError:
             vbt_version = "not_installed"
             engine = "unavailable"

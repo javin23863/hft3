@@ -44,8 +44,8 @@ graphify explain ReplaySession
 graphify path run_event_replay build_certification_stamp
 ```
 
-3. Before any edit: `scripts/graphify_pre_edit.ps1` or confirm `graphify-out/graph.json` exists.
-4. After code edits: `graphify update .` or `scripts/graphify_rebuild.ps1`.
+3. Before any edit, only when graph gates are active: `scripts/graphify_pre_edit.ps1` or confirm `graphify-out/graph.json` exists.
+4. After code edits, only when graph gates are active: `graphify update .` or `scripts/graphify_rebuild.ps1`. While `waived-by-owner-2026-06-16` is active, use VaultGate plus targeted source reads and do not claim graph freshness.
 
 Regenerate wiki index:
 
@@ -58,8 +58,8 @@ python tools/graphify/build_wiki_index.py
 - [AGENTS.md](../../AGENTS.md) — delegation, topology (CHI404 only for live), verify loop
 - [ENGINEERING.md](ENGINEERING.md) — Karpathy principles (canonical coding style)
 - [SHELL_EXECUTION.md](SHELL_EXECUTION.md) — **time-bounded shell/SSH/pytest (mandatory)**
-- [docs/AGENTIC_ENGINEERING.md](../AGENTIC_ENGINEERING.md) — Spec -> GraphPre -> Plan -> Code -> GrepLoop -> Review -> Verify -> GraphPost
-- [GREPLOOP.md](GREPLOOP.md) — mandatory `rg` loop for stale terms, old fields, missing evidence rows, and external PR AI review when available
+- [docs/AGENTIC_ENGINEERING.md](../AGENTIC_ENGINEERING.md) — Spec -> GraphPre when active -> Plan -> Code -> Local Preflight -> Review -> Verify -> Plan Drift -> Review Surface -> PR GrepLoop -> GraphPost when active
+- [GREPLOOP.md](GREPLOOP.md) — mandatory local `rg` preflight for stale terms, old fields, and missing evidence rows; external PR AI review runs only on a PR/MR/CL review surface
 - [docs/project/PROJECT_PLANNING_STANDARD.md](../project/PROJECT_PLANNING_STANDARD.md) — literature-traceable feature control before roadmap changes
 - [docs/project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](../project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md) — feature classification and acceptance basis
 

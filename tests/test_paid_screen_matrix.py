@@ -36,6 +36,7 @@ from backtest_pipeline.src.vectorbt_adapter import (
     DEFAULT_PARAM_GRID,
     _run_vectorbt_simulation,
     expand_parameter_grid,
+    validate_screening_artifact,
 )
 from research_pipeline.types import CandidateModel
 
@@ -648,6 +649,43 @@ class TestRunVectorbtSimulationMatrix:
         assert all(r.reject_reason == "vectorbt_unavailable_fail_closed" for r in result.rejected)
         assert len(result.promoted) == 0
 
+    def test_paid_compute_without_vectorbt_uses_rust_required_fail_closed_reason(
+        self, monkeypatch, tmp_path
+    ):
+        """Paid-compute matrix artifacts validate when VectorBT itself is missing."""
+        monkeypatch.setattr(vectorbt_adapter, "_has_vectorbt", False)
+        monkeypatch.setattr(vectorbt_adapter, "_vectorbt_version", None)
+        monkeypatch.setattr(vectorbt_adapter, "_rust_engine_available", False)
+        ohlcv = _synthetic_ohlcv(40)
+
+        result = run_vectorbt_simulation_matrix(
+            ohlcv,
+            [_mock_candidate()],
+            parsed=None,
+            grid={
+                "signal_threshold": [0.1],
+                "holding_period_bars": [5],
+                "stop_loss_pct": [None],
+                "take_profit_pct": [None],
+            },
+            repo_root=tmp_path,
+            screening_scope="paid-compute",
+        )
+        artifact = result.to_dict()
+        validate_screening_artifact(artifact)
+
+        assert result.trials_run == 0
+        assert not result.promoted
+        assert artifact["screening_scope"] == "paid_compute"
+        assert artifact["vectorbt_engine"] == "unavailable"
+        assert artifact["rust_engine_required_for_scope"] is True
+        assert artifact["engine_parity_status"] == "rust_engine_required_unavailable_fail_closed"
+        assert artifact["stop_reasons"] == ["rust_engine_required_unavailable_fail_closed"]
+        assert (
+            artifact["rejected"][0]["rejection_reason_or_null"]
+            == "rust_engine_required_unavailable_fail_closed"
+        )
+
     def test_signal_failure_rejects_trial(self, monkeypatch, tmp_path):
         """A signal computer that raises rejects the trial, not the whole chunk."""
         _install_fake_vectorbt(monkeypatch, _make_fake_from_signals())
@@ -734,6 +772,40 @@ class TestRunVectorbtSimulationMatrix:
             tp_len = int(tp.shape[0]) if isinstance(tp, np.ndarray) else len(tp)
             assert tp_len == n_cols
 
+    def test_singleton_chunk_uses_loop_shaped_inputs_and_scalar_stops(self, monkeypatch, tmp_path):
+        """One-column matrix chunks preserve the loop-mode VectorBT call shape."""
+        captured: dict = {}
+        _install_fake_vectorbt(monkeypatch, _make_fake_from_signals(captured))
+        ohlcv = _synthetic_ohlcv(40)
+        grid = {
+            "signal_threshold": [0.15],
+            "holding_period_bars": [5],
+            "stop_loss_pct": [0.5],
+            "take_profit_pct": [1.0],
+        }
+
+        run_vectorbt_simulation_matrix(
+            ohlcv,
+            [_mock_candidate()],
+            parsed=None,
+            grid=grid,
+            repo_root=tmp_path,
+            signal_computer=_signal_computer_returns_fixed(1, -1),
+            screening_scope="pilot",
+            chunk_size=16,
+        )
+
+        close = np.asarray(captured["close"])
+        entries = np.asarray(captured["entries"])
+        exits = np.asarray(captured["exits"])
+        assert close.ndim == 1
+        assert entries.ndim == 1
+        assert exits.ndim == 1
+        assert entries.shape == (40,)
+        assert exits.shape == (40,)
+        assert np.isscalar(captured["kwargs"].get("sl_stop"))
+        assert np.isscalar(captured["kwargs"].get("tp_stop"))
+
     def test_uses_build_signal_matrix_helper_path(self, monkeypatch, tmp_path):
         """When all columns share a param-independent signal, the matrix has the
         expected [bars, n_cols] shape passed to from_signals."""
@@ -788,3 +860,6 @@ class TestRunVectorbtSimulationMatrix:
         for prom in result.promoted:
             assert prom.vectorbt_results["feature_recipe_hash"] == "recipe_hash_abc"
             assert prom.vectorbt_results["feature_recipe"] == recipe
+        artifact = result.to_dict()
+        assert artifact["feature_recipe_hash"] == "recipe_hash_abc"
+        assert "hftbacktest_handoff_status" not in artifact

@@ -130,10 +130,12 @@ A development slice is complete only when:
 
 ```text
 [ ] Local preflight ran on changed scope.
-[ ] PR GrepLoop ran when a PR and external PR AI review connector are available, or unavailability is documented.
 [ ] Reviewer found zero red findings or remaining findings are accepted blockers.
 [ ] Scope-appropriate tests/builds ran with command output.
 [ ] git diff --check passed.
+[ ] Plan Drift Review compared executed work to the approved plan after verify and passed, or remaining drift is recorded as a blocker with `merge-ready: no`.
+[ ] Review Surface Gate created/reused a PR/MR/CL surface after Plan Drift Review passed, or `unavailable(no-pr)` is documented as blocked with `merge-ready: no`.
+[ ] PR GrepLoop ran on the current-head review surface when an external PR AI connector is installed, connector unavailability is documented with `merge-ready: no`, or owner waiver is recorded as `pr-ai-review: waived-by-user` plus `review-surface: none(waived-by-user: <reason>)`.
 [ ] Feature matrix and open questions/rejections are updated.
 [ ] Current milestone/open-question gate has no required owner decision, unaccepted warning, or blocker remaining open. Accepted available-data scope must still sideline missing-data-dependent models with explicit skip/rejection reasons.
 [ ] GraphPost ran when tracked graph output is affected.

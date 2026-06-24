@@ -5,7 +5,7 @@ repo: javin23863/hft3
 date: 2026-06-20
 ---
 
-# Mandatory Developer Assignment: Complete the Autonomous Research Pipeline with Two Walk-Forward Gates and Greptile PR GrepLoop
+# Mandatory Developer Assignment: Complete the Autonomous Research Pipeline with Two Walk-Forward Gates and External PR AI GrepLoop
 
 This prompt replaces all previous prompts for this work.
 Follow it literally.
@@ -35,14 +35,13 @@ candidate proposal
 → repeat or stop
 ```
 
-The implementation must also pass the repository's real engineering review process, including the externally installed **Greptile** PR review loop.
-Codex review does not satisfy the Greptile requirement.
+The implementation must also pass the repository's real engineering review process, including the installed external PR AI review loop on a current PR/MR/CL review surface. The vault decision `2026-06-17 GrepLoop connector generalization` supersedes the prior connector-specific wording here: prefer Greptile when installed; otherwise use the installed external PR AI connector. Local Codex self-review does not satisfy this requirement.
 
 Related repo specs (cross-links):
 
 - [Autonomous pipeline runbook](../hft3_autonomous_pipeline_runbook.md)
 - [Autonomous config](../../configs/research/autonomous_hft3.yaml)
-- [Greptile PR GrepLoop procedure](../ai/GREPLOOP.md)
+- [External PR AI GrepLoop procedure](../ai/GREPLOOP.md)
 - [Walk Forward campaigns (incl. WFC)](../workbench/WALK_FORWARD_CAMPAIGNS.md)
 
 ---
@@ -144,7 +143,7 @@ Holm/BH
 fee/slippage/latency stress
 HftBacktest campaign
 ontology gate
-Greptile PR review loop
+external PR AI review loop
 ```
 
 Do not implement a second WFC function until proving that no suitable existing function already exists.
@@ -192,22 +191,23 @@ edit
 
 This is not the PR GrepLoop.
 
-### Loop C — External Greptile PR GrepLoop
+### Loop C — External PR AI GrepLoop
 
-This is the real pull-request review cycle using the installed Greptile GitHub integration:
+This is the real pull-request review cycle using the installed external PR AI connector on a current PR/MR/CL review surface:
 
 ```text
-push current head
-→ request Greptile review
-→ retrieve Greptile findings
+create/reuse review surface after Plan Drift Review passes
+→ push current head
+→ request installed external PR AI review
+→ retrieve external PR AI findings
 → fix every actionable finding
 → rerun verification
 → push
-→ request Greptile review again
+→ request external PR AI review again
 → stop only when clean
 ```
 
-Procedure authority: [Greptile PR GrepLoop](../ai/GREPLOOP.md)
+Procedure authority: [External PR AI GrepLoop](../ai/GREPLOOP.md)
 
 Do not name the runtime gate function `GrepLoop`.
 Use a runtime name such as:
@@ -1325,15 +1325,29 @@ Unresolved actionable hits block review.
 
 ---
 
-## 23. Mandatory Greptile PR GrepLoop
+## 23. Plan Drift Review and Review Surface Gate
 
-The owner has stated that **Greptile is installed and connected to this repository**.
-Greptile is therefore the required external PR AI reviewer for this task.
-Codex, Copilot, Bugbot, local agent review, or a prose self-review does not substitute for Greptile.
+After local preflight, reviewer, ontology gate when applicable, and verification
+pass, run Plan Drift Review against the approved plan, diff, artifacts, and
+receipts. If it finds drift, fix the work or update the approved plan, then
+rerun the affected local gates.
 
-Full procedure: [Greptile PR GrepLoop](../ai/GREPLOOP.md)
+Only after Plan Drift Review passes, create or reuse the PR/MR/CL review
+surface for external PR AI. Record the current review surface as
+`review-surface: <PR/MR/CL URL or id>; head=<sha>; split-needed yes|no`.
+If no surface can be published, report `pr-ai-review: unavailable(no-pr)` and
+`merge-ready: no`; if the owner waives the gate, report `pr-ai-review:
+waived-by-user` plus `review-surface: none(waived-by-user: <reason>)`.
 
-### Greptile loop procedure
+---
+
+## 24. Mandatory External PR AI GrepLoop
+
+The original assignment named Greptile. The current vault authority is `2026-06-17 GrepLoop connector generalization`: GrepLoop means the installed external PR AI reviewer on a current PR/MR/CL review surface. Prefer Greptile when installed; otherwise use the repo's installed external PR AI connector. Local agent review or a prose self-review does not substitute for this gate.
+
+Full procedure: [External PR AI GrepLoop](../ai/GREPLOOP.md)
+
+### External PR AI loop procedure
 
 #### Step 1 — Open or identify the PR
 
@@ -1355,17 +1369,17 @@ current head SHA
 git push
 ```
 
-#### Step 3 — Request Greptile review
+#### Step 3 — Request external PR AI review
 
-Use the repository's installed Greptile trigger:
+Use the repository's installed external PR AI trigger. For Greptile, the trigger is:
 
 ```bash
 gh pr comment <PR_NUMBER> --body "@greptileai"
 ```
 
-If the installed integration uses an automatic trigger, confirm that Greptile reviewed the current head SHA. Do not assume the old review applies to the new commit.
+If the installed integration uses an automatic trigger, confirm that the external reviewer reviewed the current head SHA. Do not assume the old review applies to the new commit.
 
-#### Step 4 — Fetch all Greptile review surfaces
+#### Step 4 — Fetch all external PR AI review surfaces
 
 ```bash
 gh pr view <PR_NUMBER> --json body,reviews,comments,statusCheckRollup
@@ -1378,14 +1392,14 @@ gh api --paginate \
 Inspect:
 
 ```text
-general Greptile summary
-inline Greptile comments
+general external reviewer summary
+inline external reviewer comments
 review submissions
-updated-in-place Greptile comments
+updated-in-place reviewer comments
 review head SHA
 ```
 
-#### Step 5 — Fix all actionable Greptile findings
+#### Step 5 — Fix all actionable external PR AI findings
 
 For each finding, classify:
 
@@ -1411,49 +1425,62 @@ scope-appropriate tests
 git diff --check
 ```
 
-#### Step 7 — Push and request Greptile again
+#### Step 7 — Push and request external PR AI again
 
 ```bash
 git push
 gh pr comment <PR_NUMBER> --body "@greptileai"
 ```
 
+Use `@greptileai` only when Greptile is the installed connector; otherwise use
+the repository's installed external PR AI trigger and record the current
+review-surface head.
+
 #### Step 8 — Stop condition
 
-The Greptile gate passes only when:
+The external PR AI gate passes only when:
 
 ```text
-Greptile reviewed the current PR head SHA
-Greptile confidence ≥ 4/5 (4/5 or 5/5 in summary when present)
-zero unresolved actionable Greptile findings remain
+external reviewer reviewed the current PR/MR/CL head SHA
+external reviewer reports clean status; for Greptile, 5/5 unless an owner-approved plan records a different threshold
+zero unresolved actionable external PR AI findings remain
 all required local verification is green
 ```
 
-Run at most five Greptile iterations. Do **not** advance to split PR-B/C or
-Phase 10 until the current PR meets confidence ≥ 4/5 **and** zero actionable
-findings on current head. Codex/@codex review does **not** satisfy this gate.
+Run at most five external PR AI iterations. Do **not** advance to split PR-B/C
+or Phase 10 until the current PR/MR/CL is clean with zero actionable findings
+on current head. Local Codex self-review does **not** satisfy this gate.
 After five unsuccessful iterations:
 
 ```text
-pr-greptile-review: BLOCKED
+pr-ai-review: run
+known-gaps: remaining external PR AI findings after bounded iterations
 merge-ready: no
 ```
 
 Report all remaining findings.
 
-If Greptile is genuinely unavailable or unauthenticated:
+If no review surface exists after Plan Drift Review passes, or the connector is
+genuinely unavailable or unauthenticated:
 
 ```text
-pr-greptile-review: unavailable(<reason>)
+pr-ai-review: unavailable(no-pr|no-connector|not-authenticated)
+review-surface: none(blocked: <reason>)
 merge-ready: no
 ```
 
-Only an explicit owner waiver may change that status.
-Do not silently fall back to `@codex review`.
+Only an explicit owner waiver may change the PR AI status:
+
+```text
+pr-ai-review: waived-by-user
+review-surface: none(waived-by-user: <reason>)
+```
+
+Do not silently fall back to local Codex review.
 
 ---
 
-## 24. Final acceptance checklist
+## 25. Final acceptance checklist
 
 The assignment fails unless all are true:
 
@@ -1482,8 +1509,8 @@ The assignment fails unless all are true:
 [ ] dual-pass reviewer has zero red findings
 [ ] ontology implementation gate passes
 [ ] full-scope tests pass
-[ ] Greptile reviewed the current head SHA
-[ ] zero unresolved actionable Greptile findings remain
+[ ] external PR AI reviewed the current head SHA, or owner waiver is explicitly recorded
+[ ] zero unresolved actionable external PR AI findings remain
 ```
 
 ---
@@ -1532,9 +1559,9 @@ local rg preflight
 dual-pass reviewer
 ontology implementation gate
 full-scope verification
-Greptile iteration count
-Greptile current-head review proof
-Greptile unresolved actionable count
+external PR AI iteration count
+external PR AI current-head review proof or owner-waiver receipt
+external PR AI unresolved actionable count
 ```
 
 Do not mark an item complete because a class, function, document, or test fixture exists.

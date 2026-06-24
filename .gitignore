@@ -35,6 +35,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+# Local uv environment experiments; project dependency authority is pyproject/requirements unless uv workflow is adopted.
+uv.lock
 .pytest_cache/
 .coverage
 htmlcov/
@@ -129,6 +131,7 @@ graphify-out/manifest.json
 graphify-out/cost.json
 graphify-out/cache/
 graphify-out/.last-graph-query.json
+apps/cockpit/graphify-out/
 
 # Ops artifacts and local logs
 logs/
@@ -147,6 +150,9 @@ rithmic_gateway/RApiPlus/
 # Session scratch (created during CHI404 ops; not source)
 .tmp/
 .claude/
+.hermes/
+tmp_phase*_review/
+/_*.py
 
 # Runtime audit outputs (replay_audits, latency_reports, etc.) - not source
 packages/runtime/
@@ -156,6 +162,7 @@ runtime/data_audits/model_coverage_after_paid_sync.json
 runtime/data_audits/model_coverage_after_paid_sync.md
 runtime/data_downloads/
 runtime/*.log
+runtime/*.err
 runtime/reports/*.log
 runtime/*.png
 runtime/*.txt
@@ -171,6 +178,10 @@ runtime/reports/_*
 runtime/reports/vbt_full_units.jsonl
 runtime/reports/*.tar
 runtime/reports/*.bin
+runtime/reports/vbt_*_status.json
+runtime/reports/vbt_*_audit.json
+runtime/reports/vbt_*_watcher*.json
+runtime/reports/vbt_*_regen_check.jsonl
 runtime/vbt_full_v2_cost_monitor*.jsonl
 runtime/launch_vbt_*.sh
 runtime/poll_vbt_*.sh
@@ -178,7 +189,15 @@ runtime/relaunch_vbt_*.sh
 runtime/npz_sync_*.bat
 research_cards/autoresearch/**
 !research_cards/autoresearch/.gitkeep
+research_cards/quarantine/**
+research_cards/stage_a_full/**
+!research_cards/stage_a_full/
+!research_cards/stage_a_full/stage_a_survivors.json
+research_cards/stage_a_smoke_probe/**
+research_cards/test_units_v2_dryrun.jsonl
+research_cards/test_v2_run_out/**
 _rebase_stash/
+runtime/stage_a_probe_current/**
 runtime/_m6_*/
 runtime/cockpit/
 runtime/corrupt_npz_redownload.json
@@ -200,6 +219,7 @@ runtime/validation/slow_tier_eval.json
 scripts/run_baseline31.ps1
 scripts/run_cli_dry_run_solo.ps1
 scripts/run_fixcheck*.ps1
+tests/fixtures/paid_screen_parity_data/*_mbo.npz
 
 # R|API+ SDK downloads (per-user from Rithmic portal; not source)
 rithmic_gateway/RApiPlus.cpp.13.7.0.0.zip

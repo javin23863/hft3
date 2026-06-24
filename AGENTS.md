@@ -77,13 +77,14 @@ Run this loop in order. The main thread **orchestrates and integrates**; it does
 3. **Local preflight** — run the mandatory bounded task-specific `rg` loop in [docs/ai/GREPLOOP.md](docs/ai/GREPLOOP.md) to catch stale terms, old fields, missing required vocabulary, missing citation rows, and whitespace errors before reviewer time. Codex self-review is not a substitute.
 4. **Review** — `cavecrew-reviewer` dual-pass (Karpathy + math invariants) **before** claiming the change is sound. Report reviewer receipt: 🔴 count, 🟡 count, **merge-ready yes/no**.
 5. **Verify** — `shell` runs `pytest` (and CHI404 validate when infra applies). Paste or summarize command output; do not narrate "tests pass" without evidence.
-6. **GraphPost** — `graphify update .` or `scripts/graphify_rebuild.ps1` after edits. Commit updated `graphify-out/` with the change when the team tracks graph in git.
+6. **Plan Drift Review** — compare the executed diff/artifacts/receipts against the approved plan before Review Surface Gate.
+7. **GraphPost** — only when graph gates are active: `graphify update .` or `scripts/graphify_rebuild.ps1` after edits. While graph gates are owner-waived, record the waiver and do not claim graph freshness.
 
 **Parallel investigators** are OK. **Skipping any step** is not.
 
 ### If the chain was skipped
 
-Stop. Acknowledge the miss to the user. Re-run the full **Spec → GraphPre → Plan → Delegate → Local Preflight → Review → Verify → PR GrepLoop when available → GraphPost** loop on the current diff before more edits or a merge/commit narrative.
+Stop. Acknowledge the miss to the user. Re-run the full **Spec → GraphPre when active → Plan → Delegate → Local Preflight → Review → Verify → Plan Drift → Review Surface → PR GrepLoop → GraphPost when active** loop on the current diff before more edits or a merge/commit narrative.
 
 ### Merge-ready criteria (honest status)
 
@@ -92,11 +93,11 @@ Do not tell the user work is merge-ready unless **all** of the following are tru
 | Gate | Requirement |
 |------|-------------|
 | Reviewer | `cavecrew-reviewer` verdict **merge-ready: yes**, **0 🔴** |
-| Local preflight / PR GrepLoop | Local preflight ran on the changed scope. If a PR/MR/CL exists and an external PR AI review connector is installed, PR GrepLoop also ran or the unavailability is documented. |
+| Local preflight / PR GrepLoop | Local preflight ran on the changed scope. After Plan Drift Review passes, create or reuse a PR/MR/CL review surface before GrepLoop; `unavailable(no-pr)` is a blocker, and an owner waiver must be recorded as `pr-ai-review: waived-by-user` plus `review-surface: none(waived-by-user: <reason>)`. |
 | Tests | Scope-green per [docs/VALIDATION_HONESTY.md](docs/VALIDATION_HONESTY.md): full scope pytest or gate script with **exit code and output tail** pasted in thread — not targeted file subsets alone. Full-repo `pytest` when scope is ambiguous. |
 | Skipped tests | Every skip has a **documented blocker** (e.g. CMake missing → `test_cpp_feature_golden` skipped). Say **merge-ready: no** until the gate runs or the user explicitly accepts the skip. |
 | C++ parity | When Python/C++ feature slots change: build `hft_feature_golden` and pass `tests/test_cpp_feature_golden.py` |
-| Graph | `graphify-out/` rebuilt after code edits when graph is tracked in git |
+| Graph | When graph gates are active, `graphify-out/` rebuilt after code edits when graph is tracked in git. While owner-waived, report `graph-gate: waived-by-owner` and do not claim graph freshness. |
 
 When blocked, state **what ran**, **what was skipped**, and **what unblocks** — do not imply completion.
 
@@ -105,7 +106,7 @@ When blocked, state **what ran**, **what was skipped**, and **what unblocks** �
 - **Subset pytest is not scope-green.** A targeted pass (e.g. 10/10 on one file) while the scope test directory fails does not satisfy the Tests gate.
 - **User-waived verify is not done.** If the user says "don't test" or "code only", report `verify-run: WAIVED (user)` and **`merge-ready: no`**. Verify-gated plan todos stay **`pending`** or **`waived-not-verified`** — never **`completed`**.
 - **Plan todo theater is forbidden.** Frontmatter `status: completed` on verify todos requires pasted green output from the verify command, or an explicit user acceptance of waiver in the thread.
-- **All handoffs** must include the status block in [docs/VALIDATION_HONESTY.md](docs/VALIDATION_HONESTY.md) (`merge-ready`, `scope-green`, `scope`, `verify-run`, `data-mode`, `known-gaps`). Lane addenda (e.g. options-lane PIT gaps) supplement but do not replace the repo-wide charter.
+- **All handoffs** must include the status block in [docs/VALIDATION_HONESTY.md](docs/VALIDATION_HONESTY.md) (`merge-ready`, `scope-green`, `scope`, `verify-run`, `plan-drift`, `data-mode`, `pr-ai-review`, `review-surface`, `known-gaps`). Lane addenda (e.g. options-lane PIT gaps) supplement but do not replace the repo-wide charter.
 
 ## Shell execution (time-bounded — mandatory)
 
@@ -143,7 +144,7 @@ Touch only what the task requires. Match existing naming, types, and style. Ever
 
 Convert imperative instructions into verifiable success criteria. Prefer "write a failing test, then make it pass" over "fix the bug." Strong criteria let the agent loop independently; weak criteria ("make it work") require constant clarification.
 
-## Fable → Ponytail → VaultGate → Spec → GraphPre → Plan → Code → Local Preflight → Review → Verify → PR GrepLoop → GraphPost
+## Fable → Ponytail → VaultGate → Spec → GraphPre When Active → Plan → Code → Local Preflight → Review → Verify → Plan Drift → Review Surface → PR GrepLoop → GraphPost When Active
 
 Every task runs this loop:
 
@@ -158,10 +159,12 @@ Every task runs this loop:
 8. **Local preflight** — Before reviewer, run a bounded, task-specific `rg` loop for forbidden legacy terms, old fields, missing required terms/citation rows, and whitespace errors. Patch actionable hits; max three local iterations; report blockers instead of widening blindly.
 9. **Review** — **cavecrew-reviewer** must complete Pass A (Karpathy) and Pass B (math invariants) on the diff before test commands can be used as merge evidence.
 10. **Verify** — **shell** runs bounded pytest (see [docs/ai/SHELL_EXECUTION.md](docs/ai/SHELL_EXECUTION.md)) and CHI404 validate gates when infra applies. Loop until met or blocked.
-11. **PR GrepLoop** — If a PR/MR/CL exists and an external PR AI review connector is installed, run the PR loop or document unavailability.
-12. **GraphPost** — After code edits: `graphify update .` or `scripts/graphify_rebuild.ps1`. Commit updated `graphify-out/` with the change when the team tracks graph in git.
+11. **Plan Drift Review** — Compare the executed work against the approved plan before Review Surface Gate. If drift is found, fix it or update the approved plan, then rerun affected local gates.
+12. **Review Surface Gate** — If no PR/MR/CL exists and the work is intended to advance toward merge-ready, create or reuse a branch plus PR/MR/CL review surface after Plan Drift Review passes. If publishing is blocked, report `pr-ai-review: unavailable(no-pr)` and `merge-ready: no`; if the owner waives the gate, report `pr-ai-review: waived-by-user` plus `review-surface: none(waived-by-user: <reason>)`.
+13. **PR GrepLoop** — Run the installed external PR AI review loop on the current-head review surface; fix actionable feedback and rerun local gates before triggering it again. If the connector is missing or unauthenticated, report the blocker and `merge-ready: no`.
+14. **GraphPost** — Only when graph gates are active: after code edits, run `graphify update .` or `scripts/graphify_rebuild.ps1`. While graph gates are owner-waived, skip GraphPost and report the waiver.
 
-Do not skip Fable, Ponytail, VaultGate, VaultPre, GraphGate (when active), GraphPre, Plan, Local Preflight, Review, Verify, PR GrepLoop when available, or GraphPost (when active) for "small" changes.
+Do not skip Fable, Ponytail, VaultGate, VaultPre, GraphGate (when active), GraphPre, Plan, Local Preflight, Review, Verify, Plan Drift Review, Review Surface Gate, PR GrepLoop when available, or GraphPost (when active) for "small" changes.
 
 ## hft3-specific constraints
 

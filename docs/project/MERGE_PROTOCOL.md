@@ -4,7 +4,7 @@ This protocol prevents parallel phase work from conflicting or accidentally chan
 
 ## Required Gates Per Phase Branch
 
-1. GraphGate before edits and GraphPost after edits.
+1. GraphGate before edits and GraphPost after edits only when graph gates are active. While `waived-by-owner-2026-06-16` is active, record the waiver and do not run graphify.
 2. Contract reviewed against `PHASE_CONTRACTS.md`.
 3. Targeted phase tests pass.
 4. Relevant prior Trade Manager phase tests pass.
@@ -28,7 +28,7 @@ This protocol prevents parallel phase work from conflicting or accidentally chan
 3. Run all Trade Manager phase tests from 14 through latest integrated phase.
 4. Run production-safety tests when risk, monitor, kill switch, or execution boundary is touched.
 5. Update docs and validation matrix.
-6. Run GraphPost.
+6. Run GraphPost when graph gates are active; while owner-waived, record the waiver.
 7. Repeat for the next phase branch.
 
 ## Required Commands
@@ -39,8 +39,11 @@ Phase branch minimum:
 $env:PYTHONPATH = "packages;apps"
 python -m pytest tests/test_trade_manager_phaseXX.py -q
 git diff --check
-graphify update . --force
 ```
+
+Run `graphify update . --force` only when graph gates are active. While the
+owner waiver is active, skip graphify and record `graph-gate:
+waived-by-owner-2026-06-16`.
 
 Integration branch minimum after Phase 20 lands:
 
@@ -50,8 +53,11 @@ python -m pytest tests/test_trade_manager_phase14.py tests/test_trade_manager_ph
 python -m pytest tests/test_production_safety.py -q
 python -m economic_event_universe.cli validate
 git diff --check
-graphify update . --force
 ```
+
+Run `graphify update . --force` only when graph gates are active. While the
+owner waiver is active, skip graphify and record `graph-gate:
+waived-by-owner-2026-06-16`.
 
 Integration branch minimum after all Phase 20-23 modules land:
 
@@ -61,8 +67,11 @@ python -m pytest tests/test_trade_manager_phase14.py tests/test_trade_manager_ph
 python -m pytest tests/test_production_safety.py -q
 python -m economic_event_universe.cli validate
 git diff --check
-graphify update . --force
 ```
+
+Run `graphify update . --force` only when graph gates are active. While the
+owner waiver is active, skip graphify and record `graph-gate:
+waived-by-owner-2026-06-16`.
 
 If a phase branch is merged, its phase test file must exist and be included in the integration command. Missing expected phase tests are a merge blocker, not an optional adjustment.
 
@@ -72,7 +81,7 @@ If a phase branch is merged, its phase test file must exist and be included in t
 2. Do not stage unrelated untracked files such as local scratch or generated intake artifacts.
 3. Do not amend unless explicitly requested.
 4. Commit message format: `phase XX: add <capability>` for phase work, or concise descriptive message for project/validation work.
-5. If graph tracked files changed during GraphPost, include them with the phase commit unless the team explicitly decides otherwise.
+5. If graph gates are active and tracked graph files changed during GraphPost, include them with the phase commit unless the team explicitly decides otherwise.
 
 ## Merge-Ready Definition
 
@@ -80,7 +89,10 @@ If a phase branch is merged, its phase test file must exist and be included in t
 |---|---|
 | Reviewer | no red findings; caveat if dedicated reviewer unavailable |
 | Tests | targeted and scoped tests pass with command output |
-| Graph | GraphPost complete; graph JSON valid if present |
+| Plan Drift | executed work matches the approved plan after verify; drift is fixed or reported with `merge-ready: no` |
+| Review Surface | current-head PR/MR/CL surface exists after Plan Drift Review passes, explicit owner waiver is recorded, or blocked status is reported with `merge-ready: no` |
+| PR AI | installed external PR AI review loop ran clean on the current surface, explicit owner waiver is recorded, or connector blocker is reported with `merge-ready: no` |
+| Graph | when graph gates are active, GraphPost complete and graph JSON valid if present; while owner-waived, waiver recorded and graph freshness not claimed |
 | Safety | no unapproved execution/routing path |
 | Docs | phase status, contracts, and validation matrix updated |
 | Worktree | no unintended staged files |

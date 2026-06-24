@@ -5,8 +5,13 @@ alwaysApply: true
 
 This project has a graphify knowledge graph at graphify-out/.
 
-- For codebase or architecture questions, when `graphify-out/graph.json` exists, first run `graphify query "<question>"` (or `graphify path "<A>" "<B>"` / `graphify explain "<concept>"`). These return a scoped subgraph, usually much smaller than `GRAPH_REPORT.md` or raw grep output.
-- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+While the vault records `waived-by-owner-2026-06-16`, GraphGate, GraphPre, and
+GraphPost are skipped. Use VaultGate plus targeted source reads and do not
+claim graph freshness. The graphify commands below apply only when that waiver
+is lifted.
+
+- For codebase or architecture questions, when graph gates are active and `graphify-out/graph.json` exists, first run `graphify query "<question>"` (or `graphify path "<A>" "<B>"` / `graphify explain "<concept>"`). These return a scoped subgraph, usually much smaller than `GRAPH_REPORT.md` or raw grep output.
+- When graph gates are active and graphify-out/wiki/index.md exists, navigate it instead of reading raw files
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context
-- After modifying code files in this session, run `graphify update .` or `scripts/graphify_rebuild.ps1` (mandatory; AST-only, no API key)
+- After modifying code files in this session, run `graphify update .` or `scripts/graphify_rebuild.ps1` only when graph gates are active (mandatory then; AST-only, no API key)
 - Full semantic rebuild (PDFs/docs) is optional: `scripts/graphify_semantic_local.ps1` uses **local Ollama**, not Google/Gemini API

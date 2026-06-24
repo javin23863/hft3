@@ -22,7 +22,11 @@ from backtest_pipeline.src.paid_screen_types import (
 from backtest_pipeline.src.paid_screen_profiling import RunProfiler, DEFAULT_RESEARCH_SPLIT
 from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
 from backtest_pipeline.src.paid_screen_matrix import run_vectorbt_simulation_matrix
-from backtest_pipeline.src.vectorbt_adapter import apply_promotion_gates
+from backtest_pipeline.src.vectorbt_adapter import (
+    ScreeningArtifactError,
+    apply_filter_result_provenance_metadata,
+    apply_promotion_gates,
+)
 
 
 def _cache_get(cache, key):
@@ -183,7 +187,8 @@ def build_batching_key(unit: PaidScreenUnit, ctx: WorkerContext,
         bar_construction_id="ohlcv_1m_from_npz_or_supplied_array",
         feature_set_id=unit.feature_set_id,
         feature_set_hash=feature_set_hash,
-        research_clock="scheduled_event",
+        research_clock=unit.research_clock,
+        context_set_id=unit.context_set_id,
         split_scheme_id=split_scheme_id_for_research_split(unit.research_split),
         fees_model_id="cme_fees_v1",
         slippage_model_id="slip_v1",
@@ -448,17 +453,23 @@ def _build_candidate_model(unit: PaidScreenUnit, model_entry: dict, repo_root: P
             "event_type": unit.event_type,
             "hyp_id": model_entry.get("hyp_id"),
             "feature_set_id": unit.feature_set_id,
+            "research_clock": unit.research_clock,
+            "context_set_id": unit.context_set_id,
+            "allowed_context_set_id": unit.context_set_id,
+            "declared_context_sets": list(unit.declared_context_sets),
+            "ablation_group_id": unit.ablation_group_id,
+            "negative_control_policy": unit.negative_control_policy,
         },
         target_symbol=target_symbol,
         target_event_id=unit.event_id,
-        research_clock="scheduled_event",
+        research_clock=unit.research_clock,
     )
     return attach_feature_recipe_to_candidate(
         base,
         parsed=parsed,
         target_event_id=unit.event_id,
         target_symbol=target_symbol,
-        research_clock="scheduled_event",
+        research_clock=unit.research_clock,
     )
 
 
@@ -592,6 +603,10 @@ def _write_screening_artifact(
         filter_result.data_manifest_hash = ohlcv_hash
     filter_result.lake_manifest_hash = context.lake_manifest_hash
     filter_result.events_csv_hash_or_not_applicable = context.events_csv_hash
+    filter_result.research_clock = unit.research_clock
+    filter_result.target_event_type_or_null = unit.event_type or None
+    filter_result.allowed_context_set_id_or_null = unit.context_set_id
+    filter_result.declared_context_sets = list(unit.declared_context_sets)
 
     # Build the canonical artifact dict — this calls validate_screening_artifact
     # internally and computes the correct screening_artifact_hash.
@@ -612,22 +627,31 @@ def _write_screening_artifact(
         validate_screening_artifact,
     )
 
-    artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
-    validate_screening_artifact(artifact)
-
-    # Write atomically
     serializable = _json_primitive_screening_payload(artifact)
-    tmp_path = artifact_path + ".tmp"
+    serializable["screening_artifact_hash"] = compute_screening_artifact_hash(serializable)
+    validate_screening_artifact(serializable)
+
+    # Write atomically. The tmp name must be per-write so concurrent/retried
+    # writers never race on the same intermediate path.
+    tmp_path = f"{artifact_path}.tmp.{os.getpid()}.{time.monotonic_ns()}"
     os.makedirs(os.path.dirname(artifact_path), exist_ok=True)
-    with open(tmp_path, "w") as f:
-        json.dump(serializable, f, indent=2, sort_keys=True)
-    os.replace(tmp_path, artifact_path)
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(serializable, f, indent=2, sort_keys=True)
+        os.replace(tmp_path, artifact_path)
+    except Exception:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
     from backtest_pipeline.src.research_pipeline_stages import annotate_promoted_screening_handoffs
 
-    annotate_promoted_screening_handoffs(artifact, artifact_path=artifact_path)
+    annotate_promoted_screening_handoffs(serializable, artifact_path=artifact_path)
 
-    return artifact.get("screening_artifact_hash", "")
+    return str(serializable.get("screening_artifact_hash") or "")
 
 
 def screen_paid_batch(
@@ -816,6 +840,12 @@ def screen_paid_batch(
                 screening_scope=context.screening_scope,
                 repo_root=Path(context.repo_root),
             )
+            apply_filter_result_provenance_metadata(
+                filter_result,
+                [candidate],
+                screening_scope=context.screening_scope,
+                repo_root=Path(context.repo_root),
+            )
             if fs_v1_ctx is not None:
                 from backtest_pipeline.src.vectorbt_adapter import (
                     _apply_fs_v1_screen_metadata,
@@ -840,11 +870,19 @@ def screen_paid_batch(
                 artifact_path = os.path.join(artifact_dir, "screening_artifact.json")
 
                 # Write the artifact
-                artifact_hash = _write_screening_artifact(
-                    artifact_path, filter_result,
-                    unit, model_entry, context, ohlcv_hash, profiler,
-                    candidate=candidate,
-                )
+                try:
+                    artifact_hash = _write_screening_artifact(
+                        artifact_path, filter_result,
+                        unit, model_entry, context, ohlcv_hash, profiler,
+                        candidate=candidate,
+                    )
+                except ScreeningArtifactError as exc:
+                    results.append(UnitScreeningResult(
+                        unit_id=unit.unit_id,
+                        status="ERROR",
+                        error=str(exc),
+                    ))
+                    continue
 
                 result = UnitScreeningResult(
                     unit_id=unit.unit_id,

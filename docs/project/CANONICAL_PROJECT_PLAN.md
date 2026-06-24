@@ -137,7 +137,8 @@ rules all agree.
 ```text
 Plan feature -> classify feature -> map literature/ontology -> define data/PIT
 -> define backend behavior -> define cockpit behavior -> define tests
--> implement smallest slice -> run GrepLoop/review/verify -> update matrix
+-> implement smallest slice -> local preflight -> review -> verify
+-> Plan Drift Review -> Review Surface Gate -> PR GrepLoop -> update matrix
 ```
 
 ## Non-Goals

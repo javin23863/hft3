@@ -65,10 +65,17 @@ def _resolve_vectorbt_result(artifact: Mapping[str, Any]) -> str | None:
             return "trials_completed"
         return None
     for row in promoted:
+        vbt = row.get("vectorbt_results")
+        if isinstance(vbt, Mapping):
+            paid_compute_eval = vbt.get("paid_compute_gate_evaluation")
+            if (
+                isinstance(paid_compute_eval, Mapping)
+                and paid_compute_eval.get("failures") == []
+            ):
+                return "paid_compute_gate_pass"
         status = str(row.get("screening_status") or "").lower()
         if status == "pass":
             return "screen_pass"
-        vbt = row.get("vectorbt_results")
         if isinstance(vbt, Mapping):
             pilot_eval = vbt.get("pilot_gate_evaluation")
             if isinstance(pilot_eval, Mapping) and pilot_eval.get("failures") == []:

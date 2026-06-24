@@ -1,11 +1,14 @@
 """Tests for VectorBT paid screen gate and unit generation."""
 from __future__ import annotations
 
+import builtins
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
@@ -36,6 +39,96 @@ def test_generate_smoke_units_jsonl_count(tmp_path: Path) -> None:
     assert 1 <= len(lines) <= 5
     row = json.loads(lines[0])
     assert "unit_id" in row and "event_id" in row and "thesis" in row
+    assert row["research_clock"] == "scheduled_event"
+    assert row["context_set_id"] == "target_only"
+    assert row["allowed_context_set_id"] == "target_only"
+    assert row["declared_context_sets"] == ["target_only"]
+    assert row["negative_control_policy"]["status"] == "not_required"
+
+
+def test_generate_context_units_have_distinct_identity_and_control_policy(tmp_path: Path) -> None:
+    baseline = tmp_path / "target_only.jsonl"
+    context = tmp_path / "target_plus_cross_asset.jsonl"
+
+    common_args = [
+        sys.executable,
+        str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+        "--smoke-count",
+        "1",
+        "--event-types",
+        "CPI",
+        "--symbols",
+        "MES.v.0",
+    ]
+    baseline_proc = subprocess.run(
+        common_args + ["--out", str(baseline)],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert baseline_proc.returncode == 0, baseline_proc.stderr
+
+    context_proc = subprocess.run(
+        common_args
+        + [
+            "--out",
+            str(context),
+            "--research-clock",
+            "context_feature_uplift",
+            "--context-set-id",
+            "target_plus_cross_asset",
+            "--declared-context-sets",
+            "target_only,target_plus_cross_asset",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert context_proc.returncode == 0, context_proc.stderr
+
+    baseline_row = json.loads(baseline.read_text(encoding="utf-8").splitlines()[0])
+    context_row = json.loads(context.read_text(encoding="utf-8").splitlines()[0])
+
+    assert baseline_row["model_id"] == context_row["model_id"]
+    assert baseline_row["event_id"] == context_row["event_id"]
+    assert baseline_row["symbol"] == context_row["symbol"]
+    assert baseline_row["unit_id"] != context_row["unit_id"]
+    assert context_row["research_clock"] == "context_feature_uplift"
+    assert context_row["context_set_id"] == "target_plus_cross_asset"
+    assert context_row["allowed_context_set_id"] == "target_plus_cross_asset"
+    assert context_row["declared_context_sets"] == ["target_only", "target_plus_cross_asset"]
+    assert context_row["negative_control_policy"]["status"] == "required_before_context_claim"
+
+
+def test_generator_negative_control_policy_uses_shared_default() -> None:
+    from backtest_pipeline.src.paid_screen_types import default_negative_control_policy
+    from scripts.generate_vbt_paid_units_jsonl import _default_negative_control_policy
+
+    assert _default_negative_control_policy(
+        "scheduled_event",
+        "target_only",
+    ) == default_negative_control_policy("scheduled_event", "target_only")
+    assert _default_negative_control_policy(
+        "context_feature_uplift",
+        "target_plus_cross_asset",
+    ) == default_negative_control_policy(
+        "context_feature_uplift",
+        "target_plus_cross_asset",
+    )
+
+
+def test_generate_rejects_unknown_context_set(tmp_path: Path) -> None:
+    from scripts.generate_vbt_paid_units_jsonl import _normalize_context_set_id
+
+    with pytest.raises(ValueError, match="context_set_id_invalid"):
+        _normalize_context_set_id("target_plus_magic")
+
+
+def test_generate_rejects_declared_context_sets_missing_current_context(tmp_path: Path) -> None:
+    from scripts.generate_vbt_paid_units_jsonl import _parse_declared_context_sets
+
+    with pytest.raises(ValueError, match="declared_context_sets_missing_context_set_id"):
+        _parse_declared_context_sets("target_only", "target_plus_macro")
 
 
 def test_ready_gate_fails_on_missing_pilot(tmp_path: Path) -> None:
@@ -277,12 +370,16 @@ def test_next_steps_after_gate_points_to_vast_full(tmp_path: Path) -> None:
     assert payload["phase"] == "D1-D4"
     joined = "\n".join(payload["commands"])
     assert "run_vbt_paid_screen_vast_full.sh" in joined
-    assert "stage_a_survivors" not in joined
+    assert "Stage-A survivor scope" in joined
+    assert "VBT_UNIT_SOURCE=all_active" in joined
 
 
-def test_vast_full_script_has_no_stage_a_prerequisite() -> None:
+def test_vast_full_script_defaults_to_stage_a_survivor_scope() -> None:
     script = (REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh").read_text(encoding="utf-8")
-    assert "stage_a_survivors" not in script
+    assert 'UNIT_SOURCE="${VBT_UNIT_SOURCE:-stage_a_survivors}"' in script
+    assert "--from-stage-a-survivors" in script
+    assert "VBT_STAGE_A_SURVIVORS" in script
+    assert "VBT_UNIT_SOURCE=all_active" in script
     assert "--all-active-models" in script
 
 
@@ -328,6 +425,1219 @@ def test_stage_a_survivors_expansion_not_capped_at_fifty(tmp_path: Path) -> None
 
     parsed = parse_hypothesis(row["thesis"], use_llm=False)
     assert parsed.primary_model_id == row["model_id"]
+
+
+def test_stage_a_survivors_respects_split_and_event_type_filters(tmp_path: Path) -> None:
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [
+                    {"hyp_id": 5, "event_type": "CPI"},
+                    {"hyp_id": 5, "event_type": "NFP"},
+                ],
+                "pass_through": [],
+                "tested_cells": [
+                    {"hyp_id": 5, "event_type": "CPI"},
+                    {"hyp_id": 5, "event_type": "NFP"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--research-split",
+            "holdout",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "5",
+            "--out",
+            str(out),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    rows = [json.loads(ln) for ln in out.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert rows
+    assert {row["event_type"] for row in rows} == {"CPI"}
+    assert {row.get("research_split") for row in rows} == {"holdout"}
+    years = {int(row["event_id"].split("_")[1]) for row in rows}
+    assert years.issubset({2023, 2024})
+
+
+def test_require_runnable_npz_uses_manifest_without_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A usable manifest is authoritative enough to avoid the slow per-unit resolver."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    npz_file = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(npz_file, data=np.arange(3, dtype=np.int64))
+    (npz_root / "manifest.json").write_text(
+        json.dumps(
+            [
+                {
+                    "symbol": "MES",
+                    "event_id": "CPI_2020_01_15_TIGHT",
+                    "npz_path": npz_file.name,
+                    "event_count": 3,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.delenv("HFT3_MANIFEST_PATH", raising=False)
+
+    original_import = builtins.__import__
+
+    def guarded_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "backtest_pipeline.src.vectorbt_adapter":
+            raise AssertionError("manifest-backed filter should not import VectorBT fallback")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+
+    units = [
+        {"unit_id": "keep", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"},
+        {"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_02_15_TIGHT"},
+    ]
+
+    kept = generator._filter_runnable_npz_units(units, REPO)
+
+    assert [unit["unit_id"] for unit in kept] == ["keep"]
+
+
+def test_require_runnable_npz_uses_lake_manifest_parquet_authority(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HFT3_MANIFEST_PATH is honored when it points at the same lake."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    manifest = npz_root / "manifest.parquet"
+    manifest.write_bytes(b"placeholder")
+    npz_file = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(npz_file, data=np.arange(3, dtype=np.int64))
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(manifest))
+    monkeypatch.setattr(
+        generator,
+        "_read_manifest_parquet_records",
+        lambda _path: [
+            {
+                "symbol": "MES",
+                "event_id": "CPI_2020_01_15_TIGHT",
+                "npz_path": npz_file.name,
+                "event_count": 3,
+            }
+        ],
+    )
+
+    kept = generator._filter_runnable_npz_units(
+        [
+            {"unit_id": "keep", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"},
+            {"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_02_15_TIGHT"},
+        ],
+        REPO,
+    )
+
+    assert [unit["unit_id"] for unit in kept] == ["keep"]
+
+
+def test_require_runnable_npz_rejects_manifest_outside_lake_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Operator-provided HFT3_MANIFEST_PATH must not be silently ignored."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    external_manifest = tmp_path / "cross_mount" / "manifest.parquet"
+    external_manifest.parent.mkdir()
+    external_manifest.write_bytes(b"placeholder")
+    stray = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(stray, data=np.arange(3, dtype=np.int64))
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(external_manifest))
+
+    with pytest.raises(RuntimeError, match="HFT3_MANIFEST_PATH rejected"):
+        generator._filter_runnable_npz_units(
+            [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
+
+
+def test_require_runnable_npz_rejects_unsupported_explicit_manifest_suffix(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit HFT3_MANIFEST_PATH must be a supported sole authority."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    manifest = npz_root / "manifest.txt"
+    manifest.write_text("not-json\n", encoding="utf-8")
+    stray = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(stray, data=np.arange(3, dtype=np.int64))
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(manifest))
+
+    with pytest.raises(RuntimeError, match="unsupported manifest suffix"):
+        generator._filter_runnable_npz_units(
+            [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
+
+
+def test_require_runnable_npz_derives_npz_from_raw_parquet_output_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Parquet output_path may point at raw DBN; runnable NPZ is derived under HFT3_NPZ_ROOT."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    manifest = npz_root / "manifest.parquet"
+    manifest.write_bytes(b"placeholder")
+    npz_file = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(npz_file, data=np.arange(3, dtype=np.int64))
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(manifest))
+    monkeypatch.setattr(
+        generator,
+        "_read_manifest_parquet_records",
+        lambda _path: [
+            {
+                "symbol": "MES",
+                "event_id": "CPI_2020_01_15_TIGHT",
+                "output_path": "mbo_release/CPI_2020_01_15_TIGHT/MES.v.0/raw.dbn.zst",
+            }
+        ],
+    )
+
+    kept = generator._filter_runnable_npz_units(
+        [{"unit_id": "keep", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+        REPO,
+    )
+
+    assert [unit["unit_id"] for unit in kept] == ["keep"]
+
+
+def test_require_runnable_npz_manifest_authority_blocks_glob_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A present lake manifest with no runnable NPZ rows must not fall back to stray files."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    manifest = npz_root / "manifest.parquet"
+    manifest.write_bytes(b"placeholder")
+    stray = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(stray, data=np.arange(3, dtype=np.int64))
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(manifest))
+    monkeypatch.setattr(
+        generator,
+        "_read_manifest_parquet_records",
+        lambda _path: [
+            {
+                "symbol": "MES",
+                "event_id": "CPI_2020_02_15_TIGHT",
+                "output_path": "mbo_release/CPI_2020_02_15_TIGHT/MES.v.0/raw.dbn.zst",
+            }
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="manifest authority yielded no valid keys"):
+        generator._filter_runnable_npz_units(
+            [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
+
+
+def test_require_runnable_npz_parquet_authority_empty_records_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Empty parquet authority must fail closed instead of silently zeroing units."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    manifest = npz_root / "manifest.parquet"
+    manifest.write_bytes(b"placeholder")
+    stray = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(stray, data=np.arange(3, dtype=np.int64))
+    (npz_root / "manifest.json").write_text(
+        json.dumps([{"symbol": "MES", "event_id": "CPI_2020_01_15_TIGHT", "npz_path": stray.name}]),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(manifest))
+    monkeypatch.setattr(generator, "_read_manifest_parquet_records", lambda _path: [])
+
+    with pytest.raises(RuntimeError, match="parquet manifest yielded no records"):
+        generator._filter_runnable_npz_units(
+            [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
+
+
+def test_require_runnable_npz_event_filter_empty_parquet_authority_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Event filtering must not convert empty parquet authority into a zero-unit run."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    manifest = npz_root / "manifest.parquet"
+    manifest.write_bytes(b"placeholder")
+    stray = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(stray, data=np.arange(3, dtype=np.int64))
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(manifest))
+    monkeypatch.setattr(generator, "_read_manifest_parquet_records", lambda _path: [])
+
+    with pytest.raises(RuntimeError, match="parquet manifest yielded no records"):
+        generator._filter_events_to_runnable_npz(
+            [{"symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
+
+
+def test_require_runnable_npz_missing_parquet_manifest_fails_distinctly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing parquet authority must report the missing file, not empty records."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    manifest = npz_root / "manifest.parquet"
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(manifest))
+
+    with pytest.raises(RuntimeError, match="parquet manifest file is missing"):
+        generator._filter_runnable_npz_units(
+            [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
+
+
+def test_require_runnable_npz_missing_json_manifest_fails_distinctly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit missing JSON manifest authority must not fall back to stray NPZ files."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    stray = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(stray, data=np.arange(3, dtype=np.int64))
+    manifest = npz_root / "manifest.json"
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(manifest))
+
+    with pytest.raises(RuntimeError, match="JSON manifest file is missing"):
+        generator._filter_runnable_npz_units(
+            [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
+
+
+def test_require_runnable_npz_cli_reports_manifest_error(tmp_path: Path) -> None:
+    """CLI should print ERROR and exit 1 instead of a raw traceback."""
+    out = tmp_path / "units.jsonl"
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    env = os.environ.copy()
+    env["HFT3_NPZ_ROOT"] = str(npz_root)
+    env["HFT3_MANIFEST_PATH"] = str(npz_root / "manifest.parquet")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO), str(REPO / "packages"), str(REPO / "apps"), env.get("PYTHONPATH", "")]
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--all-active-models",
+            "--require-runnable-npz",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: runnable NPZ event filter failed:" in proc.stderr
+    assert "runnable NPZ parquet manifest file is missing" in proc.stderr
+    assert "Traceback" not in proc.stderr
+
+
+def test_stage_a_require_runnable_npz_cli_reports_manifest_error(tmp_path: Path) -> None:
+    """Stage-A survivor generation must use the same clean manifest-error path."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    env = os.environ.copy()
+    env["HFT3_NPZ_ROOT"] = str(npz_root)
+    env["HFT3_MANIFEST_PATH"] = str(npz_root / "manifest.parquet")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO), str(REPO / "packages"), str(REPO / "apps"), env.get("PYTHONPATH", "")]
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--require-runnable-npz",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: runnable NPZ unit filter failed:" in proc.stderr
+    assert "runnable NPZ parquet manifest file is missing" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_stage_a_survivors_cli_reports_malformed_json(tmp_path: Path) -> None:
+    """Malformed Stage-A survivor JSON should print ERROR instead of a traceback."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text("{not-json}\n", encoding="utf-8")
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR:" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_stage_a_survivors_cli_reports_non_object_json(tmp_path: Path) -> None:
+    """Non-object Stage-A survivor JSON should print ERROR instead of a traceback."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text("[]\n", encoding="utf-8")
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: stage_a_survivors.json: expected JSON object" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+@pytest.mark.parametrize(
+    ("missing_field", "payload"),
+    [
+        (
+            "survivors",
+            {
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            },
+        ),
+        (
+            "pass_through",
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            },
+        ),
+        (
+            "tested_cells",
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [],
+            },
+        ),
+    ],
+)
+def test_stage_a_survivors_cli_rejects_missing_top_level_keys(
+    tmp_path: Path,
+    missing_field: str,
+    payload: dict,
+) -> None:
+    """Stage-A survivor authority keys must be explicit, even when empty."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(json.dumps(payload), encoding="utf-8")
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert f"ERROR: stage_a_survivors.json: missing required top-level fields: {missing_field}" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_stage_a_survivors_cli_reports_unknown_hyp_id(tmp_path: Path) -> None:
+    """Unknown Stage-A hyp IDs should print ERROR instead of a traceback."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 999999, "event_type": "CPI"}],
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 999999, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: stage_a_survivors.json: unknown hyp_id 999999" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_stage_a_survivors_cli_allows_deprecated_tested_cell_hyp_id(tmp_path: Path) -> None:
+    """tested_cells supplies event types; only survivor/pass-through IDs expand into units."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 999999, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == 1
+    assert rows[0]["hyp_id"] == 5
+    assert rows[0]["event_type"] == "CPI"
+
+
+def test_stage_a_survivors_cli_reports_bad_nested_schema(tmp_path: Path) -> None:
+    """Malformed nested Stage-A fields should print ERROR instead of a traceback."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": {"hyp_id": 5, "event_type": "CPI"},
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: stage_a_survivors.json: survivors must be a list" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_stage_a_survivors_cli_rejects_bool_hyp_id(tmp_path: Path) -> None:
+    """Bool hyp IDs should not coerce to 0/1."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": True, "event_type": "CPI"}],
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: stage_a_survivors.json: invalid survivor hyp_id" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_stage_a_survivors_cli_rejects_falsey_bad_nested_schema(tmp_path: Path) -> None:
+    """Falsey malformed Stage-A containers must not be masked as missing."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": {},
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: stage_a_survivors.json: survivors must be a list" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_stage_a_survivors_cli_rejects_bad_tested_cells_rows(tmp_path: Path) -> None:
+    """Malformed tested_cells rows should not be ignored."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [],
+                "tested_cells": ["CPI"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: stage_a_survivors.json: tested_cells rows must be objects" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_stage_a_survivors_cli_rejects_missing_tested_cell_fields(tmp_path: Path) -> None:
+    """Object tested_cells rows still need the canonical hyp_id/event_type keys."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 5}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: stage_a_survivors.json: tested_cells rows require hyp_id and event_type" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_stage_a_survivors_cli_rejects_missing_survivor_fields(tmp_path: Path) -> None:
+    """Object survivor rows still need the canonical hyp_id/event_type keys."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5}],
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: stage_a_survivors.json: survivor rows require hyp_id and event_type" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_stage_a_survivors_cli_rejects_bad_pass_through_entries(tmp_path: Path) -> None:
+    """Malformed pass-through entries should not be skipped."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [False],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: stage_a_survivors.json: invalid pass_through entry" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_stage_a_survivors_cli_reports_unknown_pass_through_hyp_id(tmp_path: Path) -> None:
+    """Pass-through hyp IDs should validate against the same registry as survivors."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [999999],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: stage_a_survivors.json: unknown hyp_id 999999" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_all_active_require_runnable_npz_cli_reports_no_valid_manifest_keys(tmp_path: Path) -> None:
+    """All-active generation should report manifest authority failures cleanly."""
+    out = tmp_path / "units.jsonl"
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    (npz_root / "manifest.json").write_text(
+        json.dumps(
+            [
+                {
+                    "symbol": "MES.v.0",
+                    "event_id": "CPI_2020_01_15_TIGHT",
+                    "npz_path": "MES.v.0_CPI_2020_01_15_TIGHT_mbo.npz",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["HFT3_NPZ_ROOT"] = str(npz_root)
+    env.pop("HFT3_MANIFEST_PATH", None)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO), str(REPO / "packages"), str(REPO / "apps"), env.get("PYTHONPATH", "")]
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--all-active-models",
+            "--require-runnable-npz",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: runnable NPZ event filter failed:" in proc.stderr
+    assert "runnable NPZ manifest authority yielded no valid keys" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_stage_a_require_runnable_npz_cli_reports_no_valid_manifest_keys(tmp_path: Path) -> None:
+    """Stage-A survivor generation should report manifest authority failures cleanly."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    (npz_root / "manifest.json").write_text(
+        json.dumps(
+            [
+                {
+                    "symbol": "MES.v.0",
+                    "event_id": "CPI_2020_01_15_TIGHT",
+                    "npz_path": "MES.v.0_CPI_2020_01_15_TIGHT_mbo.npz",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["HFT3_NPZ_ROOT"] = str(npz_root)
+    env.pop("HFT3_MANIFEST_PATH", None)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO), str(REPO / "packages"), str(REPO / "apps"), env.get("PYTHONPATH", "")]
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--require-runnable-npz",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: runnable NPZ unit filter failed:" in proc.stderr
+    assert "runnable NPZ manifest authority yielded no valid keys" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_require_runnable_npz_cli_reports_malformed_manifest_json(tmp_path: Path) -> None:
+    """Malformed JSON manifest should report ERROR instead of a traceback."""
+    out = tmp_path / "units.jsonl"
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    (npz_root / "manifest.json").write_text("{not-json}\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["HFT3_NPZ_ROOT"] = str(npz_root)
+    env.pop("HFT3_MANIFEST_PATH", None)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO), str(REPO / "packages"), str(REPO / "apps"), env.get("PYTHONPATH", "")]
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--all-active-models",
+            "--require-runnable-npz",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: runnable NPZ event filter failed:" in proc.stderr
+    assert "runnable NPZ JSON manifest is unreadable" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
+def test_require_runnable_npz_unrecognized_manifest_json_blocks_glob_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Existing manifest.json with unknown schema is still manifest authority."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    stray = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(stray, data=np.arange(3, dtype=np.int64))
+    (npz_root / "manifest.json").write_text(
+        json.dumps({"unexpected": "schema"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.delenv("HFT3_MANIFEST_PATH", raising=False)
+
+    with pytest.raises(RuntimeError, match="unrecognized schema"):
+        generator._filter_runnable_npz_units(
+            [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
+
+
+def test_require_runnable_npz_parquet_missing_pandas_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing pandas must not make parquet manifest authority silently empty."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    manifest = tmp_path / "manifest.parquet"
+    manifest.write_bytes(b"placeholder")
+    original_import = builtins.__import__
+
+    def guarded_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "pandas":
+            raise ImportError("no pandas")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+
+    with pytest.raises(RuntimeError, match="pandas is required"):
+        generator._read_manifest_parquet_records(manifest)
+
+
+def test_require_runnable_npz_corrupt_parquet_manifest_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Corrupt parquet authority must report a manifest RuntimeError."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    manifest = tmp_path / "manifest.parquet"
+    manifest.write_bytes(b"not-a-parquet-file")
+    pd = pytest.importorskip("pandas")
+    assert pd is not None
+
+    with pytest.raises(RuntimeError, match="parquet manifest is unreadable"):
+        generator._read_manifest_parquet_records(manifest)
+
+
+def test_require_runnable_npz_accepts_fixture_manifest_shape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fixture-style manifests with a files list are parsed instead of crashing."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    npz_file = npz_root / "MES.v.0_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(npz_file, data=np.arange(3, dtype=np.int64))
+    (npz_root / "manifest.json").write_text(
+        json.dumps({"seed": 1, "files": [npz_file.name]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.delenv("HFT3_MANIFEST_PATH", raising=False)
+
+    kept = generator._filter_runnable_npz_units(
+        [{"unit_id": "keep", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+        REPO,
+    )
+
+    assert [unit["unit_id"] for unit in kept] == ["keep"]
 
 
 def test_generated_thesis_round_trips_hyp_ids_1_to_50(tmp_path: Path) -> None:
@@ -513,10 +1823,23 @@ def test_all_active_holdout_split_includes_holdout_when_explicit(tmp_path: Path)
 def test_vast_full_script_requires_declaration_before_workers() -> None:
     script = (REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh").read_text(encoding="utf-8")
     assert "vbt_full_run_declaration.json" in script
+    assert 'RESEARCH_SPLIT="${VBT_RESEARCH_SPLIT:-discovery_confirmation}"' in script
+    assert 'if [[ -n "$RESEARCH_SPLIT" ]]' in script
+    assert "stage_a_survivors_cme_m6_runnable_npz" in script
     assert "expected_work_units" in script
     assert "DECL_EXPECTED" in script
     assert "ERROR: Full-run declaration missing" in script
     assert "ERROR: Declaration expected_work_units=" in script
+    assert "ERROR: Declaration mismatch:" in script
+    assert 'STALL_MINUTES="${VBT_STALL_MINUTES:-30}"' in script
+    assert '"stall_minutes": int(stall_minutes)' in script
+    assert 'expect_int("stall_minutes", int(stall_minutes))' in script
+    assert 'expect_int("stall_minutes", 30)' not in script
+    assert "VBT_WRITE_DECLARATION_TEMPLATE" in script
+    assert "Wrote declaration template:" in script
+    assert "to regenerate the declaration template" in script
+    assert "Declaration verified:" in script
+    assert "--abort-on-failed-units" in script
     assert "--research-split" in script
 
 

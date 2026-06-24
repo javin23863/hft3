@@ -47,3 +47,6 @@ def features_engine_root(root: Path | None = None) -> Path:
 def pythonpath_entries(root: Path | None = None) -> list[str]:
     base = root or _ROOT
     return [str(base), str(base / "packages"), str(base / "apps")]
+
+
+setup_repo_paths()

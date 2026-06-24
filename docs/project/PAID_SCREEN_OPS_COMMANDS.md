@@ -33,8 +33,8 @@ Related documents:
 
 All v2 commands use `scripts/run_paid_screen.py` (canonical shim) or
 `scripts/run_vectorbt_paid_screen_v2.py` directly. The v1 subprocess-per-unit
-orchestrator (`scripts/run_vectorbt_paid_screen.py`) is **retired** (removed
-2026-06); use archived manifests for historical v1 parity only.
+orchestrator is **retired**; use archived manifests for historical v1 parity
+only.
 
 ---
 
@@ -108,13 +108,13 @@ migration gate (see `PAID_SCREEN_MIGRATION_PLAN.md` §2).
 
 ### 2.1 v1 baseline (retired — historical reference only)
 
-> **Retired 2026-06:** `scripts/run_vectorbt_paid_screen.py` was deleted. Use
+> **Retired 2026-06:** the v1 paid-screen runner was deleted. Use
 > archived v1 manifests under `runtime/reports/paid_screen_v1_baseline/` for
 > parity comparison; do not attempt to re-run v1.
 
 ```bash
-# Historical — script no longer exists:
-# python scripts/run_vectorbt_paid_screen.py ...
+# Historical — v1 script no longer exists.
+```
 
 Record the `events_csv_hash` and `lake_manifest_hash` from the v1 manifest
 (needed to make v2 cache keys directly comparable):
@@ -216,7 +216,8 @@ python scripts/run_vectorbt_paid_screen_v2.py \
 
 ```bash
 # Historical — script no longer exists:
-# python scripts/run_vectorbt_paid_screen.py ...
+# use archived v1 benchmark manifests only.
+```
 
 ### 3.3 Compare throughput
 
@@ -458,8 +459,9 @@ Key fields to verify:
 - `units` == `wc -l` of the JSONL.
 - `batches` is the number of `(symbol, event_id)` groups — fewer than `units`
   is expected and correct (batching collapses units sharing an event).
-- `after_resume` reflects units not yet completed if `--resume` were passed
-  (it is `units` without `--resume`).
+- `after_resume` is `units` without `--resume`. With `--dry-run --resume`,
+  hashes are resolved and valid resume artifacts are scanned before grouping,
+  so `after_resume` is the remaining unit count after resume filtering.
 
 ### 6.2 Dry run with resume preview
 
@@ -473,8 +475,8 @@ python scripts/run_vectorbt_paid_screen_v2.py \
   --resume
 ```
 
-`after_resume` will be less than `units` if some units in `$OUT` already have
-valid artifacts.
+`after_resume` is the post-resume remaining unit count here. A value below
+`units` means existing artifacts validated and were skipped.
 
 ---
 

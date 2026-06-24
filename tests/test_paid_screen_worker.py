@@ -1,5 +1,10 @@
 """Tests for the long-lived paid-screen worker."""
+import sys
+import types
+
 import pytest
+
+from backtest_pipeline.src import vectorbt_adapter
 from backtest_pipeline.src.paid_screen_worker import PaidScreenWorker
 from backtest_pipeline.src.paid_screen_types import PaidScreenUnit
 
@@ -27,6 +32,82 @@ class TestPaidScreenWorker:
         assert ctx is not None
         assert ctx.screening_scope == "pilot"
         assert ctx.events_csv_hash == "eh"
+
+    def test_pilot_init_does_not_attempt_rust_proof_when_available(self, monkeypatch):
+        fake_vectorbt = types.ModuleType("vectorbt")
+        fake_vectorbt.__version__ = "1.0.0"
+        monkeypatch.setitem(sys.modules, "vectorbt", fake_vectorbt)
+
+        proof_calls = []
+
+        def fake_metadata(scope):
+            assert scope == "pilot"
+            proof_succeeded = bool(proof_calls)
+            return {
+                "rust_engine_available": True,
+                "vectorbt_engine_runtime_proof": proof_succeeded,
+                "rust_engine_required_for_scope": False,
+                "vectorbt_engine": "rust" if proof_succeeded else "numba",
+            }
+
+        def fake_proof():
+            proof_calls.append("pilot")
+            return True
+
+        monkeypatch.setattr(vectorbt_adapter, "_screening_engine_metadata", fake_metadata)
+        monkeypatch.setattr(
+            vectorbt_adapter, "_establish_vectorbt_rust_runtime_proof", fake_proof
+        )
+
+        worker = PaidScreenWorker(
+            repo_root=".", screening_scope="pilot",
+            events_csv_hash="eh", lake_manifest_hash="lh",
+        )
+        worker.init()
+
+        ctx = worker.get_context()
+        assert proof_calls == []
+        assert ctx is not None
+        assert ctx.vectorbt_engine == "numba"
+        assert ctx.rust_runtime_proof is False
+
+    def test_paid_compute_init_attempts_rust_proof_when_available(self, monkeypatch):
+        fake_vectorbt = types.ModuleType("vectorbt")
+        fake_vectorbt.__version__ = "1.0.0"
+        monkeypatch.setitem(sys.modules, "vectorbt", fake_vectorbt)
+
+        proof_calls = []
+
+        def fake_metadata(scope):
+            assert scope == "paid_compute"
+            proof_succeeded = bool(proof_calls)
+            return {
+                "rust_engine_available": True,
+                "vectorbt_engine_runtime_proof": proof_succeeded,
+                "rust_engine_required_for_scope": True,
+                "vectorbt_engine": "rust" if proof_succeeded else "numba",
+            }
+
+        def fake_proof():
+            proof_calls.append("paid_compute")
+            return True
+
+        monkeypatch.setattr(vectorbt_adapter, "_screening_engine_metadata", fake_metadata)
+        monkeypatch.setattr(
+            vectorbt_adapter, "_establish_vectorbt_rust_runtime_proof", fake_proof
+        )
+
+        worker = PaidScreenWorker(
+            repo_root=".", screening_scope="paid_compute",
+            events_csv_hash="eh", lake_manifest_hash="lh",
+        )
+        worker.init()
+
+        ctx = worker.get_context()
+        assert proof_calls == ["paid_compute"]
+        assert ctx is not None
+        assert ctx.vectorbt_engine == "rust"
+        assert ctx.rust_runtime_proof is True
 
     def test_init_is_idempotent(self):
         worker = PaidScreenWorker(

@@ -41,7 +41,7 @@ Do not describe Phase D Vast rent as “full backtest” or “all features” u
 ## What we are doing today (Phase D — partial)
 
 ```text
-events.csv TIGHT × active model registry (get_active_hypotheses)
+stage_a_survivors.json × events.csv TIGHT × CME M6 symbols
   → expand to Event Target units (model × symbol × event_id)
   → run_pipeline.py --vectorbt --vectorbt-scope paid-compute (per unit, on Vast)
   → screening_artifact.json (Screening Artifact Unit + per-candidate rows)
@@ -49,7 +49,7 @@ events.csv TIGHT × active model registry (get_active_hypotheses)
   → HftBacktest realism on promoted_ids only (not discovery)
 ```
 
-Unit generation runs on the Vast host (`run_vbt_paid_screen_vast_full.sh` or `generate_vbt_paid_units_jsonl.py --all-active-models`). Do **not** require local Stage A compute or `stage_a_survivors.json` for VectorBT full rent.
+Unit generation runs on the Vast host. Current Vast full default is `run_vbt_paid_screen_vast_full.sh`, which consumes `research_cards/stage_a_full/stage_a_survivors.json` and applies the runnable-NPZ filter before workers start. `--all-active-models` / `VBT_UNIT_SOURCE=all_active` is an explicit exploratory override, not the default full-rent path.
 
 ## What we are not doing
 
@@ -57,7 +57,7 @@ Unit generation runs on the Vast host (`run_vbt_paid_screen_vast_full.sh` or `ge
 |---------------------|-----|
 | `run_event_universe` as broad discovery | [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md) — discovery is VectorBT/workbench screening first |
 | `replay_matrix`, `run_event_replay` for new VectorBT work | [RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md) §1a retired |
-| CPI+NFP × HYP_5 only as “full backtest” | One hypothesis × two event types; full rent spans all active models × TIGHT events |
+| CPI+NFP × HYP_5 only as “full backtest” | One hypothesis × two event types; current full rent spans Stage-A survivor cells × CME M6 TIGHT event-symbol rows |
 | M6 `run_event_universe` unit shape as 1:1 comparator | M6 runs all hypotheses inside one NPZ×latency replay unit; VectorBT paid units are **one hypothesis per event×symbol** |
 
 ## Research unit types (what to look for in artifacts)
@@ -97,7 +97,7 @@ A tradable **hypothesis model** in this stack is not a single feature. It is the
 | `kind` | `hypothesis` or `pdf_structural` |
 | `class` | Python class name in `hypotheses/` or `structural_models/` |
 
-Inventory: **50 registered hypotheses** (`hyp_id` 1–50 in `model_registry.yaml`) + **11 PDF structural models**. `get_active_hypotheses()` returns the production list (cross-asset/VIX subsets may be ablated via `HFT3_CROSS_ASSET`). VectorBT paid screen expands **active hypothesis** slugs from the registry × `events.csv` TIGHT rows.
+Inventory: **50 registered hypotheses** (`hyp_id` 1–50 in `model_registry.yaml`) + **11 PDF structural models**. `get_active_hypotheses()` returns the production list (cross-asset/VIX subsets may be ablated via `HFT3_CROSS_ASSET`). Current Vast VectorBT full expands Stage-A survivor cells into canonical model slugs × CME M6 TIGHT event-symbol rows; active-registry expansion is an explicit override only.
 
 ### 2. Feature set (`feature_set_id = fs_v1`)
 
@@ -154,7 +154,7 @@ Workbench supports `primary_model_id` + phased PDF stubs (`before`/`during`/`con
 
 ## Stage A vs VectorBT (different engines)
 
-Stage A is a **separate historical job** (M6 cell filtering). It is **not** the VectorBT paid-screen unit source.
+Stage A is a **separate historical job** (M6 cell filtering). Current Vast VectorBT full does not rerun Stage A; it consumes the completed survivor file as the survivor-scope input.
 
 | | Stage A (historical / M6) | VectorBT paid screen (current) |
 |---|---------|---------------------|
@@ -162,9 +162,9 @@ Stage A is a **separate historical job** (M6 cell filtering). It is **not** the 
 | Unit | `(hyp_id, event_type)` cell on feature store | `(slug, symbol, event_id)` |
 | Output | `stage_a_survivors.json` (423 cells) | `screening_artifact.json` per unit |
 | Engine | Cell expectancy on `fs_v1` features | Rust VectorBT bar simulation |
-| Role | M6 `run_event_universe --from-stage-a` filter (optional) | Cheap research prefilter; discovery handoff for HBT/robustness |
+| Role | Survivor-cell filter for current Vast VBT scope | Cheap research prefilter; discovery handoff for HBT/robustness |
 
-Stage A **423** = survivor **cells**, not paid work-unit count. Work units = `wc -l vbt_full_units.jsonl` after on-Vast expansion (`--all-active-models`).
+Stage A **423** = survivor **cells**, not paid work-unit count. Work units = `wc -l vbt_full_units.jsonl` after on-Vast expansion (`--from-stage-a-survivors` plus runnable-NPZ filtering).
 
 ## Paid work unit JSONL (canonical fields)
 
@@ -184,14 +184,14 @@ Stage A **423** = survivor **cells**, not paid work-unit count. Work units = `wc
 
 ## Checklist before Vast rent
 
-1. Units generated on Vast with `--all-active-models` + full M6 symbol list + `events.csv` (or `run_vbt_paid_screen_vast_full.sh`).
+1. Units generated on Vast with `--from-stage-a-survivors research_cards/stage_a_full/stage_a_survivors.json` + full M6 symbol list + `events.csv` + runnable-NPZ filtering (or `run_vbt_paid_screen_vast_full.sh` default).
 2. Every `model_id` is a registry **slug**; `hyp_id` matches `get_hyp_id_for_slug(model_id)`.
 3. `paid_screen_ready_gate.json` → `ready_for_full_run: true` on **real** pilot/smoke hashes (not cloud fixture placeholders).
 4. `expected_work_units` = JSONL line count from on-host generation (not 423 Stage A cells).
 5. Workers ≥ 230 on 256 vCPU host.
 6. Post-run: manifest terminal, `validate_screening_artifact` sample, `aggregate_vbt_promoted_ids.py` — no cockpit GREEN from partial JSONL.
 
-Historical only: `--from-stage-a-survivors` + M6 symbol list (backward-compatible M6 path; not VectorBT full default).
+Explicit override only: `--all-active-models` + M6 symbol list (active-registry expansion; not the current Vast full default).
 
 ## Related specs (downstream — not part of Vast VectorBT rent)
 

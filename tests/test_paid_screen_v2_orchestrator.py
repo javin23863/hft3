@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import multiprocessing as mp
+import queue
 import subprocess
 import sys
 import time
@@ -27,12 +28,53 @@ _VALID_UNIT_ARTIFACT = _REPO / "research_cards" / "pipeline_runs" / "paid_batch_
 
 def _copy_valid_unit_artifact(dest: Path, *, repo_root: Path, unit: "PaidScreenUnit") -> None:
     from backtest_pipeline.src.paid_screen_batch import resolve_resume_provenance
+    from backtest_pipeline.src.promotion_gate import RejectedCandidate
+    from backtest_pipeline.src.vectorbt_adapter import FilterResult
     from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
-    payload.update(resolve_resume_provenance(str(repo_root), unit))
+    provenance = resolve_resume_provenance(str(repo_root), unit)
+    if _VALID_UNIT_ARTIFACT.is_file():
+        payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+    else:
+        rejected = RejectedCandidate(
+            candidate_id="fixture_reject",
+            hypothesis_id=unit.model_id,
+            reject_reason="vectorbt_unavailable_fail_closed",
+            metric_values={
+                "symbol": unit.symbol,
+                "base_candidate_id": f"{unit.model_id}|{unit.symbol}|{unit.event_id}|{unit.hyp_id or 0}",
+                "base_candidate_metadata": {
+                    "event_id": unit.event_id,
+                    "symbol": unit.symbol,
+                    "context_set_id": unit.context_set_id,
+                    "allowed_context_set_id": unit.context_set_id,
+                    "declared_context_sets": list(unit.declared_context_sets),
+                },
+            },
+        )
+        payload = FilterResult(
+            backend="vectorbt_unavailable",
+            run_id="paid_batch_ok_fixture",
+            code_commit=provenance["code_commit"],
+            screening_scope="pilot",
+            research_clock=unit.research_clock,
+            target_event_type_or_null=unit.event_type,
+            allowed_context_set_id_or_null=unit.context_set_id,
+            declared_context_sets=list(unit.declared_context_sets),
+            parameter_space_id="ps_fixture",
+            parameter_space_hash="ps_hash_fixture",
+            max_trials=1,
+            max_total_trials=1,
+            max_models=1,
+            max_symbols=1,
+            max_feature_sets=1,
+            rejected=[rejected],
+        ).to_dict()
+        payload["research_split"] = unit.research_split or "discovery_confirmation"
+    payload.update(provenance)
     payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
+    validate_screening_artifact(payload)
     dest.write_text(json.dumps(payload), encoding="utf-8")
 
 
@@ -44,6 +86,28 @@ def _sleep_forever_worker() -> None:
 def _immediate_worker_exit(_worker_args, _batch_queue, _result_queue) -> None:
     """Spawn target: simulate init/import failure before any batch result."""
     raise SystemExit(1)
+
+
+class _FakeProcess:
+    def __init__(self, *, pid: int, exitcode: int | None, alive: bool = False):
+        self.pid = pid
+        self.exitcode = exitcode
+        self._alive = alive
+        self.terminated = False
+
+    def join(self, timeout=None) -> None:
+        return None
+
+    def is_alive(self) -> bool:
+        return self._alive
+
+    def terminate(self) -> None:
+        self.terminated = True
+        self._alive = False
+
+    def kill(self) -> None:
+        self.terminated = True
+        self._alive = False
 
 
 def _echo_fast_fail_worker(_worker_args, batch_queue, result_queue) -> None:
@@ -181,6 +245,127 @@ def _resolve_vast_launch_hashes(
     return events_hash, lake_hash
 
 
+class TestWorkerAffinity:
+    def test_parse_worker_affinity_accepts_ranges_and_lists(self):
+        v2 = _load_v2_module()
+        assert v2._parse_worker_affinity_cpus("2-4") == [2, 3, 4]
+        assert v2._parse_worker_affinity_cpus("2,3,4") == [2, 3, 4]
+        assert v2._parse_worker_affinity_cpus("2-3,7") == [2, 3, 7]
+
+    @pytest.mark.parametrize("value", ["", "4-2", "2-", "1,,2", "-1", "cpu2"])
+    def test_parse_worker_affinity_rejects_invalid_ranges(self, value):
+        v2 = _load_v2_module()
+        with pytest.raises(ValueError):
+            v2._parse_worker_affinity_cpus(value)
+
+    def test_main_rejects_invalid_worker_affinity_range(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(tmp_path / "units.jsonl"),
+                "--out",
+                str(tmp_path / "out"),
+                "--worker-affinity-cpus",
+                "11-2",
+            ],
+        )
+        assert rc == 2
+        assert "invalid worker affinity CPU range" in capsys.readouterr().err
+
+    def test_spawn_helper_strips_internal_keys_and_round_robins(self, monkeypatch):
+        v2 = _load_v2_module()
+        spawned = []
+        captured_worker_args = []
+        affinity_calls = []
+
+        class FakeProcess:
+            _next_pid = 40_000
+
+            def __init__(self, *, target, args):
+                type(self)._next_pid += 1
+                self.target = target
+                self.args = args
+                self.pid = None
+
+            def start(self) -> None:
+                self.pid = type(self)._next_pid
+
+        class FakeContext:
+            def Process(self, *, target, args):
+                proc = FakeProcess(target=target, args=args)
+                spawned.append(proc)
+                captured_worker_args.append(args[0])
+                return proc
+
+        def fake_sched_setaffinity(pid, cpus):
+            affinity_calls.append((pid, tuple(sorted(cpus))))
+
+        monkeypatch.setattr(
+            v2.os, "sched_setaffinity", fake_sched_setaffinity, raising=False
+        )
+        worker_args = {
+            "repo_root": str(_REPO),
+            "screening_scope": "paid-compute",
+            "_worker_affinity_cpus": [2, 3],
+            "_worker_affinity_spawn_count": 0,
+        }
+
+        proc_a = v2._spawn_paid_screen_worker(
+            FakeContext(), worker_args, object(), object()
+        )
+        proc_b = v2._spawn_paid_screen_worker(
+            FakeContext(), worker_args, object(), object()
+        )
+
+        assert proc_a is spawned[0]
+        assert proc_b is spawned[1]
+        assert captured_worker_args == [
+            {"repo_root": str(_REPO), "screening_scope": "paid-compute"},
+            {"repo_root": str(_REPO), "screening_scope": "paid-compute"},
+        ]
+        assert affinity_calls == [(proc_a.pid, (2,)), (proc_b.pid, (3,))]
+        assert worker_args["_worker_affinity_spawn_count"] == 2
+
+    def test_spawn_helper_affinity_request_requires_sched_setaffinity(self, monkeypatch):
+        v2 = _load_v2_module()
+        spawned = []
+
+        class FakeProcess:
+            def __init__(self, *, target, args):
+                self.target = target
+                self.args = args
+                self.pid = None
+                self.terminated = False
+
+            def start(self) -> None:
+                self.pid = 41_000
+
+            def terminate(self) -> None:
+                self.terminated = True
+
+            def join(self, timeout=None) -> None:
+                self.join_timeout = timeout
+
+        class FakeContext:
+            def Process(self, *, target, args):
+                proc = FakeProcess(target=target, args=args)
+                spawned.append(proc)
+                return proc
+
+        monkeypatch.delattr(v2.os, "sched_setaffinity", raising=False)
+        worker_args = {
+            "repo_root": str(_REPO),
+            "_worker_affinity_cpus": [2],
+            "_worker_affinity_spawn_count": 0,
+        }
+
+        with pytest.raises(RuntimeError, match="sched_setaffinity"):
+            v2._spawn_paid_screen_worker(FakeContext(), worker_args, object(), object())
+        assert spawned[0].terminated is True
+
+
 class TestVastLauncherV2Only:
     def test_v2_provenance_flags_always_passed(self):
         text = _VAST_SCRIPT.read_text(encoding="utf-8")
@@ -316,16 +501,58 @@ class TestV2ManifestRelpaths:
         row = v2._result_to_dict(result)
         assert row["screening_artifact_relpath"] == "units/u42/screening_artifact.json"
 
+    def test_fresh_result_row_includes_feature_plane_metadata(self, tmp_path):
+        v2 = _load_v2_module()
+        artifact = tmp_path / "screening_artifact.json"
+        artifact.write_text(
+            json.dumps(
+                {
+                    "research_clock": "context_feature_uplift",
+                    "allowed_context_set_id_or_null": "target_plus_cross_asset",
+                    "declared_context_sets": ["target_only", "target_plus_cross_asset"],
+                    "feature_plane_status": "scheduled_event_only",
+                    "feature_usage_manifest_hash": "feature_hash",
+                    "context_ablation_status": "not_measured",
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = UnitScreeningResult(
+            unit_id="u42",
+            status="OK",
+            screening_artifact_path=str(artifact),
+        )
+        row = v2._result_to_dict(result)
+        assert row["research_clock"] == "context_feature_uplift"
+        assert row["allowed_context_set_id_or_null"] == "target_plus_cross_asset"
+        assert row["declared_context_sets"] == ["target_only", "target_plus_cross_asset"]
+        assert row["feature_usage_manifest_hash"] == "feature_hash"
+
     def test_resume_cached_row_includes_screening_artifact_relpath(self, tmp_path):
         v2 = _load_v2_module()
         unit_dir = tmp_path / "units" / "u9"
         unit_dir.mkdir(parents=True)
         (unit_dir / "screening_artifact.json").write_text(
-            json.dumps({"promoted_ids": [], "rejected_ids": []}),
+            json.dumps(
+                {
+                    "promoted_ids": [],
+                    "rejected_ids": [],
+                    "research_clock": "context_feature_uplift",
+                    "allowed_context_set_id_or_null": "target_plus_cross_asset",
+                    "declared_context_sets": ["target_only", "target_plus_cross_asset"],
+                    "feature_plane_status": "scheduled_event_only",
+                    "feature_usage_manifest_hash": "feature_hash",
+                    "context_ablation_status": "not_measured",
+                }
+            ),
             encoding="utf-8",
         )
         row = v2._resume_cached_unit_result(tmp_path, "u9")
         assert row["screening_artifact_relpath"] == "units/u9/screening_artifact.json"
+        assert row["research_clock"] == "context_feature_uplift"
+        assert row["allowed_context_set_id_or_null"] == "target_plus_cross_asset"
+        assert row["declared_context_sets"] == ["target_only", "target_plus_cross_asset"]
+        assert row["feature_usage_manifest_hash"] == "feature_hash"
 
     def test_aggregate_promoted_ids_accepts_v2_manifest_rows(self, tmp_path):
         run_id = "paid_v2_aggregate"
@@ -496,18 +723,12 @@ class TestDrainWorkersWallClockBudget:
 class TestDrainWorkersEarlyWorkerExit:
     def test_drain_aborts_when_all_workers_dead_before_expected_batches(self):
         v2 = _load_v2_module()
-        ctx = mp.get_context("spawn")
-        batch_queue = ctx.Queue()
-        result_queue = ctx.Queue()
+        batch_queue = queue.Queue()
+        result_queue = queue.Queue()
         workers = [
-            ctx.Process(
-                target=_immediate_worker_exit,
-                args=({}, batch_queue, result_queue),
-            )
-            for _ in range(2)
+            _FakeProcess(pid=71_000, exitcode=1),
+            _FakeProcess(pid=71_001, exitcode=1),
         ]
-        for proc in workers:
-            proc.start()
 
         t0 = time.monotonic()
         collected, stop_reason = v2._drain_workers(
@@ -568,9 +789,8 @@ class TestDrainWorkersEarlyWorkerExit:
 class TestDrainWorkersPartialWorkerFailure:
     def test_drain_fails_when_one_worker_crashes_but_batches_complete(self):
         v2 = _load_v2_module()
-        ctx = mp.get_context("spawn")
-        batch_queue = ctx.Queue()
-        result_queue = ctx.Queue()
+        batch_queue = queue.Queue()
+        result_queue = queue.Queue()
         result_queue.put((
             1,
             [UnitScreeningResult(unit_id="u1", status="OK")],
@@ -582,14 +802,9 @@ class TestDrainWorkersPartialWorkerFailure:
             {"stage_timings": {}},
         ))
         workers = [
-            ctx.Process(
-                target=_immediate_worker_exit,
-                args=({}, batch_queue, result_queue),
-            ),
-            ctx.Process(target=_sleep_forever_worker),
+            _FakeProcess(pid=72_000, exitcode=1),
+            _FakeProcess(pid=72_001, exitcode=None, alive=True),
         ]
-        for proc in workers:
-            proc.start()
 
         collected, stop_reason = v2._drain_workers(
             workers,
@@ -680,6 +895,20 @@ class TestResumeArtifactContextValidation:
             git_commit=v2.resolve_git_commit(str(repo_root)),
         )
 
+    def test_declared_context_sets_match_ignores_order(self):
+        from backtest_pipeline.src.paid_screen_profiling import _artifact_unit_context_matches
+
+        unit = _matching_paid_batch_unit(
+            context_set_id="target_plus_cross_asset",
+            declared_context_sets=("target_only", "target_plus_cross_asset"),
+        )
+        payload = {
+            "research_clock": unit.research_clock,
+            "allowed_context_set_id_or_null": unit.context_set_id,
+            "declared_context_sets": ["target_plus_cross_asset", "target_only"],
+        }
+        assert _artifact_unit_context_matches(payload, unit)
+
     def test_wrong_symbol_rejected(self, tmp_path):
         v2 = _load_v2_module()
         unit = _matching_paid_batch_unit(symbol="ES.v.0")
@@ -742,7 +971,7 @@ class TestResumeArtifactContextValidation:
 
 
 class TestV2RunHashResolution:
-    def test_main_fails_closed_without_hash_sources(self, tmp_path):
+    def test_main_dry_run_without_hash_sources(self, tmp_path, capsys):
         v2 = _load_v2_module()
         repo = tmp_path / "repo"
         repo.mkdir()
@@ -774,7 +1003,538 @@ class TestV2RunHashResolution:
                 "--dry-run",
             ],
         )
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "after_resume=1 resume_check=no_run" in out
+
+    def test_main_dry_run_resume_reports_filtered_count(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        unit = _matching_paid_batch_unit()
+        units_path = tmp_path / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": unit.unit_id,
+                    "model_id": unit.model_id,
+                    "hyp_id": unit.hyp_id,
+                    "symbol": unit.symbol,
+                    "event_id": unit.event_id,
+                    "event_type": unit.event_type,
+                    "research_split": unit.research_split,
+                    "research_clock": unit.research_clock,
+                    "context_set_id": unit.context_set_id,
+                    "declared_context_sets": list(unit.declared_context_sets),
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        out_dir = tmp_path / "out"
+        _copy_valid_unit_artifact(
+            out_dir / "units" / unit.unit_id / "screening_artifact.json",
+            repo_root=_REPO,
+            unit=unit,
+        )
+
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(_REPO),
+                "--dry-run",
+                "--resume",
+                "--events-csv-hash",
+                "not_applicable_for_vectorbt_pilot",
+                "--lake-manifest-hash",
+                "pilot_requires_lake_manifest_before_screen",
+                "--vectorbt-scope",
+                "pilot",
+            ],
+        )
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "[resume] skipping 1 units with valid artifacts" in out
+        assert "DRY_RUN units=1 after_resume=0 batches=0" in out
+
+    def test_main_fails_closed_without_hash_sources(self, tmp_path):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": "u1",
+                    "model_id": "HYP_5",
+                    "hyp_id": 5,
+                    "symbol": "MES.v.0",
+                    "event_id": "CPI_2024_09_11_TIGHT",
+                    "event_type": "CPI",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+            ],
+        )
         assert rc == 1
+
+    def test_main_rejects_invalid_context_set_unit_row_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": "u1",
+                    "model_id": "HYP_5",
+                    "hyp_id": 5,
+                    "symbol": "MES.v.0",
+                    "event_id": "CPI_2024_09_11_TIGHT",
+                    "event_type": "CPI",
+                    "context_set_id": "not_a_context_set",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--dry-run",
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "ERROR: invalid unit row" in captured.err
+        assert "context_set_id_invalid:not_a_context_set" in captured.err
+        assert "not_a_context_set" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_rejects_invalid_research_clock_unit_row_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": "u1",
+                    "model_id": "HYP_5",
+                    "hyp_id": 5,
+                    "symbol": "MES.v.0",
+                    "event_id": "CPI_2024_09_11_TIGHT",
+                    "event_type": "CPI",
+                    "research_clock": "not_a_clock",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--dry-run",
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "ERROR: invalid unit row" in captured.err
+        assert "research_clock_invalid:not_a_clock" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_reports_malformed_units_jsonl_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text("{not-json}\n", encoding="utf-8")
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--dry-run",
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "ERROR: unable to load units jsonl" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_reports_invalid_utf8_units_jsonl_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_bytes(b"\xff\xfe\x00\n")
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--dry-run",
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "ERROR: unable to load units jsonl" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_rejects_non_object_unit_row_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text(json.dumps(["not", "object"]) + "\n", encoding="utf-8")
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--dry-run",
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "ERROR: invalid unit row expected JSON object" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_rejects_non_iterable_declared_context_sets_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": "u1",
+                    "model_id": "HYP_5",
+                    "hyp_id": 5,
+                    "symbol": "MES.v.0",
+                    "event_id": "CPI_2024_09_11_TIGHT",
+                    "event_type": "CPI",
+                    "declared_context_sets": 7,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--dry-run",
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "ERROR: invalid unit row" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_reports_malformed_ready_gate_cleanly(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": "u1",
+                    "model_id": "HYP_5",
+                    "hyp_id": 5,
+                    "symbol": "MES.v.0",
+                    "event_id": "CPI_2024_09_11_TIGHT",
+                    "event_type": "CPI",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        gate_path = repo / "gate.json"
+        gate_path.write_text("{not-json}\n", encoding="utf-8")
+        out_dir = repo / "out"
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--workers",
+                "2",
+                "--ready-gate-file",
+                str(gate_path),
+            ],
+        )
+        captured = capsys.readouterr()
+        assert rc == 2
+        assert "ERROR: ready gate file is unreadable" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_ready_gate_requires_json_object(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text("[]\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="ready gate file must contain a JSON object"):
+            v2._load_ready_gate(gate_path)
+
+    def test_ready_gate_requires_literal_true(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "errors": [],
+                    "ready_for_full_run": "false",
+                    "lookahead_pytest_tail": "1 passed",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert v2._load_ready_gate(gate_path) is False
+
+    def test_ready_gate_requires_empty_errors_list(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "errors": {},
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert v2._load_ready_gate(gate_path) is False
+
+    @pytest.mark.parametrize("payload_errors", [None, "missing"])
+    def test_ready_gate_allows_legacy_absent_or_null_errors(self, tmp_path, payload_errors):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        payload = {
+            "ready_for_full_run": True,
+            "lookahead_pytest_tail": "1 passed",
+        }
+        if payload_errors != "missing":
+            payload["errors"] = payload_errors
+        gate_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        assert v2._load_ready_gate(gate_path) is True
+
+    def test_ready_gate_requires_string_pytest_tail(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "errors": [],
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": {"bad": "tail"},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert v2._load_ready_gate(gate_path) is False
+
+    def test_ready_gate_hash_path_requires_json_object(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text("[]\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="ready gate file must contain a JSON object"):
+            v2._assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash="events",
+                lake_manifest_hash="lake",
+            )
+
+    def test_ready_gate_hash_path_requires_pilot_hash_object(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                    "pilot_hashes": "bad",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="ready gate pilot_hashes must be a JSON object"):
+            v2._assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash="events",
+                lake_manifest_hash="lake",
+            )
+
+    def test_ready_gate_hash_path_allows_missing_pilot_hashes(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        v2._assert_hashes_match_ready_gate(
+            gate_path,
+            events_csv_hash="events",
+            lake_manifest_hash="lake",
+        )
+
+    def test_ready_gate_hash_path_allows_missing_events_and_lake_hashes(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                    "pilot_hashes": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        v2._assert_hashes_match_ready_gate(
+            gate_path,
+            events_csv_hash="events",
+            lake_manifest_hash="lake",
+        )
+
+    def test_ready_gate_hash_path_requires_string_hashes(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                    "pilot_hashes": {
+                        "events_csv_hash": 123,
+                        "lake_manifest_hash": "lake",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="ready gate pilot_hashes events/lake hashes must be strings"):
+            v2._assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash="123",
+                lake_manifest_hash="lake",
+            )
+
+    def test_ready_gate_hash_path_rejects_present_null_hashes(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                    "pilot_hashes": {
+                        "events_csv_hash": None,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="ready gate pilot_hashes events/lake hashes must be strings"):
+            v2._assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash="events",
+                lake_manifest_hash="lake",
+            )
+
+    def test_ready_gate_hash_path_compares_present_hashes(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                    "pilot_hashes": {
+                        "events_csv_hash": "events",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="events_csv_hash other != ready gate events"):
+            v2._assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash="other",
+                lake_manifest_hash="lake",
+            )
 
     def test_resolve_run_hashes_from_explicit_and_files(self, tmp_path):
         v2 = _load_v2_module()
@@ -863,6 +1623,7 @@ class TestRunningManifestWrites:
             vectorbt_scope="paid-compute",
             workers=4,
             resume=False,
+            worker_affinity_cpus=[2, 3],
         )
         v2._write_run_manifest(
             manifest_path,
@@ -893,6 +1654,7 @@ class TestRunningManifestWrites:
         assert payload["expected_batches"] == 5
         assert payload["completed_work_units"] == 2
         assert payload["finished_at_utc"] is None
+        assert payload["worker_affinity_cpus"] == [2, 3]
 
     def test_drain_callback_increments_collected_batches(self):
         v2 = _load_v2_module()
@@ -1047,28 +1809,26 @@ class TestPipelinedDispatchAndDrain:
 
     def test_pipelined_high_worker_count_fast_fail_shuts_down_promptly(self):
         v2 = _load_v2_module()
-        ctx = mp.get_context("spawn")
-        batch_queue = ctx.Queue()
-        result_queue = ctx.Queue()
+        batch_queue = queue.Queue()
+        result_queue = queue.Queue()
         num_workers = 32
         batch_count = 128
         batches = [(idx, []) for idx in range(batch_count)]
-        worker_args = {
-            "repo_root": str(_REPO),
-            "screening_scope": "paid-compute",
-            "events_csv_hash": "eh",
-            "lake_manifest_hash": "lh",
-            "scratch_root": str(_REPO / "runtime" / "paid_screen_scratch" / "orchestrator_test"),
-        }
-        workers = [
-            ctx.Process(
-                target=_echo_fast_fail_worker,
-                args=({}, batch_queue, result_queue),
+        workers = [_FakeProcess(pid=74_000 + idx, exitcode=0) for idx in range(num_workers)]
+        for batch_id, _units in batches:
+            result_queue.put(
+                (
+                    batch_id,
+                    [
+                        UnitScreeningResult(
+                            unit_id=f"u{batch_id}",
+                            status="ERROR",
+                            error="no_ohlcv_data",
+                        )
+                    ],
+                    {"stage_timings": {}},
+                )
             )
-            for _ in range(num_workers)
-        ]
-        for proc in workers:
-            proc.start()
 
         t0 = time.monotonic()
         collected, stop_reason = v2._pipelined_dispatch_and_drain(
@@ -1079,9 +1839,6 @@ class TestPipelinedDispatchAndDrain:
             expected_batches=batch_count,
             timeout_per_batch=30.0,
             inflight_limit=v2._inflight_batch_limit(num_workers),
-            spawn_ctx=ctx,
-            spawn_worker_args=worker_args,
-            target_worker_count=num_workers,
         )
         elapsed = time.monotonic() - t0
 
@@ -1128,21 +1885,26 @@ class TestPipelinedDispatchAndDrain:
 
     def test_pipelined_high_worker_fast_fail_collects_all_batches(self):
         v2 = _load_v2_module()
-        ctx = mp.get_context("spawn")
-        batch_queue = ctx.Queue()
-        result_queue = ctx.Queue()
+        batch_queue = queue.Queue()
+        result_queue = queue.Queue()
         num_workers = 16
         batch_count = 64
         batches = [(idx, []) for idx in range(batch_count)]
-        workers = [
-            ctx.Process(
-                target=_echo_fast_fail_worker,
-                args=({}, batch_queue, result_queue),
+        workers = [_FakeProcess(pid=75_000 + idx, exitcode=0) for idx in range(num_workers)]
+        for batch_id, _units in batches:
+            result_queue.put(
+                (
+                    batch_id,
+                    [
+                        UnitScreeningResult(
+                            unit_id=f"u{batch_id}",
+                            status="ERROR",
+                            error="no_ohlcv_data",
+                        )
+                    ],
+                    {"stage_timings": {}},
+                )
             )
-            for _ in range(num_workers)
-        ]
-        for proc in workers:
-            proc.start()
 
         collected, stop_reason = v2._pipelined_dispatch_and_drain(
             workers,
@@ -1193,6 +1955,56 @@ class TestPipelinedDispatchAndDrain:
         assert stop_reason is None
         assert len(collected) == len(batches)
         _DIE_BEFORE_ECHO_BUDGET = None
+
+    def test_pipelined_respawn_failure_fails_closed_and_cleans_up(self, monkeypatch):
+        v2 = _load_v2_module()
+        batch_queue = queue.Queue()
+        result_queue = queue.Queue()
+        worker = _FakeProcess(pid=73_000, exitcode=None, alive=True)
+        alive_checks = {"count": 0}
+
+        def alive_once() -> bool:
+            alive_checks["count"] += 1
+            if alive_checks["count"] == 1:
+                return True
+            worker._alive = False
+            return False
+
+        worker.is_alive = alive_once
+        workers = [worker]
+        shutdown_calls = []
+        original_shutdown = v2._shutdown_workers
+
+        def failing_spawn(_ctx, _worker_args, _batch_queue, _result_queue):
+            raise RuntimeError("affinity setup failed")
+
+        def spy_shutdown(workers_arg, batch_queue_arg, *, total_timeout_seconds=None):
+            shutdown_calls.append(list(workers_arg))
+            return original_shutdown(
+                workers_arg,
+                batch_queue_arg,
+                total_timeout_seconds=total_timeout_seconds,
+            )
+
+        monkeypatch.setattr(v2, "_spawn_paid_screen_worker", failing_spawn)
+        monkeypatch.setattr(v2, "_shutdown_workers", spy_shutdown)
+
+        collected, stop_reason = v2._pipelined_dispatch_and_drain(
+            workers,
+            batch_queue,
+            result_queue,
+            batches=[(0, [])],
+            expected_batches=1,
+            timeout_per_batch=30.0,
+            inflight_limit=1,
+            spawn_ctx=object(),
+            spawn_worker_args={"repo_root": str(_REPO)},
+            target_worker_count=1,
+        )
+
+        assert collected == []
+        assert stop_reason == "worker_respawn_failed"
+        assert shutdown_calls == [workers]
 
     def test_manifest_flush_throttled_during_callback_flood(self, tmp_path, monkeypatch):
         v2 = _load_v2_module()
@@ -1314,8 +2126,13 @@ class TestOrchestratorMainExit:
         gate_path = repo / "gate.json"
         gate_path.write_text(
             json.dumps({
+                "errors": [],
                 "ready_for_full_run": True,
                 "lookahead_pytest_tail": "1 passed in 0.01s",
+                "pilot_hashes": {
+                    "events_csv_hash": "events_csv_hash",
+                    "lake_manifest_hash": "explicit_lake_hash",
+                },
             }),
             encoding="utf-8",
         )
@@ -1332,6 +2149,8 @@ class TestOrchestratorMainExit:
                 str(repo),
                 "--events-csv",
                 str(events_csv),
+                "--events-csv-hash",
+                "events_csv_hash",
                 "--lake-manifest-hash",
                 "explicit_lake_hash",
                 "--workers",
@@ -1351,6 +2170,93 @@ class TestOrchestratorMainExit:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         assert manifest["status"] in {"complete", "partial", "aborted", "failed"}
         assert manifest["finished_at_utc"] is not None
+
+    def test_initial_worker_spawn_failure_writes_terminal_manifest(self, tmp_path, monkeypatch):
+        v2 = _load_v2_module()
+        first_proc = _FakeProcess(pid=81_000, exitcode=None, alive=True)
+        spawn_calls = 0
+
+        def fake_spawn(_ctx, _worker_args, _batch_queue, _result_queue):
+            nonlocal spawn_calls
+            spawn_calls += 1
+            if spawn_calls == 1:
+                return first_proc
+            raise RuntimeError("affinity setup failed")
+
+        def fake_groups(units, _grouping_ctx):
+            return {idx: [unit] for idx, unit in enumerate(units)}
+
+        monkeypatch.setattr(v2, "_spawn_paid_screen_worker", fake_spawn)
+        monkeypatch.setattr(v2, "group_units_by_batch_key", fake_groups)
+        monkeypatch.setattr(v2, "_WORKER_SHUTDOWN_COOP_SECONDS", 0.0)
+
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        events_csv = repo / "events.csv"
+        events_csv.write_text("event_id\nE1\n", encoding="utf-8")
+        units_path = repo / "units.jsonl"
+        unit_rows = [
+            {
+                "unit_id": f"u{i}",
+                "model_id": "HYP_5",
+                "hyp_id": 5,
+                "symbol": "MES.v.0",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "event_type": "CPI",
+                "research_split": "discovery_confirmation",
+            }
+            for i in range(2)
+        ]
+        units_path.write_text(
+            "\n".join(json.dumps(row) for row in unit_rows) + "\n",
+            encoding="utf-8",
+        )
+        out_dir = repo / "out"
+        gate_path = repo / "gate.json"
+        gate_path.write_text(
+            json.dumps({
+                "errors": [],
+                "ready_for_full_run": True,
+                "lookahead_pytest_tail": "1 passed in 0.01s",
+                "pilot_hashes": {
+                    "events_csv_hash": "events_csv_hash",
+                    "lake_manifest_hash": "explicit_lake_hash",
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--events-csv",
+                str(events_csv),
+                "--events-csv-hash",
+                "events_csv_hash",
+                "--lake-manifest-hash",
+                "explicit_lake_hash",
+                "--workers",
+                "2",
+                "--ready-gate-file",
+                str(gate_path),
+            ],
+        )
+
+        assert rc == 1
+        assert first_proc.terminated is True
+        manifest = json.loads(
+            (out_dir / "paid_screen_run_manifest.json").read_text(encoding="utf-8")
+        )
+        assert manifest["status"] in {"aborted", "failed"}
+        assert manifest["finished_at_utc"] is not None
+        assert manifest["aborted"] is True
+        assert manifest["stop_reason"] == "worker_spawn_failed"
 
 
 class TestWorkerShutdownAtScale:
@@ -1435,6 +2341,21 @@ class TestWorkerScratchPath:
         assert v2._build_worker_run_budget(0) == {}
         assert v2._build_worker_run_budget(-1) == {}
         assert v2._build_worker_run_budget(42) == {"max_wall_clock_seconds": 42}
+        assert v2._build_worker_run_budget(
+            42,
+            max_trials=256,
+            max_total_trials=256,
+            max_models=1,
+            max_symbols=1,
+            max_feature_sets=1,
+        ) == {
+            "max_trials": 256,
+            "max_total_trials": 256,
+            "max_models": 1,
+            "max_symbols": 1,
+            "max_feature_sets": 1,
+            "max_wall_clock_seconds": 42,
+        }
 
     def test_worker_scratch_root_under_runtime_not_out_dir(self, tmp_path):
         v2 = _load_v2_module()

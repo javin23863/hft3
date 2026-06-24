@@ -18,7 +18,12 @@ import hashlib
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-from backtest_pipeline.src.paid_screen_types import PaidScreenUnit
+from backtest_pipeline.src.paid_screen_types import (
+    PaidScreenUnit,
+    RESEARCH_CLOCK_SCHEDULED_EVENT,
+    TARGET_ONLY_CONTEXT_SET_ID,
+)
+from backtest_pipeline.src.research_clock import ResearchClockError, validate_research_clock
 
 DEFAULT_RESEARCH_SPLIT = "discovery_confirmation"
 
@@ -382,6 +387,70 @@ def _row_unit_identity(row: Mapping[str, Any]) -> tuple[str, str, str] | None:
     return None
 
 
+def _canonical_clock(value: Any) -> str:
+    try:
+        return validate_research_clock(str(value))
+    except (ResearchClockError, TypeError):
+        return ""
+
+
+def _row_context_set(row: Mapping[str, Any]) -> str:
+    meta = row.get("base_candidate_metadata")
+    if not isinstance(meta, Mapping):
+        meta = {}
+    return str(
+        row.get("context_set_id")
+        or row.get("allowed_context_set_id")
+        or row.get("allowed_context_set_id_or_null")
+        or meta.get("context_set_id")
+        or meta.get("allowed_context_set_id")
+        or meta.get("allowed_context_set_id_or_null")
+        or ""
+    ).strip()
+
+
+def _context_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
+
+
+def _artifact_unit_context_matches(payload: Mapping[str, Any], unit: PaidScreenUnit) -> bool:
+    expected_clock = _canonical_clock(unit.research_clock)
+    artifact_clock = _canonical_clock(payload.get("research_clock"))
+    if artifact_clock and expected_clock and artifact_clock != expected_clock:
+        return False
+    if not artifact_clock and expected_clock != RESEARCH_CLOCK_SCHEDULED_EVENT:
+        return False
+
+    expected_context = str(unit.context_set_id or TARGET_ONLY_CONTEXT_SET_ID).strip()
+    artifact_context = str(
+        payload.get("allowed_context_set_id_or_null")
+        or payload.get("context_set_id")
+        or payload.get("allowed_context_set_id")
+        or ""
+    ).strip()
+    if not artifact_context:
+        for row in _candidate_rows(payload):
+            artifact_context = _row_context_set(row)
+            if artifact_context:
+                break
+    if artifact_context and artifact_context != expected_context:
+        return False
+    if not artifact_context and expected_context != TARGET_ONLY_CONTEXT_SET_ID:
+        return False
+
+    artifact_declared = _context_list(payload.get("declared_context_sets"))
+    expected_declared = list(unit.declared_context_sets)
+    if artifact_declared and sorted(artifact_declared) != sorted(expected_declared):
+        return False
+    if not artifact_declared and expected_context != TARGET_ONLY_CONTEXT_SET_ID:
+        return False
+    return True
+
+
 def artifact_unit_identity_matches(payload: Mapping[str, Any], unit: PaidScreenUnit) -> bool:
     """Return True when artifact candidate rows match the unit identity."""
     identities = [
@@ -424,6 +493,8 @@ def artifact_matches_resume_unit(
     if hashes["lake_manifest_hash"] != lake_manifest_hash:
         return False
     if not artifact_unit_identity_matches(payload, unit):
+        return False
+    if not _artifact_unit_context_matches(payload, unit):
         return False
     if unit.research_split and unit.research_split != research_split:
         return False
@@ -563,9 +634,6 @@ def merge_unit_screening_artifacts(
     base["run_id"] = run_id
     base["created_at_utc"] = finished_at_utc or base.get("created_at_utc") or datetime.now(timezone.utc).isoformat()
 
-    candidate_ids: list[str] = []
-    promoted_ids: list[str] = []
-    rejected_ids: list[str] = []
     stop_reasons: list[str] = []
     promoted_rows: list[dict[str, Any]] = []
     rejected_rows: list[dict[str, Any]] = []
@@ -575,9 +643,6 @@ def merge_unit_screening_artifacts(
     trials_run = 0
 
     for artifact in unit_artifacts:
-        candidate_ids.extend(str(x) for x in artifact.get("candidate_ids") or [])
-        promoted_ids.extend(str(x) for x in artifact.get("promoted_ids") or [])
-        rejected_ids.extend(str(x) for x in artifact.get("rejected_ids") or [])
         stop_reasons.extend(str(x) for x in artifact.get("stop_reasons") or [])
         promoted_rows.extend(_merge_candidate_rows(list(artifact.get("promoted") or [])))
         rejected_rows.extend(_merge_candidate_rows(list(artifact.get("rejected") or [])))
@@ -589,12 +654,20 @@ def merge_unit_screening_artifacts(
             rejected_reasons.append(artifact["rejected_reasons"])
         trials_run += int(artifact.get("trials_run") or 0)
 
-    base["candidate_ids"] = _merge_unique_strings(candidate_ids)
-    base["promoted_ids"] = _merge_unique_strings(promoted_ids)
-    base["rejected_ids"] = _merge_unique_strings(rejected_ids)
     base["stop_reasons"] = _merge_unique_strings(stop_reasons)
     base["promoted"] = _merge_candidate_rows(promoted_rows)
     base["rejected"] = _merge_candidate_rows(rejected_rows)
+    base["promoted_ids"] = [
+        str(row["candidate_id"])
+        for row in base["promoted"]
+        if isinstance(row, dict) and row.get("candidate_id")
+    ]
+    base["rejected_ids"] = [
+        str(row["candidate_id"])
+        for row in base["rejected"]
+        if isinstance(row, dict) and row.get("candidate_id")
+    ]
+    base["candidate_ids"] = [*base["promoted_ids"], *base["rejected_ids"]]
     base["candidate_reasons"] = _merge_reason_maps(candidate_reasons)
     base["promoted_reasons"] = _merge_reason_maps(promoted_reasons)
     base["rejected_reasons"] = _merge_reason_maps(rejected_reasons)

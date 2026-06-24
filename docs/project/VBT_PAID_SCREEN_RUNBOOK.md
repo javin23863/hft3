@@ -32,7 +32,7 @@ derivative handoff map and must not be used to invent a parallel manifest.
 | **A Pilot** | Workstation | 1 | 1 (`CPI_2024_09_11_TIGHT`) | No | Artifact validates; lookahead pytest green |
 | **B Smoke** | Workstation only | 4–8 | 8–16 diverse units | No | Gate script exit 0; zero unit `ERROR` |
 | **C Gate** | Workstation | — | — | No | `paid_screen_ready_gate.json` written |
-| **D Full** | Vast 256 vCPU | **≥230** | events.csv × active models (see below) | **Yes** | `--ready-gate-file` from Phase C |
+| **D Full** | Vast 256 vCPU | **≥230** | Stage-A survivors × events.csv × CME M6, NPZ-filtered (see below) | **Yes** | `--ready-gate-file` from Phase C |
 | **E Post-run** | Workstation | — | — | No | Manifest complete; quarantine import before cockpit |
 
 ```mermaid
@@ -158,11 +158,11 @@ python scripts/validate_paid_screen_ready_gate.py \
 
 ```json
 {
-  "host_vcpu": 256,
+  "host_vcpu": "<nproc on Vast host>",
   "reserved_vcpu": 26,
-  "workers_requested": 230,
+  "workers_requested": "<computed workers or VBT_WORKERS override>",
   "expected_work_units": "<unit count from Vast host after on-host generation>",
-  "units_source": "events.csv TIGHT × CME M6 symbols × active model registry (generated on Vast host)",
+  "units_source": "stage_a_survivors_cme_m6_runnable_npz",
   "stall_minutes": 30,
   "abort_on_failed_units": true,
   "git_head": "<sha>",
@@ -173,19 +173,20 @@ python scripts/validate_paid_screen_ready_gate.py \
 
 ### D1 Generate full unit manifest (on Vast host)
 
-Full units are **not** generated on the workstation from local Stage A survivors. `bash scripts/run_vbt_paid_screen_vast_full.sh` generates `runtime/reports/vbt_full_units.jsonl` on the Vast instance before workers start.
+Full units are **not** generated on the workstation and Stage A is not rerun during rent. `bash scripts/run_vbt_paid_screen_vast_full.sh` consumes the completed Stage-A survivor file, generates `runtime/reports/vbt_full_units.jsonl` on the Vast instance, applies runnable-NPZ filtering, then checks the declaration before workers start.
 
 ```bash
 python scripts/generate_vbt_paid_units_jsonl.py \
-  --all-active-models \
+  --from-stage-a-survivors research_cards/stage_a_full/stage_a_survivors.json \
   --events-csv packages/data_system/config/events.csv \
   --symbols MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0 \
+  --require-runnable-npz \
   --out runtime/reports/vbt_full_units.jsonl
 ```
 
-Env knobs on Vast: `VBT_MODEL_SCOPE=active` (default), `VBT_MODEL_IDS=...`, `VBT_EVENT_TYPES=...`, `VBT_SYMBOLS=...`.
+Env knobs on Vast: `VBT_STAGE_A_SURVIVORS=...`, `VBT_SYMBOLS=...`, `VBT_EVENT_TYPES=...`, `VBT_REQUIRE_RUNNABLE_NPZ=1`, `VBT_UNIT_SOURCE=all_active` for the explicit all-active override.
 
-Historical only: `--from-stage-a-survivors research_cards/stage_a_full/stage_a_survivors.json` (M6 Stage A path; not required for VectorBT paid screen).
+Explicit override only: `VBT_UNIT_SOURCE=all_active` / `--all-active-models` expands the active registry across eligible TIGHT events; do not use it as the current Vast full default without owner approval.
 
 ### D2 Vast host setup
 
@@ -195,7 +196,7 @@ git submodule update --init vendor/openfoundry vendor/alphageometry
 bash scripts/install_vbt_hbt_handoff_verify_deps.sh
 pip install 'vectorbt[rust]==1.0.0'
 export HFT3_NPZ_ROOT=/path/to/npz   # must match manifest
-export HFT3_MANIFEST_PATH=/path/to/manifest.json
+export HFT3_MANIFEST_PATH=/path/to/manifest.parquet
 ```
 
 ### D3 Execute (tmux)
@@ -210,19 +211,25 @@ Or manual orchestrator after on-host unit generation:
 
 ```bash
 export VBT_FULL_RUN_ID="paid_full_$(date -u +%Y%m%dT%H%M%SZ)"
+EVENTS_HASH="$(python -c "import hashlib; print(hashlib.sha256(open('packages/data_system/config/events.csv','rb').read()).hexdigest()[:32])")"
+LAKE_HASH="$(python -c "import hashlib, os; p=os.environ['HFT3_MANIFEST_PATH']; print(hashlib.sha256(open(p,'rb').read()).hexdigest()[:32])")"
 
-python scripts/run_paid_screen.py \
+python scripts/run_vectorbt_paid_screen_v2.py \
   --units-jsonl runtime/reports/vbt_full_units.jsonl \
   --out "research_cards/pipeline_runs/${VBT_FULL_RUN_ID}" \
   --vectorbt-scope paid-compute \
-  --workers 230 \
+  --workers "${VBT_WORKERS:-230}" \
   --ready-gate-file runtime/reports/paid_screen_ready_gate.json \
   --max-wall-clock-seconds 86400 \
-  --stall-minutes 30 \
-  --no-llm
+  --no-llm \
+  --resume \
+  --abort-on-failed-units \
+  --events-csv packages/data_system/config/events.csv \
+  --events-csv-hash "$EVENTS_HASH" \
+  --lake-manifest-hash "$LAKE_HASH"
 ```
 
-**Full run refuses to start** without `--ready-gate-file` when `--workers > 16` (unless `--owner-waiver` with reason string).
+**Full run refuses to start** without `--ready-gate-file` when `--workers > 1` (unless `--owner-waiver` with reason string).
 
 ### D4 Stall monitor (supervisor shell)
 
@@ -282,8 +289,14 @@ pytest tests/test_vectorbt_adapter.py::TestFilterCandidates::test_same_close_jum
 ## Honest status template
 
 ```text
-merge-ready: no until full manifest validated
-scope-green: run_vbt_hbt_handoff_verify.sh + paid screen gate tests
+merge-ready:     no
+scope-green:     run_vbt_hbt_handoff_verify.sh + paid screen gate tests
+scope:           VectorBT paid screen
+verify-run:      <command> -> exit <code>; <summary tail>
+plan-drift:      pass | fail | not-run
+data-mode:       fixture | production | live | mixed | n/a
+pr-ai-review:    pending | run | unavailable(no-pr|no-connector|not-authenticated) | waived-by-user
+review-surface:  <PR/MR/CL URL or id>; head=<sha>; split-needed yes|no | none(blocked: <reason>) | none(waived-by-user: <reason>)
 phase: A|B|C|D|E
 pilot-artifact: <path>
 smoke-manifest: <path>

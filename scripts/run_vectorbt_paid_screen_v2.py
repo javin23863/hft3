@@ -13,7 +13,8 @@ Compatibility flags from v1 (``--vectorbt-scope``, ``--workers``,
 ``--max-wall-clock-seconds``, ``--ready-gate-file``, ``--owner-waiver``,
 ``--dry-run``, ``--no-llm``, ``--repo-root``) are preserved. New v2 flags:
 ``--max-batches-before-recycle``, ``--cache-memory-limit-mb``,
-``--cache-max-entries``, ``--events-csv-hash``, ``--lake-manifest-hash``.
+``--cache-max-entries``, ``--events-csv-hash``, ``--lake-manifest-hash``,
+``--worker-affinity-cpus``.
 
 Launch hygiene: run **one** orchestrator per out-dir (``flock`` the manifest
 path on Linux, or a single tmux session on Vast). Duplicate launches leave
@@ -69,6 +70,49 @@ from backtest_pipeline.src.paid_screen_worker import worker_process_main
 # Helpers
 # ---------------------------------------------------------------------------
 
+_PARENT_ONLY_WORKER_ARG_KEYS = frozenset({
+    "_worker_affinity_cpus",
+    "_worker_affinity_spawn_count",
+})
+
+
+def _parse_worker_affinity_cpus(raw: str | None) -> List[int]:
+    if raw is None:
+        return []
+    raw = raw.strip()
+    if not raw:
+        raise ValueError("worker affinity CPU list cannot be empty")
+
+    cpus: List[int] = []
+    for part in raw.split(","):
+        token = part.strip()
+        if not token:
+            raise ValueError(f"invalid worker affinity CPU list: {raw!r}")
+        if "-" in token:
+            bounds = [item.strip() for item in token.split("-")]
+            if len(bounds) != 2 or not bounds[0] or not bounds[1]:
+                raise ValueError(f"invalid worker affinity CPU range: {token!r}")
+            try:
+                start = int(bounds[0])
+                end = int(bounds[1])
+            except ValueError as exc:
+                raise ValueError(f"invalid worker affinity CPU range: {token!r}") from exc
+            if start < 0 or end < 0:
+                raise ValueError(f"invalid worker affinity CPU range: {token!r}")
+            if end < start:
+                raise ValueError(f"invalid worker affinity CPU range: {token!r}")
+            cpus.extend(range(start, end + 1))
+            continue
+        try:
+            cpu = int(token)
+        except ValueError as exc:
+            raise ValueError(f"invalid worker affinity CPU: {token!r}") from exc
+        if cpu < 0:
+            raise ValueError(f"invalid worker affinity CPU: {token!r}")
+        cpus.append(cpu)
+    return cpus
+
+
 def _load_units(path: Path) -> List[Dict[str, Any]]:
     """Load JSONL unit rows (same row format as v1 + the structured fields)."""
     units: List[Dict[str, Any]] = []
@@ -81,14 +125,25 @@ def _load_units(path: Path) -> List[Dict[str, Any]]:
     return units
 
 
+def _load_ready_gate_payload(path: Path) -> Dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"ready gate file is unreadable: {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"ready gate file must contain a JSON object: {path}")
+    return payload
+
+
 def _load_ready_gate(path: Path) -> bool:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("errors"):
+    payload = _load_ready_gate_payload(path)
+    errors = payload.get("errors")
+    if errors not in (None, []):
         return False
-    if not payload.get("ready_for_full_run"):
+    if payload.get("ready_for_full_run") is not True:
         return False
-    tail = str(payload.get("lookahead_pytest_tail") or "").strip()
-    return bool(tail)
+    tail = payload.get("lookahead_pytest_tail")
+    return isinstance(tail, str) and bool(tail.strip())
 
 
 def _assert_hashes_match_ready_gate(
@@ -97,10 +152,22 @@ def _assert_hashes_match_ready_gate(
     events_csv_hash: str,
     lake_manifest_hash: str,
 ) -> None:
-    payload = json.loads(gate_path.read_text(encoding="utf-8"))
-    pilot = payload.get("pilot_hashes") or {}
-    expected_events = str(pilot.get("events_csv_hash") or "").strip()
-    expected_lake = str(pilot.get("lake_manifest_hash") or "").strip()
+    payload = _load_ready_gate_payload(gate_path)
+    if "pilot_hashes" not in payload:
+        return
+    pilot = payload["pilot_hashes"]
+    if not isinstance(pilot, dict):
+        raise ValueError(f"ready gate pilot_hashes must be a JSON object: {gate_path}")
+    has_events_hash = "events_csv_hash" in pilot
+    has_lake_hash = "lake_manifest_hash" in pilot
+    raw_expected_events = pilot.get("events_csv_hash")
+    raw_expected_lake = pilot.get("lake_manifest_hash")
+    if has_events_hash and not isinstance(raw_expected_events, str):
+        raise ValueError(f"ready gate pilot_hashes events/lake hashes must be strings: {gate_path}")
+    if has_lake_hash and not isinstance(raw_expected_lake, str):
+        raise ValueError(f"ready gate pilot_hashes events/lake hashes must be strings: {gate_path}")
+    expected_events = raw_expected_events.strip() if has_events_hash else ""
+    expected_lake = raw_expected_lake.strip() if has_lake_hash else ""
     if expected_events and events_csv_hash != expected_events:
         raise ValueError(
             f"events_csv_hash {events_csv_hash} != ready gate {expected_events}"
@@ -123,6 +190,7 @@ def _result_to_dict(result: UnitScreeningResult) -> Dict[str, Any]:
         "promoted_ids": result.promoted_ids,
         "rejected_ids": result.rejected_ids,
     }
+    row.update(_artifact_feature_plane_metadata(result.screening_artifact_path))
     return row
 
 
@@ -130,16 +198,64 @@ def _unit_artifact_relpath(unit_id: str) -> str:
     return f"units/{unit_id}/screening_artifact.json"
 
 
+def _artifact_feature_plane_metadata(path: Optional[str]) -> Dict[str, Any]:
+    if not path:
+        return {}
+    artifact_path = Path(path)
+    if not artifact_path.is_file():
+        return {}
+    try:
+        payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    keys = (
+        "research_clock",
+        "allowed_context_set_id_or_null",
+        "declared_context_sets",
+        "feature_plane_status",
+        "feature_usage_manifest_hash",
+        "model_feature_usage_status",
+        "context_ablation_status",
+        "continuous_clock_status",
+        "cross_asset_alignment_status",
+        "vix_sensor_status",
+        "vix_options_status",
+        "cme_options_context_status",
+        "latency_feature_status",
+        "data_scope_skip_manifest_hash",
+    )
+    return {key: payload[key] for key in keys if key in payload}
+
+
 def _worker_scratch_root(repo_root: Path, out_dir: Path) -> Path:
     """Return runtime scratch directory for worker artifacts (not under pipeline_runs)."""
     return repo_root / "runtime" / "paid_screen_scratch" / out_dir.name
 
 
-def _build_worker_run_budget(max_wall_clock_seconds: int) -> dict[str, int]:
-    """Build worker run_budget; omit wall-clock cap when unset (<= 0)."""
-    if int(max_wall_clock_seconds) <= 0:
-        return {}
-    return {"max_wall_clock_seconds": int(max_wall_clock_seconds)}
+def _build_worker_run_budget(
+    max_wall_clock_seconds: int,
+    *,
+    max_trials: int | None = None,
+    max_total_trials: int | None = None,
+    max_models: int | None = None,
+    max_symbols: int | None = None,
+    max_feature_sets: int | None = None,
+) -> dict[str, int]:
+    """Build worker run_budget; omit unset optional caps."""
+    budget: dict[str, int] = {}
+    if max_trials is not None:
+        budget["max_trials"] = int(max_trials)
+    if max_total_trials is not None:
+        budget["max_total_trials"] = int(max_total_trials)
+    if max_models is not None:
+        budget["max_models"] = int(max_models)
+    if max_symbols is not None:
+        budget["max_symbols"] = int(max_symbols)
+    if max_feature_sets is not None:
+        budget["max_feature_sets"] = int(max_feature_sets)
+    if int(max_wall_clock_seconds) > 0:
+        budget["max_wall_clock_seconds"] = int(max_wall_clock_seconds)
+    return budget
 
 
 def _has_valid_artifact(
@@ -210,7 +326,7 @@ def _resume_cached_unit_result(out_dir: Path, unit_id: str) -> Dict[str, Any]:
             rejected_ids = list(payload.get("rejected_ids") or [])
         except Exception:
             pass
-    return {
+    row = {
         "unit_id": unit_id,
         "status": "OK_CACHED",
         "screening_artifact_path": str(artifact_path),
@@ -221,6 +337,8 @@ def _resume_cached_unit_result(out_dir: Path, unit_id: str) -> Dict[str, Any]:
         "promoted_ids": promoted_ids,
         "rejected_ids": rejected_ids,
     }
+    row.update(_artifact_feature_plane_metadata(str(artifact_path)))
+    return row
 
 
 def _count_work_units(all_results: List[UnitScreeningResult]) -> Tuple[int, int, int]:
@@ -249,6 +367,39 @@ def _resolve_run_hashes(
         repo_root=repo_root,
     )
     return events_csv_hash, lake_manifest_hash
+
+
+def _print_dry_run_plan(
+    *,
+    args: argparse.Namespace,
+    out_dir: Path,
+    units_raw_count: int,
+    units: list[PaidScreenUnit],
+    grouping_ctx: WorkerContext,
+    resume_check: str = "",
+) -> None:
+    groups = group_units_by_batch_key(units, grouping_ctx)
+    after_resume = str(len(units))
+    resume_check_token = f"resume_check={resume_check} " if resume_check else ""
+    print(
+        f"DRY_RUN units={units_raw_count} "
+        f"after_resume={after_resume} "
+        f"{resume_check_token}"
+        f"batches={len(groups)} "
+        f"workers={args.workers} "
+        f"scope={args.vectorbt_scope} "
+        f"out={out_dir}"
+    )
+    for unit in units[:20]:
+        print(json.dumps({
+            "unit_id": unit.unit_id,
+            "model_id": unit.model_id,
+            "symbol": unit.symbol,
+            "event_id": unit.event_id,
+            "event_type": unit.event_type,
+        }))
+    if len(units) > 20:
+        print(f"... and {len(units) - 20} more")
 
 
 def _write_run_manifest(
@@ -309,6 +460,9 @@ def _write_run_manifest(
         "aborted": aborted,
         "stop_reason": stop_reason,
     }
+    worker_affinity_cpus = getattr(args, "worker_affinity_cpus", None)
+    if worker_affinity_cpus:
+        manifest["worker_affinity_cpus"] = list(worker_affinity_cpus)
     if profiler_summaries is not None:
         manifest["worker_profiler_summaries"] = profiler_summaries
         if profiler_summaries:
@@ -504,10 +658,59 @@ def _spawn_paid_screen_worker(
 ) -> mp.Process:
     proc = ctx.Process(
         target=worker_process_main,
-        args=(worker_args, batch_queue, result_queue),
+        args=(_strip_parent_worker_args(worker_args), batch_queue, result_queue),
     )
     proc.start()
+    _apply_worker_affinity(proc, worker_args)
     return proc
+
+
+def _strip_parent_worker_args(worker_args: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        key: value
+        for key, value in worker_args.items()
+        if key not in _PARENT_ONLY_WORKER_ARG_KEYS
+    }
+
+
+def _terminate_started_process(proc: mp.Process) -> None:
+    terminate = getattr(proc, "terminate", None)
+    if callable(terminate):
+        try:
+            terminate()
+        except Exception:
+            pass
+    join = getattr(proc, "join", None)
+    if callable(join):
+        try:
+            join(timeout=1.0)
+        except Exception:
+            pass
+
+
+def _apply_worker_affinity(proc: mp.Process, worker_args: Dict[str, Any]) -> None:
+    cpus = worker_args.get("_worker_affinity_cpus") or []
+    if not cpus:
+        return
+    set_affinity = getattr(os, "sched_setaffinity", None)
+    if set_affinity is None:
+        _terminate_started_process(proc)
+        raise RuntimeError(
+            "worker CPU affinity requested but os.sched_setaffinity is unavailable"
+        )
+    pid = getattr(proc, "pid", None)
+    if pid is None:
+        _terminate_started_process(proc)
+        raise RuntimeError("worker CPU affinity requested but worker PID is unavailable")
+
+    spawn_count = int(worker_args.get("_worker_affinity_spawn_count", 0))
+    cpu = int(cpus[spawn_count % len(cpus)])
+    try:
+        set_affinity(pid, {cpu})
+    except Exception:
+        _terminate_started_process(proc)
+        raise
+    worker_args["_worker_affinity_spawn_count"] = spawn_count + 1
 
 
 def _maintain_worker_pool(
@@ -829,17 +1032,22 @@ def _pipelined_dispatch_and_drain(
         last_progress_log_mono = last_collect_mono
 
     def _maybe_recover_workers(now_mono: float) -> None:
-        nonlocal last_progress_log_mono
+        nonlocal last_progress_log_mono, stop_reason
         if not recover_worker_deaths:
             return
-        respawned = _maintain_worker_pool(
-            workers,
-            ctx=spawn_ctx,
-            worker_args=spawn_worker_args,
-            batch_queue=batch_queue,
-            result_queue=result_queue,
-            target_worker_count=target_worker_count,
-        )
+        try:
+            respawned = _maintain_worker_pool(
+                workers,
+                ctx=spawn_ctx,
+                worker_args=spawn_worker_args,
+                batch_queue=batch_queue,
+                result_queue=result_queue,
+                target_worker_count=target_worker_count,
+            )
+        except Exception as exc:
+            stop_reason = "worker_respawn_failed"
+            print(f"[pool] worker respawn failed: {exc}", flush=True)
+            return
         redispatched = 0
         if respawned > 0:
             redispatched = _redispatch_outstanding_batches(
@@ -894,6 +1102,8 @@ def _pipelined_dispatch_and_drain(
             break
 
         _maybe_recover_workers(now_mono)
+        if stop_reason is not None:
+            break
 
         if not recover_worker_deaths:
             polled_failure = _failed_worker_stop_reason(workers)
@@ -1012,6 +1222,41 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--vectorbt-scope", default="paid-compute")
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--max-wall-clock-seconds", type=int, default=0)
+    parser.add_argument(
+        "--max-trials",
+        "--vectorbt-max-trials",
+        dest="max_trials",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max-total-trials",
+        "--vectorbt-max-total-trials",
+        dest="max_total_trials",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max-models",
+        "--vectorbt-max-models",
+        dest="max_models",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max-symbols",
+        "--vectorbt-max-symbols",
+        dest="max_symbols",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max-feature-sets",
+        "--vectorbt-max-feature-sets",
+        dest="max_feature_sets",
+        type=int,
+        default=None,
+    )
     parser.add_argument("--ready-gate-file", type=Path, default=None)
     parser.add_argument("--owner-waiver", default=None, help="Reason to skip ready gate")
     parser.add_argument("--dry-run", action="store_true")
@@ -1030,6 +1275,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="Path to events CSV for hash (default: DATA_SYSTEM_EVENTS_CSV or packages/data_system/config/events.csv)")
     parser.add_argument("--lake-manifest-hash", default=None,
                         help="Explicit lake manifest hash (required if HFT3_MANIFEST_PATH unset/missing)")
+    parser.add_argument(
+        "--worker-affinity-cpus",
+        default=None,
+        help="Linux CPU list/ranges for worker PID affinity, e.g. 2-11 or 2,3,4",
+    )
     parser.add_argument("--batch-timeout-seconds", type=float, default=1800.0,
                         help="Per-batch wall-clock timeout when draining results")
     parser.add_argument(
@@ -1039,12 +1289,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    try:
+        args.worker_affinity_cpus = _parse_worker_affinity_cpus(
+            args.worker_affinity_cpus
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
 
     repo_root = args.repo_root if args.repo_root.is_absolute() else _REPO / args.repo_root
     units_path = args.units_jsonl if args.units_jsonl.is_absolute() else repo_root / args.units_jsonl
     out_dir = args.out if args.out.is_absolute() else repo_root / args.out
 
-    units_raw = _load_units(units_path)
+    try:
+        units_raw = _load_units(units_path)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        print(f"ERROR: unable to load units jsonl {units_path}: {exc}", file=sys.stderr)
+        return 1
     if not units_raw:
         print("ERROR: empty units jsonl", file=sys.stderr)
         return 1
@@ -1063,7 +1323,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         else:
             gate_path = (args.ready_gate_file if args.ready_gate_file.is_absolute()
                          else repo_root / args.ready_gate_file)
-            if not _load_ready_gate(gate_path):
+            try:
+                ready_gate_ok = _load_ready_gate(gate_path)
+            except ValueError as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            if not ready_gate_ok:
                 print("ERROR: ready gate file reports ready_for_full_run=false", file=sys.stderr)
                 return 2
 
@@ -1073,11 +1338,39 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Parse rows into typed units
     units: List[PaidScreenUnit] = []
     for row in units_raw:
+        if not isinstance(row, dict):
+            print(f"ERROR: invalid unit row expected JSON object: {row}", file=sys.stderr)
+            return 1
         try:
             units.append(PaidScreenUnit.from_jsonl_row(row))
         except KeyError as exc:
             print(f"ERROR: malformed unit row missing field {exc}: {row}", file=sys.stderr)
             return 1
+        except (ValueError, TypeError) as exc:
+            print(f"ERROR: invalid unit row {exc}: {row}", file=sys.stderr)
+            return 1
+
+    if args.dry_run and not args.resume:
+        try:
+            derive_run_research_split(units_raw)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        dry_run_ctx = _grouping_context(
+            repo_root,
+            args.events_csv_hash or "dry_run_events_csv_hash_not_resolved",
+            args.lake_manifest_hash or "dry_run_lake_manifest_hash_not_resolved",
+            git_commit=resolve_git_commit(str(repo_root)),
+        )
+        _print_dry_run_plan(
+            args=args,
+            out_dir=out_dir,
+            units_raw_count=len(units_raw),
+            units=units,
+            grouping_ctx=dry_run_ctx,
+            resume_check="no_run",
+        )
+        return 0
 
     # Hashes and research split must be resolved before resume (BLUEPRINT §8).
     try:
@@ -1129,6 +1422,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"[resume] skipping {len(skipped_unit_ids)} units with valid artifacts",
                   flush=True)
 
+    if args.dry_run:
+        _print_dry_run_plan(
+            args=args,
+            out_dir=out_dir,
+            units_raw_count=len(units_raw),
+            units=units,
+            grouping_ctx=grouping_ctx,
+        )
+        return 0
+
     bootstrap_started = datetime.now(timezone.utc)
     if not args.dry_run:
         _write_run_manifest(
@@ -1156,27 +1459,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         print(f"[bootstrap] manifest written ({len(units)} units pending grouping)",
               flush=True)
-
-    # Dry run: print plan and exit
-    if args.dry_run:
-        groups = group_units_by_batch_key(units, grouping_ctx)
-        print(f"DRY_RUN units={len(units_raw)} "
-              f"after_resume={len(units)} "
-              f"batches={len(groups)} "
-              f"workers={args.workers} "
-              f"scope={args.vectorbt_scope} "
-              f"out={out_dir}")
-        for unit in units[:20]:
-            print(json.dumps({
-                "unit_id": unit.unit_id,
-                "model_id": unit.model_id,
-                "symbol": unit.symbol,
-                "event_id": unit.event_id,
-                "event_type": unit.event_type,
-            }))
-        if len(units) > 20:
-            print(f"... and {len(units) - 20} more")
-        return 0
 
     # Group units into compatible batches (full BatchingKey)
     groups = group_units_by_batch_key(units, grouping_ctx)
@@ -1349,13 +1631,23 @@ def main(argv: Optional[List[str]] = None) -> int:
         "screening_scope": args.vectorbt_scope,
         "events_csv_hash": events_csv_hash,
         "lake_manifest_hash": lake_manifest_hash,
-        "run_budget": _build_worker_run_budget(args.max_wall_clock_seconds),
+        "run_budget": _build_worker_run_budget(
+            args.max_wall_clock_seconds,
+            max_trials=args.max_trials,
+            max_total_trials=args.max_total_trials,
+            max_models=args.max_models,
+            max_symbols=args.max_symbols,
+            max_feature_sets=args.max_feature_sets,
+        ),
         "max_batches_before_recycle": args.max_batches_before_recycle,
         "cache_memory_limit_mb": int(args.cache_memory_limit_mb),
         "cache_max_entries": int(args.cache_max_entries),
         "scratch_root": str(_worker_scratch_root(repo_root, out_dir)),
         "native_threads": 1,
     }
+    if args.worker_affinity_cpus:
+        worker_args["_worker_affinity_cpus"] = list(args.worker_affinity_cpus)
+        worker_args["_worker_affinity_spawn_count"] = 0
     for env_key in ("HFT3_NPZ_ROOT", "HFT3_MANIFEST_PATH"):
         env_val = os.environ.get(env_key, "").strip()
         if env_val:
@@ -1367,10 +1659,22 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     num_workers = max(1, min(args.workers, len(batches)))
     workers: List[mp.Process] = []
-    for _ in range(num_workers):
-        workers.append(
-            _spawn_paid_screen_worker(ctx, worker_args, batch_queue, result_queue)
+    try:
+        for _ in range(num_workers):
+            workers.append(
+                _spawn_paid_screen_worker(ctx, worker_args, batch_queue, result_queue)
+            )
+    except Exception as exc:
+        _shutdown_workers(
+            workers,
+            batch_queue,
+            total_timeout_seconds=_POST_DRAIN_EXIT_BUDGET_SECONDS,
         )
+        _close_mp_queues(batch_queue, result_queue)
+        run_state["stop_reason"] = "worker_spawn_failed"
+        _flush_running_manifest(finished=datetime.now(timezone.utc), force=True)
+        print(f"[bootstrap] worker spawn failed: {exc}", flush=True)
+        return 1
 
     # Pipelined dispatch + drain (backpressure keeps result_queue bounded)
     collected, drain_stop_reason = _pipelined_dispatch_and_drain(

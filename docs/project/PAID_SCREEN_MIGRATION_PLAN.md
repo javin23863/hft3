@@ -8,7 +8,7 @@ verified by 214 passing tests across 8 test files
 
 This document is the authoritative migration and rollback plan for switching
 production paid-screen runs from the **retired v1 orchestrator**
-(`scripts/run_vectorbt_paid_screen.py`, deleted 2026-06) to the **v2 orchestrator**
+(retired v1 runner, deleted 2026-06) to the **v2 orchestrator**
 (`scripts/run_vectorbt_paid_screen_v2.py`) and the redesigned execution path
 (typed units → `group_units_by_batch_key` → `PaidScreenWorker` →
 `screen_paid_batch` → `run_vectorbt_simulation_matrix`).
@@ -114,7 +114,7 @@ python scripts/run_vectorbt_paid_screen_v2.py \
 
 ### 1.5 Rollback pre-arming (historical — v1 retired 2026-06)
 
-- **v1 retired.** `scripts/run_vectorbt_paid_screen.py` was deleted after v2
+- **v1 retired.** The previous subprocess-per-unit runner was deleted after v2
   became canonical. Rollback is no longer to v1; preserve v2 run dirs for
   post-mortem and re-run with `--resume` or a fresh v2 launch.
 
@@ -130,7 +130,7 @@ explicit gate; do not advance until the gate passes.
 
 `scripts/run_paid_screen.py` forwards all args to
 `scripts/run_vectorbt_paid_screen_v2.py`. The v1 `--execution-mode` selector
-and `scripts/run_vectorbt_paid_screen.py` were **retired 2026-06**.
+and the previous subprocess-per-unit runner were **retired 2026-06**.
 
 ### Step 2 — Parity run (v1 vs v2 on the same corpus)
 
@@ -195,7 +195,7 @@ amortizes imports and VectorBT/Rust init across batches (design §1).
 ### Step 4 — Cut over the default — **done (2026-06)**
 
 v2 is canonical. `run_paid_screen.py` forwards to `run_vectorbt_paid_screen_v2.py`.
-v1 (`run_vectorbt_paid_screen.py`) was deleted; rollback is v2 `--resume` only.
+v1 was deleted; rollback is v2 `--resume` only.
 
 ---
 
@@ -228,7 +228,7 @@ subprocess-per-unit path is no longer available.
    `runtime/reports/paid_screen_rollback_<date>.json` with: v2 run dir, v2
    failure summary, recovery run dir, manifest status, root-cause hypothesis.
 
-> **Historical:** v1 rollback via `scripts/run_vectorbt_paid_screen.py` is no
+> **Historical:** v1 rollback via the previous subprocess-per-unit runner is no
 > longer available (script deleted 2026-06).
 
 ### 3.3 What is preserved on rollback

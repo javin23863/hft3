@@ -229,6 +229,8 @@ GATE_RULES:
 The Ontology Gate sits between the existing `cavecrew-reviewer` dual-pass review and the verify step. It is an **additional gate**, not a replacement.
 
 ```
+Fable mindset (loaded before all gates)
+  → Ponytail mindset
 VaultGate (read vault first)
   → Spec (restate goal)
   → GraphPre (waived-by-owner-2026-06-16)
@@ -236,10 +238,11 @@ VaultGate (read vault first)
   → Delegate (investigator → builder)
   → Local Preflight (rg for stale terms, required vocabulary)
   → Review (cavecrew-reviewer Pass A + Pass B)
-  → *** FABLE MINDSET LOAD *** (NEW — gate agent loads Fable loop, confirms entry checklist)
-  → *** ONTOLOGY GATE *** (citation trace + invariant enforcement + tool-usage check)
+  → *** ONTOLOGY GATE *** (confirms Fable receipt, citation trace, invariant enforcement, tool-usage check)
   → Verify (shell runs pytest, paste exit code + output tail)
-  → PR GrepLoop (external review when available)
+  → Plan Drift Review (compare diff/artifacts/receipts to approved plan)
+  → Review Surface Gate (PR/MR/CL surface before external PR AI)
+  → PR GrepLoop (external PR AI on current review surface)
   → GraphPost (waived-by-owner-2026-06-16)
 ```
 

@@ -83,7 +83,7 @@ def test_validate_screening_artifact_public_api(tmp_path: Path):
         tmp_path, "run1", "2026-01-01T00:00:00Z", replay_eligible=True, surface_defined=True
     )
     payload = json.loads(artifact.read_text(encoding="utf-8"))
-    assert validate_screening_artifact(payload) == []
+    assert validate_screening_artifact(payload) is None
 
 
 def test_prepared_data_key_changes_with_event_id(tmp_path: Path):

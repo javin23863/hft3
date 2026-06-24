@@ -6,6 +6,9 @@ Status: v0.1 planning-control specification. This document defines the target
 robustness-testing product behavior. It is not evidence that the current repo
 already implements every item.
 
+Implementation/data-contract companion:
+[ROBUSTNESS_PIPELINE_SOURCE_OF_TRUTH.md](ROBUSTNESS_PIPELINE_SOURCE_OF_TRUTH.md).
+
 ## Purpose
 
 The robustness layer decides whether a model is worth trusting with future
@@ -28,6 +31,7 @@ plans must map each slice back to this document.
 | hftbacktest | [nkaz001/hftbacktest](https://github.com/nkaz001/hftbacktest), [official hftbacktest docs](https://hftbacktest.readthedocs.io/en/latest/index.html), and [HFTBACKTEST_REALISM_ENGINE_SPEC.md](HFTBACKTEST_REALISM_ENGINE_SPEC.md) | Tick/order-book replay, latency, queue position, fee, order, and fill simulation. |
 | Walk Forward Correlation | User-provided transcript from "Martyn Tinsley - Walk Forward Correlation: A New Tool for Robust Strategy Design" | Defines WFC as full parameter-surface IS/OOS correlation, not parameter selection. |
 | HFT3 current code | Existing packages, specs, docs, and artifacts | Adapter target. Current behavior does not override the higher authorities. |
+| HFT3 robustness handoff | [ROBUSTNESS_PIPELINE_SOURCE_OF_TRUTH.md](ROBUSTNESS_PIPELINE_SOURCE_OF_TRUTH.md), `scripts/build_robustness_raw_inputs_from_screening.py`, `scripts/package_robustness_evidence_inputs.py`, `scripts/apply_robustness_evidence_to_screening.py` | Implementation contract for raw-surface assembly, evidence packaging, strict replay eligibility, and fail-closed HftBacktest handoff. |
 
 ## Non-Negotiable Invariants
 
@@ -125,7 +129,12 @@ Required metrics at this phase:
 - turnover
 
 Acceptance: VectorBT may reject. VectorBT alone may not certify execution
-tradability.
+tradability. Before WFC/DSR/PBO/CSCV evidence can be packaged, the screening
+artifact must contain complete measured event-by-parameter surfaces for the same
+model/symbol/event-type/research-clock/context-set family plus explicit fee and
+tick-value stress inputs. Incomplete, insufficient, or missing-stress surfaces
+produce no raw robustness package and cannot advance to strict HftBacktest
+replay.
 
 ### 4. In-Sample Surface Robustness
 

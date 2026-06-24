@@ -206,6 +206,41 @@ class TestScreenPaidBatch:
         assert budget is not None
         assert budget.max_wall_clock_seconds == 42
 
+    def test_screen_paid_batch_owns_single_provenance_stamp(self, monkeypatch):
+        import numpy as np
+        from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult
+
+        calls: list[dict] = []
+
+        def _fake_matrix(**kwargs):
+            return FilterResult(backend="vectorbt", run_id="run_test")
+
+        def _fake_stamp(*args, **kwargs):
+            calls.append(dict(kwargs))
+
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            _fake_matrix,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.apply_promotion_gates",
+            lambda result, **kwargs: result,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.apply_filter_result_provenance_metadata",
+            _fake_stamp,
+        )
+
+        ctx = make_context(run_budget={})
+        cache = BoundedLRUCache(max_entries=4, max_memory_mb=64)
+        cache.put(_batch_cache_key(ctx), np.array([[1, 2, 3, 4, 5, 1_700_000_000_000.0]]))
+
+        screen_paid_batch([make_unit()], ctx, data_cache=cache, run_screening=True)
+
+        assert len(calls) == 1
+        assert calls[0]["screening_scope"] == ctx.screening_scope
+
     def test_screen_paid_batch_default_run_budget_has_no_wall_clock_cap(self, monkeypatch):
         from types import SimpleNamespace
         from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
@@ -290,6 +325,37 @@ class TestScreenPaidBatch:
             assert result.status == "OK"
             assert Path(result.screening_artifact_path).parent.parent == scratch
 
+    def test_screen_paid_batch_reports_artifact_validation_error(self, monkeypatch, tmp_path):
+        import numpy as np
+        from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult, ScreeningArtifactError
+
+        def fake_write(*_args, **_kwargs):
+            raise ScreeningArtifactError("screening_artifact_hash mismatch")
+
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._write_screening_artifact",
+            fake_write,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            lambda **kwargs: FilterResult(backend="vectorbt", run_id="artifact_error"),
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.apply_promotion_gates",
+            lambda result, **kwargs: result,
+        )
+
+        ctx = make_context(repo_root=str(tmp_path))
+        cache = BoundedLRUCache(max_entries=4, max_memory_mb=64)
+        cache.put(_batch_cache_key(ctx), np.array([[1, 2, 3, 4, 5, 1_700_000_000_000.0]]))
+
+        results = screen_paid_batch([make_unit()], ctx, data_cache=cache, run_screening=True)
+
+        assert len(results) == 1
+        assert results[0].status == "ERROR"
+        assert "screening_artifact_hash mismatch" in str(results[0].error)
+
     def test_default_scratch_dir_under_runtime_not_pipeline_runs(self):
         repo = "/repo/root"
         scratch_dir = _worker_scratch_artifact_dir(repo, "u99")
@@ -340,6 +406,227 @@ class TestArtifactProvenanceStamping:
             research_split=DEFAULT_RESEARCH_SPLIT,
             screening_scope="pilot",
             **provenance,
+        )
+
+    def test_write_screening_artifact_validates_json_primitive_payload(
+        self, monkeypatch, tmp_path
+    ):
+        from backtest_pipeline.src.promotion_gate import PromotedCandidate
+        from backtest_pipeline.src import vectorbt_adapter
+        from backtest_pipeline.src.vectorbt_adapter import ScreeningArtifactError
+
+        ctx = make_context(repo_root=str(tmp_path))
+        unit = make_unit(model_id="SPREAD_BLOWOUT_RECOMPRESSION")
+        prom = PromotedCandidate(
+            candidate_id="nan_metric_row",
+            hypothesis_id=unit.model_id,
+            strategy_family=unit.model_id,
+            asset_class="futures",
+            symbol=unit.symbol,
+            timeframe="1m",
+            param_values={"signal_threshold": 0.15},
+            vectorbt_run_id="json_roundtrip_guard",
+            vectorbt_results={
+                "gate_metric_authority": "official_vectorbt_portfolio_stats",
+                "oos_expectancy": 1.0,
+                "max_drawdown_pct": -1.0,
+                "num_trades": 10,
+                "profit_factor": 1.2,
+                "sharpe": 0.5,
+                "sortino": 0.6,
+            },
+            pass_reason="vectorbt_simulated",
+        )
+        filter_result = _valid_filter_result(
+            unit,
+            backend="vectorbt",
+            run_id="json_roundtrip_guard",
+            promoted=[prom],
+            rejected=[],
+            trials_run=1,
+            max_total_trials=1,
+            vectorbt_available=True,
+            vectorbt_version="1.0.0",
+        )
+        artifact_path = tmp_path / "scratch" / unit.unit_id / "screening_artifact.json"
+        model_entry = {"model_id": unit.model_id, "hyp_id": unit.hyp_id}
+        parsed = build_structured_parsed_hypothesis(unit, model_entry)
+        candidate = _build_candidate_model(unit, model_entry, tmp_path, parsed)
+        original_primitive = vectorbt_adapter._json_primitive_screening_payload
+
+        def primitive_with_null_profit_factor(value):
+            payload = original_primitive(value)
+            if isinstance(payload, dict) and payload.get("run_id") == "json_roundtrip_guard":
+                payload["promoted"][0]["profit_factor"] = None
+            return payload
+
+        monkeypatch.setattr(
+            vectorbt_adapter,
+            "_json_primitive_screening_payload",
+            primitive_with_null_profit_factor,
+        )
+
+        with pytest.raises(
+            ScreeningArtifactError,
+            match="empty candidate field: profit_factor",
+        ):
+            _write_screening_artifact(
+                str(artifact_path),
+                filter_result,
+                unit,
+                model_entry,
+                ctx,
+                "deadbeef" * 4,
+                RunProfiler(),
+                candidate=candidate,
+            )
+        assert not artifact_path.exists()
+
+    def test_write_screening_artifact_uses_unique_tmp_and_cleans_failed_replace(
+        self, monkeypatch, tmp_path
+    ):
+        ctx = make_context(repo_root=str(tmp_path))
+        unit = make_unit(model_id="SPREAD_BLOWOUT_RECOMPRESSION")
+        filter_result = _valid_filter_result(unit)
+        artifact_path = tmp_path / "scratch" / unit.unit_id / "screening_artifact.json"
+        fixed_tmp_path = Path(str(artifact_path) + ".tmp")
+        fixed_tmp_path.parent.mkdir(parents=True, exist_ok=True)
+        fixed_tmp_path.write_text("stale fixed tmp", encoding="utf-8")
+
+        model_entry = {"model_id": unit.model_id, "hyp_id": unit.hyp_id}
+        parsed = build_structured_parsed_hypothesis(unit, model_entry)
+        candidate = _build_candidate_model(unit, model_entry, tmp_path, parsed)
+        replace_calls = []
+
+        def fail_replace(src, dst):
+            replace_calls.append((Path(src), Path(dst)))
+            raise OSError("simulated replace failure")
+
+        monkeypatch.setattr(os, "replace", fail_replace)
+
+        with pytest.raises(OSError, match="simulated replace failure"):
+            _write_screening_artifact(
+                str(artifact_path),
+                filter_result,
+                unit,
+                model_entry,
+                ctx,
+                "deadbeef" * 4,
+                RunProfiler(),
+                candidate=candidate,
+            )
+
+        assert replace_calls
+        tmp_path_used, dst_path = replace_calls[0]
+        assert dst_path == artifact_path
+        assert tmp_path_used != fixed_tmp_path
+        assert tmp_path_used.name.startswith("screening_artifact.json.tmp.")
+        assert fixed_tmp_path.read_text(encoding="utf-8") == "stale fixed tmp"
+        assert not tmp_path_used.exists()
+        assert not artifact_path.exists()
+        assert not list(artifact_path.parent.glob("screening_artifact.json.tmp.*"))
+
+    def test_candidate_and_artifact_carry_unit_context_metadata(self, tmp_path):
+        ctx = make_context(
+            repo_root=str(tmp_path),
+            events_csv_hash="ctx_events_hash_abc",
+            lake_manifest_hash="ctx_lake_hash_xyz",
+        )
+        unit = make_unit(
+            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+            research_clock="context_feature_uplift",
+            context_set_id="target_plus_cross_asset",
+            declared_context_sets=("target_only", "target_plus_cross_asset"),
+        )
+        ohlcv_hash = "deadbeef" * 4
+        filter_result = _valid_filter_result(unit)
+        artifact_path = tmp_path / "scratch" / unit.unit_id / "screening_artifact.json"
+
+        model_entry = {"model_id": unit.model_id, "hyp_id": unit.hyp_id}
+        parsed = build_structured_parsed_hypothesis(unit, model_entry)
+        candidate = _build_candidate_model(unit, model_entry, tmp_path, parsed)
+
+        assert candidate.research_clock == "context_feature_uplift"
+        assert candidate.metadata["context_set_id"] == "target_plus_cross_asset"
+        assert candidate.metadata["declared_context_sets"] == ["target_only", "target_plus_cross_asset"]
+
+        artifact_hash = _write_screening_artifact(
+            str(artifact_path),
+            filter_result,
+            unit,
+            model_entry,
+            ctx,
+            ohlcv_hash,
+            RunProfiler(),
+            candidate=candidate,
+        )
+
+        payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+        validate_screening_artifact(payload)
+        assert artifact_hash == payload["screening_artifact_hash"]
+        assert payload["research_clock"] == "context_feature_uplift"
+        assert payload["allowed_context_set_id_or_null"] == "target_plus_cross_asset"
+        assert payload["declared_context_sets"] == ["target_only", "target_plus_cross_asset"]
+        assert payload["context_ablation_status"] == "not_measured"
+        assert artifact_matches_resume_unit(
+            payload,
+            unit,
+            events_csv_hash="ctx_events_hash_abc",
+            lake_manifest_hash="ctx_lake_hash_xyz",
+            research_split=DEFAULT_RESEARCH_SPLIT,
+            screening_scope="pilot",
+            **resolve_resume_provenance(str(tmp_path), unit, git_commit=ctx.git_commit),
+        )
+
+    def test_resume_rejects_artifact_from_different_context(self, tmp_path):
+        ctx = make_context(
+            repo_root=str(tmp_path),
+            events_csv_hash="ctx_events_hash_abc",
+            lake_manifest_hash="ctx_lake_hash_xyz",
+        )
+        baseline = make_unit(model_id="SPREAD_BLOWOUT_RECOMPRESSION")
+        context_unit = make_unit(
+            model_id=baseline.model_id,
+            hyp_id=baseline.hyp_id,
+            symbol=baseline.symbol,
+            event_id=baseline.event_id,
+            event_type=baseline.event_type,
+            research_clock="context_feature_uplift",
+            context_set_id="target_plus_cross_asset",
+            declared_context_sets=("target_only", "target_plus_cross_asset"),
+        )
+        artifact_path = tmp_path / "scratch" / baseline.unit_id / "screening_artifact.json"
+        model_entry = {"model_id": baseline.model_id, "hyp_id": baseline.hyp_id}
+        parsed = build_structured_parsed_hypothesis(baseline, model_entry)
+        candidate = _build_candidate_model(baseline, model_entry, tmp_path, parsed)
+        _write_screening_artifact(
+            str(artifact_path),
+            _valid_filter_result(baseline),
+            baseline,
+            model_entry,
+            ctx,
+            "deadbeef" * 4,
+            RunProfiler(),
+            candidate=candidate,
+        )
+
+        payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+        assert artifact_matches_resume_unit(
+            payload,
+            baseline,
+            events_csv_hash="ctx_events_hash_abc",
+            lake_manifest_hash="ctx_lake_hash_xyz",
+            research_split=DEFAULT_RESEARCH_SPLIT,
+            screening_scope="pilot",
+            **resolve_resume_provenance(str(tmp_path), baseline, git_commit=ctx.git_commit),
+        )
+        assert not artifact_matches_resume_unit(
+            payload,
+            context_unit,
+            events_csv_hash="ctx_events_hash_abc",
+            lake_manifest_hash="ctx_lake_hash_xyz",
+            research_split=DEFAULT_RESEARCH_SPLIT,
+            screening_scope="pilot",
         )
 
     def test_screen_paid_batch_artifact_resume_accepts_context_hashes(self, monkeypatch, tmp_path):
@@ -410,6 +697,13 @@ class TestGroupUnitsByBatchKey:
         ctx = make_context()
         u1 = make_unit(unit_id="u1", feature_set_id="fs_a")
         u2 = make_unit(unit_id="u2", feature_set_id="fs_b")
+        groups = group_units_by_batch_key([u1, u2], ctx)
+        assert len(groups) == 2
+
+    def test_different_context_set_splits_groups(self):
+        ctx = make_context()
+        u1 = make_unit(unit_id="u1", context_set_id="target_only")
+        u2 = make_unit(unit_id="u2", context_set_id="target_plus_cross_asset")
         groups = group_units_by_batch_key([u1, u2], ctx)
         assert len(groups) == 2
 
@@ -786,7 +1080,7 @@ class TestPromotionGateWiringPlantedPass:
         assert len(gated.promoted) == 1
         assert gated.promoted[0].candidate_id == "planted_pass"
         assert gated.promoted[0].pass_reason == "vectorbt_screen_passed_replay_not_eligible"
-        assert gated.promoted[0].vectorbt_results["pilot_gate_evaluation"]["failures"] == []
+        assert gated.promoted[0].vectorbt_results["paid_compute_gate_evaluation"]["failures"] == []
 
     def test_paid_compute_rejects_low_expectancy_with_explicit_reason(self):
         from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
@@ -796,7 +1090,7 @@ class TestPromotionGateWiringPlantedPass:
         gated = apply_promotion_gates(result, screening_scope="paid_compute")
         assert gated.promoted == []
         assert len(gated.rejected) == 1
-        failures = gated.rejected[0].metric_values["pilot_gate_evaluation"]["failures"]
+        failures = gated.rejected[0].metric_values["paid_compute_gate_evaluation"]["failures"]
         assert "oos_expectancy_below_threshold" in failures
 
     def test_paid_compute_rejects_missing_expectancy_with_explicit_reason(self):
@@ -807,8 +1101,52 @@ class TestPromotionGateWiringPlantedPass:
         result = FilterResult(backend="vectorbt", run_id="run_planted", promoted=[prom], rejected=[])
         gated = apply_promotion_gates(result, screening_scope="paid-compute")
         assert gated.promoted == []
-        failures = gated.rejected[0].metric_values["pilot_gate_evaluation"]["failures"]
+        failures = gated.rejected[0].metric_values["paid_compute_gate_evaluation"]["failures"]
         assert "missing_oos_expectancy" in failures
+
+    def test_paid_compute_hydrates_auxiliary_walk_forward_metrics(self):
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
+
+        prom = self._official_stats_promoted()
+        prom.vectorbt_results.pop("oos_expectancy", None)
+        prom.vectorbt_results.pop("wf_consistency", None)
+        prom.vectorbt_results["auxiliary_numpy_walk_forward"] = {
+            "oos_expectancy": 1.25,
+            "wf_consistency": 0.9,
+        }
+        result = FilterResult(backend="vectorbt", run_id="run_planted", promoted=[prom], rejected=[])
+        gated = apply_promotion_gates(result, screening_scope="paid_compute")
+
+        assert len(gated.promoted) == 1
+        metrics = gated.promoted[0].vectorbt_results
+        assert metrics["oos_expectancy"] == 1.25
+        assert metrics["wf_consistency"] == 0.9
+        assert metrics["paid_compute_gate_evaluation"]["used_fields"] == {
+            "oos_expectancy": "auxiliary_numpy_walk_forward",
+            "wf_consistency": "auxiliary_numpy_walk_forward",
+            "max_drawdown_pct": "Max Drawdown [%]",
+            "num_trades": "Total Trades",
+        }
+        assert "wf_consistency" not in metrics["paid_compute_gate_evaluation"]["skipped_unmeasured_fields"]
+
+    def test_pilot_gate_ignores_auxiliary_walk_forward_metrics(self):
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
+
+        prom = self._official_stats_promoted(
+            expectancy=-1.0,
+            auxiliary_numpy_walk_forward={
+                "oos_expectancy": 2.0,
+                "wf_consistency": 1.0,
+            },
+        )
+        result = FilterResult(backend="vectorbt", run_id="run_planted", promoted=[prom], rejected=[])
+        gated = apply_promotion_gates(result, screening_scope="pilot")
+
+        assert gated.promoted == []
+        failures = gated.rejected[0].metric_values["pilot_gate_evaluation"]["failures"]
+        assert "oos_expectancy_below_threshold" in failures
+        assert gated.rejected[0].metric_values["oos_expectancy"] == -1.0
+        assert "wf_consistency" not in gated.rejected[0].metric_values
 
     def test_full_gate_rejects_missing_walk_forward_and_stability(self):
         from backtest_pipeline.src.promotion_gate import PromotionGate
@@ -876,6 +1214,75 @@ class TestPromotionGateWiringPlantedPass:
         assert results[0].promoted_ids == ["planted_pass"]
         artifact = json.loads(Path(results[0].screening_artifact_path).read_text(encoding="utf-8"))
         assert artifact["promoted_ids"] == ["planted_pass"]
+
+    def test_pilot_batch_artifact_stamps_matrix_recipe_handoff(
+        self, monkeypatch, tmp_path
+    ):
+        from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult
+        from research_pipeline.types import CandidateModel
+
+        recipe_hash = "recipe_hash_abc"
+        unit = make_unit()
+        pinned_candidate = CandidateModel(
+            candidate_id="candidate_with_recipe_hash",
+            model_id=unit.model_id,
+            strategy_params={"signal_threshold": 0.15},
+            thesis=unit.thesis,
+            metadata={
+                "strategy_family": unit.model_id,
+                "symbol": unit.symbol,
+                "feature_recipe_hash": recipe_hash,
+            },
+        )
+        pinned_candidate.feature_recipe_hash = recipe_hash
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._build_candidate_model",
+            lambda *_, **__: pinned_candidate,
+        )
+
+        prom = self._official_stats_promoted(
+            feature_recipe_hash=recipe_hash,
+            base_candidate_metadata={"feature_recipe_hash": recipe_hash},
+        )
+        filter_result = FilterResult(
+            backend="vectorbt",
+            run_id="run_matrix_recipe_handoff",
+            promoted=[prom],
+            rejected=[],
+            screening_scope="pilot",
+            code_commit="abc123",
+            parameter_space_id="ps_test",
+            parameter_space_hash="ps_hash_test",
+            max_trials=1,
+            trials_run=1,
+            max_total_trials=1,
+            max_models=1,
+            max_symbols=1,
+            max_feature_sets=1,
+            vectorbt_available=True,
+            vectorbt_version="1.0.0",
+        )
+
+        ctx = make_context(screening_scope="pilot", repo_root=str(tmp_path))
+        cache = BoundedLRUCache(max_entries=4, max_memory_mb=64)
+        ohlcv = np.array([[100.0, 101.0, 102.0, 103.0, 1.0, 1_700_000_000_000.0]] * 40)
+        cache.put(_batch_cache_key(ctx, unit), ohlcv)
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            lambda **_kwargs: filter_result,
+        )
+
+        results = screen_paid_batch([unit], ctx, data_cache=cache, run_screening=True)
+        assert len(results) == 1
+        assert results[0].status == "OK", results[0].error
+        artifact = json.loads(
+            Path(results[0].screening_artifact_path).read_text(encoding="utf-8")
+        )
+        validate_screening_artifact(artifact)
+        assert artifact["feature_recipe_hash"] == recipe_hash
+        assert artifact["hftbacktest_handoff_status"] == "recipe_hash_handoff_ready"
+        assert artifact["promoted"][0]["feature_recipe_hash"] == recipe_hash
 
 
 class TestDefaultDataLoaderNpzRoot:
