@@ -151,6 +151,29 @@ def test_parse_hypothesis_detects_symbol_aliases(thesis, expected_symbol):
     assert expected_symbol in parsed.instrument_universe
 
 
+def test_parse_hypothesis_ignores_duration_phrases_as_treasury_aliases():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis(
+        "Use the continuation model over the last 10-year backtest window",
+        use_llm=False,
+    )
+
+    assert parsed.primary_model_id == "SECOND_WAVE_CONTINUATION"
+    assert parsed.instrument_universe == ["MES"]
+    assert parsed.metadata["instrument_universe_compatibility"] == "compatible"
+
+
+def test_symbol_aliases_do_not_include_duration_year_phrases():
+    from research_pipeline import hypothesis_parser
+
+    aliases = hypothesis_parser._symbol_aliases()
+
+    for values in aliases.values():
+        normalised = [hypothesis_parser._normalize_alias_text(alias) for alias in values]
+        assert not any(value.endswith(" YEAR") for value in normalised)
+
+
 def test_parse_hypothesis_does_not_seed_mes_when_other_symbol_present():
     from research_pipeline.hypothesis_parser import parse_hypothesis
 
@@ -294,6 +317,30 @@ def test_parameter_search_grid_and_vectorbt_ranges_are_deterministic():
     assert [item.params for item in selected] == [item.params for item in select_parameters(grid, max_candidates=4)]
     assert selected[0].metadata["method_status"] == "ok"
     assert selected[0].metadata["grid_size"] == 144
+
+
+def test_parameter_grid_skips_optional_risk_params_without_ranges():
+    from research_pipeline.parameter_search import parameter_grid, select_parameters
+    from research_pipeline.types import ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="signal only",
+        instrument_universe=["MES"],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=[],
+        feature_list=[],
+        param_ranges={"signal_threshold": [0.1, 0.2]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+
+    grid = parameter_grid(parsed)
+    selected = select_parameters(grid, max_candidates=2)
+
+    assert grid["stop_loss_pct"] == []
+    assert grid["take_profit_pct"] == []
+    assert all("stop_loss_pct" not in item.params for item in selected)
+    assert all("take_profit_pct" not in item.params for item in selected)
 
 
 def test_parameter_search_seeded_and_unavailable_methods_are_explicit():

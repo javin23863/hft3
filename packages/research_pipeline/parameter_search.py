@@ -50,8 +50,8 @@ def parameter_grid(
     }
     stop_loss = _range_points(_param_range(parsed, "stop_loss_pct", "stop_loss"), default=[])
     take_profit = _range_points(_param_range(parsed, "take_profit_pct", "take_profit"), default=[])
-    grid["stop_loss_pct"] = [None] + stop_loss if stop_loss else [None]
-    grid["take_profit_pct"] = [None] + take_profit if take_profit else [None]
+    grid["stop_loss_pct"] = [None] + stop_loss if stop_loss else []
+    grid["take_profit_pct"] = [None] + take_profit if take_profit else []
     if expand_for_vectorbt:
         grid["holding_period_bars"] = _holding_points(
             _param_range(parsed, "holding_period_bars", "holding_bars")
