@@ -122,6 +122,29 @@ _DEFAULT_PIPELINE_RUNTIME_CONFIG: dict[str, Any] = {
     "evaluation": {
         "workers": 1,
     },
+    "gate_profiles": {
+        "default_profile": "normal",
+        "profiles": {
+            "normal": {
+                "min_net_pnl": -1000000000.0,
+                "min_trades": 0,
+                "max_tail_loss": 1000000000.0,
+                "min_win_rate": 0.0,
+            },
+            "high_volatility": {
+                "min_net_pnl": 0.0,
+                "min_trades": 10,
+                "max_tail_loss": 5000.0,
+                "min_win_rate": 0.45,
+            },
+            "low_volatility": {
+                "min_net_pnl": 0.0,
+                "min_trades": 5,
+                "max_tail_loss": 2500.0,
+                "min_win_rate": 0.40,
+            },
+        },
+    },
 }
 _VECTORBT_SCOPE_CHOICES = {
     "pilot",
@@ -247,6 +270,27 @@ def _bool_default(value: Any, *, name: str) -> bool:
     raise ValueError(f"{name} must be boolean")
 
 
+def _gate_profiles(config: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    gate_config = _section(config, "gate_profiles")
+    profiles = gate_config.get("profiles")
+    if not isinstance(profiles, Mapping):
+        return {}
+    return {
+        str(name): dict(profile)
+        for name, profile in profiles.items()
+        if isinstance(profile, Mapping)
+    }
+
+
+def _gate_thresholds_from_args(args: argparse.Namespace) -> GateThresholds:
+    return GateThresholds(
+        min_net_pnl=_float_default(args.gate_min_net_pnl, name="gate_profiles.min_net_pnl"),
+        min_trades=_nonnegative_int(args.gate_min_trades, name="gate_profiles.min_trades"),
+        max_tail_loss=_float_default(args.gate_max_tail_loss, name="gate_profiles.max_tail_loss"),
+        min_win_rate=_float_default(args.gate_min_win_rate, name="gate_profiles.min_win_rate"),
+    )
+
+
 def _required_true(value: Any, *, name: str) -> bool:
     parsed = _bool_default(value, name=name)
     if not parsed:
@@ -260,6 +304,7 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
     search_config = _section(config, "candidate_search")
     rl_config = _section(config, "rl_training")
     evaluation_config = _section(config, "evaluation")
+    gate_config = _section(config, "gate_profiles")
 
     if args.max_candidates is None:
         args.max_candidates = config.get("max_candidates", 5)
@@ -323,6 +368,23 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
     if getattr(args, "evaluation_workers", None) is None:
         args.evaluation_workers = evaluation_config.get("workers", 1)
     args.evaluation_workers = _positive_int(args.evaluation_workers, name="evaluation.workers")
+
+    profiles = _gate_profiles(config)
+    if getattr(args, "gate_profile", None) is None:
+        args.gate_profile = str(gate_config.get("default_profile") or "normal")
+    args.gate_profile = str(args.gate_profile)
+    if args.gate_profile not in profiles:
+        raise ValueError("gate_profiles.default_profile must name one of: " + ", ".join(sorted(profiles)))
+    profile = profiles[args.gate_profile]
+    if getattr(args, "gate_min_net_pnl", None) is None:
+        args.gate_min_net_pnl = profile.get("min_net_pnl", -1e9)
+    if getattr(args, "gate_min_trades", None) is None:
+        args.gate_min_trades = profile.get("min_trades", 0)
+    if getattr(args, "gate_max_tail_loss", None) is None:
+        args.gate_max_tail_loss = profile.get("max_tail_loss", 1e9)
+    if getattr(args, "gate_min_win_rate", None) is None:
+        args.gate_min_win_rate = profile.get("min_win_rate", 0.0)
+    _gate_thresholds_from_args(args)
 
 
 class _PipelineJsonFormatter(logging.Formatter):
@@ -428,6 +490,15 @@ def _pipeline_config_receipt(
         },
         "evaluation": {
             "workers": getattr(args, "evaluation_workers", 1),
+        },
+        "gate_profiles": {
+            "profile": getattr(args, "gate_profile", "normal"),
+            "thresholds": {
+                "min_net_pnl": getattr(args, "gate_min_net_pnl", -1e9),
+                "min_trades": getattr(args, "gate_min_trades", 0),
+                "max_tail_loss": getattr(args, "gate_max_tail_loss", 1e9),
+                "min_win_rate": getattr(args, "gate_min_win_rate", 0.0),
+            },
         },
     }
     hash_payload = {
@@ -1066,6 +1137,11 @@ def _main_impl(
         default=None,
         help="Bounded worker count for legacy candidate evaluation; VectorBT paid-screen uses its own controls",
     )
+    parser.add_argument("--gate-profile", default=None, help="Legacy evaluation gate profile name")
+    parser.add_argument("--gate-min-net-pnl", type=float, default=None)
+    parser.add_argument("--gate-min-trades", type=int, default=None)
+    parser.add_argument("--gate-max-tail-loss", type=float, default=None)
+    parser.add_argument("--gate-min-win-rate", type=float, default=None)
     parser.add_argument(
         "--orchestrator-result",
         action="store_true",
@@ -1774,7 +1850,7 @@ def _main_impl(
     if chi404 is None:
         print("Warning: no latency data available; backtest will run without CHI404 latency", file=sys.stderr)
 
-    gates = GateThresholds(min_trades=0)
+    gates = _gate_thresholds_from_args(args)
     for cand in candidates:
         print(f"Evaluating {cand.model_id} threshold={cand.strategy_params.get('signal_threshold')}...")
     logger.info(

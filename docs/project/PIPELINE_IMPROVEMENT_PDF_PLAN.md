@@ -213,6 +213,12 @@ Gate:
 
 ### Phase 6 - Regime-Aware Gates
 
+Implementation receipt:
+
+- `config/research_pipeline/default_runtime.json` and `scripts/run_pipeline.py` now define `normal`, `high_volatility`, and `low_volatility` legacy evaluation gate profiles.
+- CLI overrides exist for profile, min net PnL, min trades, max tail loss, and min win rate.
+- The current gate profile applies only to legacy `EvaluationResult` fields already produced by `evaluate_model`; Sharpe/Sortino/drawdown profile gates remain deferred to the VectorBT/robustness layers that emit those metrics.
+
 Implementation requirements:
 
 - Config file for gate profiles, for example `config/autoresearch/gate_thresholds.yaml`.

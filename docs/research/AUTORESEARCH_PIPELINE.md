@@ -95,6 +95,13 @@ one use a bounded `ProcessPoolExecutor` for candidate-level independence, but
 high worker counts must be reserved for CHI404 or VastAI. VectorBT paid-screen
 and HftBacktest campaign runners keep their own worker controls.
 
+Legacy evaluation gates can be selected with `gate_profiles.default_profile` or
+`--gate-profile`, with explicit CLI overrides for min net PnL, min trades, max
+tail loss, and min win rate. These profiles apply only to the legacy
+`WorkbenchEngine` evaluation result fields already emitted by this entrypoint;
+they do not replace VectorBT promotion gates, robustness evidence, or
+HftBacktest replay gates.
+
 `--hftbacktest-realism` remains fail-closed: the writer is called only after a
 promoted screening row is strict replay-eligible and carries a robustness
 evidence receipt from the robustness applicator.

@@ -137,6 +137,17 @@ def test_pipeline_runtime_config_defaults_from_json(tmp_path):
                 "llm_ideas": {"max_ideas": 4, "review_memory_limit": 2},
                 "candidate_search": {"method": "bayesian", "seed": 13},
                 "evaluation": {"workers": 3},
+                "gate_profiles": {
+                    "default_profile": "high_volatility",
+                    "profiles": {
+                        "high_volatility": {
+                            "min_net_pnl": 0.0,
+                            "min_trades": 10,
+                            "max_tail_loss": 5000.0,
+                            "min_win_rate": 0.45,
+                        }
+                    },
+                },
             }
         ),
         encoding="utf-8",
@@ -157,6 +168,11 @@ def test_pipeline_runtime_config_defaults_from_json(tmp_path):
         candidate_search_method=None,
         candidate_search_seed=None,
         evaluation_workers=None,
+        gate_profile=None,
+        gate_min_net_pnl=None,
+        gate_min_trades=None,
+        gate_max_tail_loss=None,
+        gate_min_win_rate=None,
     )
 
     run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
@@ -170,6 +186,9 @@ def test_pipeline_runtime_config_defaults_from_json(tmp_path):
     assert args.candidate_search_method == "bayesian"
     assert args.candidate_search_seed == 13
     assert args.evaluation_workers == 3
+    assert args.gate_profile == "high_volatility"
+    assert args.gate_min_trades == 10
+    assert args.gate_min_win_rate == 0.45
     assert run_pipeline._vectorbt_run_budget(args, cfg) == {
         "max_trials": 3,
         "max_total_trials": 21,
