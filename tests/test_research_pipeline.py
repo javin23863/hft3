@@ -135,6 +135,7 @@ def test_pipeline_runtime_config_defaults_from_json(tmp_path):
                     },
                 },
                 "llm_ideas": {"max_ideas": 4, "review_memory_limit": 2},
+                "candidate_search": {"method": "bayesian", "seed": 13},
             }
         ),
         encoding="utf-8",
@@ -152,6 +153,8 @@ def test_pipeline_runtime_config_defaults_from_json(tmp_path):
         vectorbt_max_peak_memory_mb=None,
         max_ideas=None,
         review_memory_limit=None,
+        candidate_search_method=None,
+        candidate_search_seed=None,
     )
 
     run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
@@ -162,6 +165,8 @@ def test_pipeline_runtime_config_defaults_from_json(tmp_path):
     assert args.vectorbt_max_total_trials == 21
     assert args.max_ideas == 4
     assert args.review_memory_limit == 2
+    assert args.candidate_search_method == "bayesian"
+    assert args.candidate_search_seed == 13
     assert run_pipeline._vectorbt_run_budget(args, cfg) == {
         "max_trials": 3,
         "max_total_trials": 21,

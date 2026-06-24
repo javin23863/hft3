@@ -279,6 +279,8 @@ def candidates_from_ideas(
     *,
     max_candidates: int,
     expand_for_vectorbt: bool = False,
+    search_method: str = "grid",
+    search_seed: int = 42,
 ) -> List[CandidateModel]:
     queued = static_filter_ideas(packet)
     candidates: List[CandidateModel] = []
@@ -290,6 +292,8 @@ def candidates_from_ideas(
                 parsed_from_idea(idea),
                 max_candidates=max_candidates,
                 expand_for_vectorbt=expand_for_vectorbt,
+                search_method=search_method,
+                search_seed=search_seed,
             ),
         )
         for idea in queued

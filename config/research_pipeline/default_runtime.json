@@ -31,5 +31,9 @@
     "signal_threshold_min": 0.0,
     "signal_threshold_max": 1.0,
     "require_positive_holding_period_bars": true
+  },
+  "candidate_search": {
+    "method": "grid",
+    "seed": 42
   }
 }

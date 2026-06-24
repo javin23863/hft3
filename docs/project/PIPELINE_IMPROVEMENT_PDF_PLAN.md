@@ -157,6 +157,12 @@ Required methods:
 - `bayesian`
 - `evolutionary`
 
+Implementation receipt:
+
+- `packages/research_pipeline/parameter_search.py` adds deterministic stdlib-backed `grid`, `bayesian`, and `evolutionary` candidate selectors.
+- `scripts/run_pipeline.py` records effective `candidate_search.method` and `candidate_search.seed` in `pipeline_runtime_config.json`.
+- The methods run before VectorBT only and record `objective_evaluations=0`; they do not promote candidates or bypass downstream gates.
+
 Implementation requirements:
 
 - No silent fallback to `seeded` for requested advanced methods.

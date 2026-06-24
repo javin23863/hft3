@@ -33,6 +33,7 @@ from research_pipeline.evaluation import evaluate_model
 from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.knowledge_graph import persist_graph_slice
 from research_pipeline.model_generation import generate_candidates
+from research_pipeline.parameter_search import SUPPORTED_SEARCH_METHODS
 from research_pipeline.idea_generation import (
     candidates_from_ideas,
     generate_idea_set,
@@ -99,6 +100,10 @@ _DEFAULT_PIPELINE_RUNTIME_CONFIG: dict[str, Any] = {
         "signal_threshold_min": 0.0,
         "signal_threshold_max": 1.0,
         "require_positive_holding_period_bars": True,
+    },
+    "candidate_search": {
+        "method": "grid",
+        "seed": 42,
     },
 }
 _VECTORBT_SCOPE_CHOICES = {
@@ -235,6 +240,7 @@ def _required_true(value: Any, *, name: str) -> bool:
 def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[str, Any]) -> None:
     vectorbt_config = _section(config, "vectorbt")
     idea_config = _section(config, "llm_ideas")
+    search_config = _section(config, "candidate_search")
 
     if args.max_candidates is None:
         args.max_candidates = config.get("max_candidates", 5)
@@ -260,6 +266,18 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
     if args.review_memory_limit is None:
         args.review_memory_limit = idea_config.get("review_memory_limit", 5)
     args.review_memory_limit = _nonnegative_int(args.review_memory_limit, name="review_memory_limit")
+
+    if getattr(args, "candidate_search_method", None) is None:
+        args.candidate_search_method = str(search_config.get("method") or "grid")
+    args.candidate_search_method = str(args.candidate_search_method).strip().lower().replace("-", "_")
+    if args.candidate_search_method not in SUPPORTED_SEARCH_METHODS:
+        raise ValueError(
+            "candidate_search.method must be one of: "
+            + ", ".join(sorted(SUPPORTED_SEARCH_METHODS))
+        )
+    if getattr(args, "candidate_search_seed", None) is None:
+        args.candidate_search_seed = search_config.get("seed", 42)
+    args.candidate_search_seed = _nonnegative_int(args.candidate_search_seed, name="candidate_search.seed")
 
 
 class _PipelineJsonFormatter(logging.Formatter):
@@ -351,6 +369,10 @@ def _pipeline_config_receipt(
         },
         "doc_cache": _section(config, "doc_cache"),
         "candidate_prefilter": _section(config, "candidate_prefilter"),
+        "candidate_search": {
+            "method": getattr(args, "candidate_search_method", "grid"),
+            "seed": getattr(args, "candidate_search_seed", 42),
+        },
     }
     hash_payload = {
         "loaded_config": copy.deepcopy(dict(config)),
@@ -889,6 +911,18 @@ def _main_impl(
     parser.add_argument("--idea-temperature", type=float, default=None, help="Sampling temperature for idea generation only")
     parser.add_argument("--idea-top-p", type=float, default=None, help="Top-p sampling for idea generation only")
     parser.add_argument(
+        "--candidate-search-method",
+        choices=sorted(SUPPORTED_SEARCH_METHODS),
+        default=None,
+        help="Candidate parameter search method before VectorBT screening",
+    )
+    parser.add_argument(
+        "--candidate-search-seed",
+        type=int,
+        default=None,
+        help="Seed for deterministic candidate parameter search",
+    )
+    parser.add_argument(
         "--orchestrator-result",
         action="store_true",
         help="Emit single-line HFT3_PIPELINE_RESULT for paid-screen worker subprocesses",
@@ -1089,6 +1123,8 @@ def _main_impl(
             idea_packet,
             max_candidates=args.max_candidates,
             expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+            search_method=args.candidate_search_method,
+            search_seed=args.candidate_search_seed,
         )
         idea_candidates_count = len(candidates)
         queued = [idea for idea in idea_packet.get("ideas", []) if idea.get("status") == "queued_for_test"]
@@ -1149,6 +1185,8 @@ def _main_impl(
             expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
             target_event_id=args.event_id,
             target_symbol=args.symbol,
+            search_method=args.candidate_search_method,
+            search_seed=args.candidate_search_seed,
         ))
 
     candidates, candidate_prefilter = prefilter_candidates(

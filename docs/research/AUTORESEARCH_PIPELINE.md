@@ -71,6 +71,15 @@ by default because remote content can change behind a stable URL. The cache
 covers extracted text summary and KG slice records; it does not change the
 VectorBT or HftBacktest gates.
 
+Candidate generation is controlled by the runtime config's
+`candidate_search` section or the `--candidate-search-method` and
+`--candidate-search-seed` CLI flags. Supported methods are `grid`,
+`bayesian`, and `evolutionary`. These methods only select parameter sets before
+VectorBT screening; the emitted `candidate_search` metadata records
+`backend=stdlib`, the seed, grid size, iterations, and
+`objective_evaluations=0`. They do not promote candidates and do not replace
+the VectorBT -> robustness evidence -> HftBacktest gate order.
+
 `--hftbacktest-realism` remains fail-closed: the writer is called only after a
 promoted screening row is strict replay-eligible and carries a robustness
 evidence receipt from the robustness applicator.
