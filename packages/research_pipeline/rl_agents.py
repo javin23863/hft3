@@ -286,7 +286,7 @@ def validate_rl_artifact(artifact: Mapping[str, Any]) -> None:
         raise ValueError("RL artifact must be non-promotable")
     failure_reasons = artifact.get("failure_reasons")
     if not isinstance(failure_reasons, list) or not all(
-        isinstance(reason, str) and reason for reason in failure_reasons
+        isinstance(reason, str) and reason.strip() for reason in failure_reasons
     ):
         raise ValueError("RL artifact failure_reasons must be a list of strings")
     _require_str_list(artifact, "feature_names")

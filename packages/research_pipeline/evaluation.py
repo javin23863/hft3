@@ -59,10 +59,8 @@ def aggregate_evaluation_results(
         for position, result in enumerate(results)
     ]
     date_keys = [date_key for date_key, _, _ in dated_results if date_key is not None]
-    risk_metrics_gateable = (
-        len(date_keys) == len(results)
-        and len(set(date_keys)) == len(date_keys)
-    )
+    risk_metrics_gateable = len(date_keys) == len(results)
+    duplicate_date_warning = risk_metrics_gateable and len(set(date_keys)) != len(date_keys)
     ordered_results = [
         result
         for _, _, result in sorted(dated_results, key=lambda item: (item[0], item[1]))
@@ -86,6 +84,9 @@ def aggregate_evaluation_results(
             "tail_loss": result.tail_loss,
             "error": result.error,
             "passes": _passes_basic_event_gates(result, gates),
+            "risk_metric_warning": (
+                "same_date_event_window" if duplicate_date_warning else None
+            ),
         }
         for result in ordered_results
     ]

@@ -52,7 +52,6 @@ class GateThresholds:
         return (
             self.min_sharpe > -1e9
             or self.min_sortino > -1e9
-            or self.signed_tail_loss_floor() > -1e9
             or self.max_drawdown < 1e9
         )
 

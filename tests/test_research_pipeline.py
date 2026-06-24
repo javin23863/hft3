@@ -723,7 +723,7 @@ def test_cross_event_risk_metrics_fail_closed_without_dated_event_order():
     assert aggregate.passes_all_gates() is False
 
 
-def test_cross_event_risk_metrics_fail_closed_on_same_date_ties():
+def test_cross_event_risk_metrics_warn_on_same_date_ties():
     from research_pipeline.evaluation import aggregate_evaluation_results
     from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
 
@@ -745,32 +745,51 @@ def test_cross_event_risk_metrics_fail_closed_on_same_date_ties():
         gates=GateThresholds(min_trades=0, max_drawdown=4.0),
     )
 
-    assert aggregate.risk_metrics_source == "cross_event_net_pnl_diagnostic"
-    assert aggregate.risk_metrics_gateable is False
+    assert aggregate.risk_metrics_source == "cross_event_net_pnl_chronological"
+    assert aggregate.risk_metrics_gateable is True
+    assert [event["risk_metric_warning"] for event in aggregate.event_results] == [
+        "same_date_event_window",
+        "same_date_event_window",
+    ]
     assert aggregate.passes_all_gates() is False
 
 
-def test_cross_event_tail_loss_threshold_requires_gateable_metrics():
+def test_tail_loss_threshold_does_not_require_gateable_risk_metrics():
     from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
 
-    result = EvaluationResult(
-        candidate=CandidateModel(
-            candidate_id="cand_tail",
-            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
-            strategy_params={},
-            thesis="tail gate",
-        ),
+    candidate = CandidateModel(
+        candidate_id="cand_tail",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={},
+        thesis="tail gate",
+    )
+    gates = GateThresholds(min_trades=0, max_tail_loss=-2.0)
+    rejected = EvaluationResult(
+        candidate=candidate,
         event_id="CPI_1,NFP_1",
         net_pnl=10.0,
         num_trades=5,
         win_rate=1.0,
         expectancy=2.0,
         tail_loss=-5.0,
-        gates=GateThresholds(min_trades=0, max_tail_loss=-2.0),
+        gates=gates,
+        risk_metrics_gateable=False,
+    )
+    accepted = EvaluationResult(
+        candidate=candidate,
+        event_id="CPI_1",
+        net_pnl=10.0,
+        num_trades=5,
+        win_rate=1.0,
+        expectancy=2.0,
+        tail_loss=-1.0,
+        gates=gates,
         risk_metrics_gateable=False,
     )
 
-    assert result.passes_all_gates() is False
+    assert gates.requires_gateable_risk_metrics() is False
+    assert rejected.passes_all_gates() is False
+    assert accepted.passes_all_gates() is True
 
 
 def test_tail_loss_gate_uses_signed_tail_pnl_floor():
@@ -788,7 +807,7 @@ def test_tail_loss_gate_accepts_legacy_positive_loss_magnitude_cap():
     gates = GateThresholds(min_trades=0, max_tail_loss=2.0)
 
     assert gates.signed_tail_loss_floor() == -2.0
-    assert gates.requires_gateable_risk_metrics() is True
+    assert gates.requires_gateable_risk_metrics() is False
     assert gates.passes(1.0, 1, -1.0, 1.0)
     assert not gates.passes(1.0, 1, -5.0, 1.0)
     assert GateThresholds(min_trades=0, max_tail_loss=1e9).requires_gateable_risk_metrics() is False
@@ -1561,6 +1580,15 @@ def test_validate_rl_artifact_rejects_promotable_policy():
     artifact["promotable"] = True
 
     with pytest.raises(ValueError, match="non-promotable"):
+        validate_rl_artifact(artifact)
+
+
+def test_validate_rl_artifact_rejects_whitespace_failure_reason():
+    from research_pipeline.rl_agents import blocked_rl_artifact, validate_rl_artifact
+
+    artifact = blocked_rl_artifact(reason="   ")
+
+    with pytest.raises(ValueError, match="failure_reasons"):
         validate_rl_artifact(artifact)
 
 
