@@ -187,15 +187,16 @@ parity driver is `scripts/verify_cpp_parity.py`, which runs both the Python
 lake NPZ file and reports a per-slot diff table.
 
 **Silent-skip is prohibited.** `verify_cpp_parity.py` hard-fails with exit 2
-if the C++ module (`build/hft3_features_cpp.cp312-win_amd64.pyd`) cannot be
-imported. CI must assert the artefact is present before invoking the script;
-an absent module must not be treated as a pass (see CORRECTNESS.md §2 row 3
-and §3 defect e for the older script's exit-0 silent-skip hazard).
+if the C++ module (`build/hft3_features_cpp*.so` on Linux/CHI404 or
+`build/hft3_features_cpp*.pyd` on Windows) cannot be imported. CI must assert
+the artefact is present before invoking the script; an absent module must not
+be treated as a pass (see CORRECTNESS.md §2 row 3 and §3 defect e for the older
+script's exit-0 silent-skip hazard).
 
 Invocation:
 
 ```bash
-python -S scripts/verify_cpp_parity.py --npz <lake_npz> [--tick-size 0.25] [--window-ns 1000000000]
+python scripts/verify_cpp_parity.py --npz <lake_npz> [--tick-size 0.25] [--window-ns 1000000000]
 ```
 
 ### Regime-slot architecture note

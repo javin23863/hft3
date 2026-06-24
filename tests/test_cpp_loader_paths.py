@@ -1,0 +1,46 @@
+from __future__ import annotations
+
+import sys
+import types
+from pathlib import Path
+
+
+_REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_REPO))
+
+
+def test_cpp_loader_prefers_active_build_dir(monkeypatch, tmp_path: Path) -> None:
+    from features_engine.src.features._cpp_loader import _candidate_dirs
+
+    repo = tmp_path / "repo"
+    active_build = tmp_path / "cmake-build-lane"
+    monkeypatch.setenv("HFT3_FEATURES_CPP_BUILD_DIR", str(active_build))
+
+    candidates = list(_candidate_dirs(repo))
+
+    assert candidates[:3] == [
+        active_build.resolve(),
+        (active_build / "Release").resolve(),
+        (active_build / "Debug").resolve(),
+    ]
+    assert repo / "build" in candidates
+
+
+def test_cpp_loader_rejects_stale_sys_module_when_active_build_dir_is_set(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    import features_engine.src.features._cpp_loader as loader
+
+    active_build = tmp_path / "active-build"
+    stale_build = tmp_path / "stale-build"
+    active_build.mkdir()
+    stale_mod = types.SimpleNamespace(__file__=str(stale_build / "hft3_features_cpp.so"))
+
+    monkeypatch.setenv("HFT3_FEATURES_CPP_BUILD_DIR", str(active_build))
+    monkeypatch.setattr(loader, "_cached", stale_mod)
+    monkeypatch.setattr(loader, "_searched", True)
+    monkeypatch.setitem(sys.modules, loader._MODULE_NAME, stale_mod)
+
+    assert loader.load_cpp_features() is None
+    assert loader._MODULE_NAME not in sys.modules

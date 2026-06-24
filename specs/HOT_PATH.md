@@ -158,23 +158,21 @@ contract location has moved.
 ### 3.6 pybind11 Research Binding
 
 A pybind11 module `hft3_features_cpp` exposes the C++ `FeatureExtractor` to
-Python research tooling without a CMake invocation. The module is built via
-direct `g++` because `FindPython3` hangs on the development workstation
-(Windows, RTX 3080 Laptop); CMake is not used for this target.
+Python research tooling through the root CMake target `hft3_features_cpp`.
+The Linux/CHI404 C-lane builds the module before parity and discovers
+`build/hft3_features_cpp*.so`; the Windows daily subset checks the
+`build/hft3_features_cpp*.pyd` artifact.
 
-**Build command** (documented in `scripts/verify_cpp_parity.py` header,
-lines ~73–80):
+**Build command**:
 
 ```bash
-g++ -O2 -std=c++20 -shared -DMS_WIN64 -DWIN32 \
-    -I packages/features_engine/cpp/include \
-    -I <python-include> -I <pybind11-include> -I <numpy-include> \
-    packages/features_engine/cpp/bindings/py_features.cpp \
-    packages/features_engine/cpp/src/*.cpp \
-    <python-lib> -o build/hft3_features_cpp.cp312-win_amd64.pyd
+PYBIND11_DIR="$(python3 -m pybind11 --cmakedir)"
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_DIR"
+cmake --build build --target hft3_features_cpp
 ```
 
-Output artefact: `build/hft3_features_cpp.cp312-win_amd64.pyd`.
+Output artefact: `build/hft3_features_cpp*.so` on Linux/CHI404 or
+`build/hft3_features_cpp*.pyd` on Windows.
 
 Status: **BUILT and golden bit-identical** on all non-regime slots. Regime
 slots 41–49 differ between Python and C++ because the Python pipeline calls
@@ -184,8 +182,8 @@ persists until the pipeline-level integration task lands (ALPHA_CME.md M0).
 
 **Parity driver**: `scripts/verify_cpp_parity.py` — hard-fails (exit 2) if
 the C++ module is absent; runs both extractors on a real lake NPZ and prints
-a per-slot diff table. CI must assert the `.pyd` artefact is present before
-invoking this script (see CORRECTNESS.md §2 row 3).
+a per-slot diff table. CI must assert the `.so`/`.pyd` artefact is present
+before invoking this script (see CORRECTNESS.md §2 row 3).
 
 ---
 

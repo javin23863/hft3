@@ -373,9 +373,39 @@ RUST_REQUIRED_SCREENING_SCOPES = {
     "paid-compute",
     "paid_compute",
 }
+NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_ROOTS = (
+    "reports/latency_baselines/",
+    "runtime/latency_reports/",
+    "reports/cpp_lane/",
+    "runtime/cpp_lane/",
+    "runtime/reports/",
+    "research_cards/cpp_lane/",
+    "research_cards/hftbacktest_realism/",
+)
+NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_SUFFIXES = (
+    ".json",
+    ".jsonl",
+    ".log",
+    ".md",
+    ".parquet",
+    ".txt",
+)
 NATIVE_CPP_HOT_PATH_EVIDENCE_TOKENS = (
     "rithmic_latency_probe",
-    "reports/latency_baselines/",
+    "latency_baselines",
+    "latency_summary",
+    "run_c_lane",
+    "hft3_features_cpp",
+    "verify_cpp_parity",
+    "hft_feature_golden",
+    "hft_event_context_golden",
+    "test_decision_runtime_hardening",
+    "test_safety_failure_injection",
+    "test_engine_loop",
+    "spsc_queue_stress",
+    "risk_manager_atomic_stress",
+    "safety_poller_concurrent",
+    "hft3_engine",
 )
 SOURCE_LOCK_REQUIRED_FIELDS = (
     "upstream_repo_url",
@@ -603,7 +633,13 @@ def _validate_native_latency_probe_evidence(latency_model: Mapping[str, Any]) ->
 def _looks_like_native_cpp_hot_path_evidence(value: Any) -> bool:
     if not isinstance(value, str) or not value.strip():
         return False
-    normalized = value.replace("\\", "/").lower()
+    normalized = value.split("#", 1)[0].replace("\\", "/").lower().strip()
+    if not normalized:
+        return False
+    if not normalized.startswith(NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_ROOTS):
+        return False
+    if not normalized.endswith(NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_SUFFIXES):
+        return False
     return any(token in normalized for token in NATIVE_CPP_HOT_PATH_EVIDENCE_TOKENS)
 
 

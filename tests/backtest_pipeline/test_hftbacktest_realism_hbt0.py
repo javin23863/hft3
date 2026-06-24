@@ -46,9 +46,19 @@ def _write_screening(path: Path, artifact: dict | None = None) -> Path:
     return path
 
 
+def _fake_hftbacktest_install(version: str = "2.4.2") -> dict[str, object]:
+    return {
+        "available": True,
+        "python_package_name": "hftbacktest",
+        "python_package_version": version,
+        "installed_module_path": "site-packages/hftbacktest/__init__.py",
+    }
+
+
 def test_source_lock_schema_hash_and_required_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(hbt0, "_repo_commit", lambda _root: "hft3sha")
     monkeypatch.setattr(hbt0, "_repo_dirty", lambda _root: False)
+    monkeypatch.setattr(hbt0, "detect_hftbacktest_installation", _fake_hftbacktest_install)
 
     lock = build_hftbacktest_source_lock(
         repo_root=tmp_path,
@@ -93,7 +103,7 @@ def test_source_lock_fails_closed_on_empty_required_lists(
     lock = build_hftbacktest_source_lock(
         repo_root=tmp_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=["rithmic_gateway/tools/rithmic_latency_probe"],
+        native_hot_path_evidence=[hbt0.NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_ROOTS[0] + "order_ack_summary.json"],
         native_hot_path_status="provided",
     )
     lock["docs_pages_used"] = []
@@ -116,7 +126,7 @@ def test_source_lock_fails_closed_on_non_list_required_list_fields(
     lock = build_hftbacktest_source_lock(
         repo_root=tmp_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=["rithmic_gateway/tools/rithmic_latency_probe"],
+        native_hot_path_evidence=[hbt0.NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_ROOTS[0] + "order_ack_summary.json"],
         native_hot_path_status="provided",
     )
     lock["docs_pages_used"] = "https://hftbacktest.readthedocs.io"
@@ -176,6 +186,52 @@ def test_source_lock_rejects_unrecognized_native_hot_path_evidence(
         repo_root=tmp_path,
         upstream_ref="v2.4.2",
         native_hot_path_evidence=["risk_engine_fake_claim.json"],
+        native_hot_path_status="provided",
+    )
+
+    reasons = validate_hftbacktest_source_lock(lock)
+
+    assert "native_cpp_hot_path_evidence_unrecognized" in reasons
+
+
+def test_source_lock_accepts_hash_backed_c_lane_receipt_evidence(
+    tmp_path: Path,
+) -> None:
+    lock = build_hftbacktest_source_lock(
+        repo_root=tmp_path,
+        upstream_ref="v2.4.2",
+        native_hot_path_evidence=[
+            f"reports/cpp_lane/run_c_lane_summary.json#sha256:{'a' * 64}",
+            f"reports/cpp_lane/hft3_features_cpp_parity.json#sha256:{'b' * 64}",
+            f"reports/cpp_lane/tsan_risk_manager_atomic_stress.json#sha256:{'c' * 64}",
+            f"reports/cpp_lane/test_engine_loop.json#sha256:{'d' * 64}",
+        ],
+        native_hot_path_status="provided",
+    )
+
+    reasons = validate_hftbacktest_source_lock(lock)
+
+    assert "native_cpp_hot_path_evidence_unrecognized" not in reasons
+
+
+@pytest.mark.parametrize(
+    "fake_evidence",
+    [
+        "scripts/run_c_lane.sh",
+        "scripts/run_c_lane.sh#sha256:" + "a" * 64,
+        "build/hft3_engine#sha256:" + "b" * 64,
+        "engine/src/hft3_engine_main.cpp#sha256:" + "c" * 64,
+        "reports/cpp_lane/evidence.json#sha256:" + "d" * 64,
+    ],
+)
+def test_source_lock_rejects_source_or_binary_native_hot_path_claims(
+    tmp_path: Path,
+    fake_evidence: str,
+) -> None:
+    lock = build_hftbacktest_source_lock(
+        repo_root=tmp_path,
+        upstream_ref="v2.4.2",
+        native_hot_path_evidence=[fake_evidence],
         native_hot_path_status="provided",
     )
 
@@ -447,6 +503,7 @@ def test_hbt0_writes_source_lock_and_fail_closed_summary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(hbt0, "_repo_commit", lambda _root: "hft3sha")
+    monkeypatch.setattr(hbt0, "detect_hftbacktest_installation", _fake_hftbacktest_install)
     screening_path = _write_screening(tmp_path / "screening_artifact.json")
 
     payload = write_hbt0_artifacts(
@@ -633,6 +690,7 @@ def test_hbt0_cli_writes_fail_closed_artifacts(tmp_path: Path, monkeypatch: pyte
 
     screening_path = _write_screening(tmp_path / "screening_artifact.json")
     out_root = tmp_path / "hbt_realism"
+    monkeypatch.setattr(hbt0, "detect_hftbacktest_installation", _fake_hftbacktest_install)
     monkeypatch.setattr(
         sys,
         "argv",

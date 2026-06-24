@@ -16,6 +16,7 @@ project(hft3 CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+enable_testing()
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -25,6 +26,12 @@ if(MSVC)
     add_compile_options(/O2 /W4)
 else()
     add_compile_options(-O3 -Wall -Wextra)
+endif()
+
+string(TOLOWER "${CMAKE_BUILD_TYPE}" HFT3_BUILD_TYPE)
+if(HFT3_BUILD_TYPE STREQUAL "tsan" AND NOT MSVC)
+    add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
 endif()
 
 # Feature extractor library
@@ -93,9 +100,37 @@ target_include_directories(test_safety_failure_injection PRIVATE
 )
 target_link_libraries(test_safety_failure_injection PRIVATE hft_risk)
 
+# TSan stress targets (CORRECTNESS.md row 2)
+add_executable(spsc_queue_stress
+    rithmic_gateway/tests/spsc_queue_stress.cpp
+)
+target_include_directories(spsc_queue_stress PRIVATE
+    rithmic_gateway/include
+)
+add_test(NAME tsan_spsc_queue_stress COMMAND spsc_queue_stress)
+
+add_executable(risk_manager_atomic_stress
+    risk_engine/tests/risk_manager_atomic_stress.cpp
+)
+target_include_directories(risk_manager_atomic_stress PRIVATE
+    risk_engine/include
+)
+target_link_libraries(risk_manager_atomic_stress PRIVATE hft_risk)
+add_test(NAME tsan_risk_manager_atomic_stress COMMAND risk_manager_atomic_stress)
+
+add_executable(safety_poller_concurrent
+    rithmic_gateway/tests/safety_poller_concurrent.cpp
+)
+target_include_directories(safety_poller_concurrent PRIVATE
+    rithmic_gateway/include
+    risk_engine/include
+)
+target_link_libraries(safety_poller_concurrent PRIVATE hft_risk)
+add_test(NAME tsan_safety_poller_concurrent COMMAND safety_poller_concurrent)
+
 # ── pybind11 Python extension ────────────────────────────────────────────────
 # Locate pybind11 via the cmake directory reported by:
-#   python -S -m pybind11 --cmakedir
+#   python -m pybind11 --cmakedir
 # Pass it with -Dpybind11_DIR=<path> or set HFT3_PYBIND11_DIR env var.
 if(DEFINED ENV{HFT3_PYBIND11_DIR})
     set(pybind11_DIR "$ENV{HFT3_PYBIND11_DIR}" CACHE PATH "pybind11 cmake dir")
@@ -136,7 +171,7 @@ if(pybind11_FOUND)
 else()
     message(WARNING
         "pybind11 not found — hft3_features_cpp will NOT be built.\n"
-        "Install pybind11 and pass -Dpybind11_DIR=<path> (from: python -S -m pybind11 --cmakedir)")
+        "Install pybind11 and pass -Dpybind11_DIR=<path> (from: python -m pybind11 --cmakedir)")
 endif()
 
 # ── hft3_engine (REPLAY + conceptual LIVE) ───────────────────────────────────

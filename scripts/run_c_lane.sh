@@ -20,6 +20,7 @@
 # Environment overrides:
 #   HFT3_NPZ_ROOT  — directory to search for NPZ when --npz not given.
 #   BUILD_DIR      — override the default ./build directory.
+#   PYTHON_BIN     — Python interpreter used for pybind discovery/parity.
 #
 # Exit code: nonzero on any failure.
 
@@ -27,6 +28,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$REPO/build}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 FAILURES=()
 NPZ_PATH=""
 
@@ -41,14 +43,50 @@ done
 log_section() { echo; echo "=== $1 ==="; }
 pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1" >&2; FAILURES+=("$1"); }
+find_pybind_so() {
+    find "$BUILD_DIR" -maxdepth 2 -type f -name 'hft3_features_cpp*.so' | sort | head -n 1
+}
+pybind11_cmake_arg() {
+    if [[ -n "${HFT3_PYBIND11_DIR:-}" ]]; then
+        printf '%s\n' "-Dpybind11_DIR=$HFT3_PYBIND11_DIR"
+        return 0
+    fi
+
+    local cmake_dir
+    if cmake_dir="$("$PYTHON_BIN" -m pybind11 --cmakedir 2>/dev/null)" && [[ -n "$cmake_dir" ]]; then
+        printf '%s\n' "-Dpybind11_DIR=$cmake_dir"
+        return 0
+    fi
+    return 1
+}
 
 # ---------------------------------------------------------------------------
-# Precondition: pybind module (Linux .so name)
+# Precondition: pybind module (Linux .so)
 # ---------------------------------------------------------------------------
-log_section "Precondition: pybind module present"
-PYD="$BUILD_DIR/hft3_features_cpp.cpython-312-x86_64-linux-gnu.so"
-if [[ ! -f "$PYD" ]]; then
-    fail "pybind module not found at $PYD — parity step cannot run (CORRECTNESS row 3)"
+log_section "Precondition: build pybind module"
+mkdir -p "$BUILD_DIR"
+PYD=""
+PYBIND_ARG=""
+PYBIND_ARGS=()
+if PYBIND_ARG="$(pybind11_cmake_arg)"; then
+    PYBIND_ARGS=("$PYBIND_ARG")
+    pass "pybind11 CMake dir resolved: ${PYBIND_ARG#-Dpybind11_DIR=}"
+else
+    fail "pybind11 CMake dir unavailable — install pybind11 or set HFT3_PYBIND11_DIR"
+fi
+if cmake -B "$BUILD_DIR" -S "$REPO" -DCMAKE_BUILD_TYPE=Release \
+         -DHFT3_PYTHON_EXECUTABLE="$PYTHON_BIN" "${PYBIND_ARGS[@]}" -Wno-dev 2>&1; then
+    if cmake --build "$BUILD_DIR" --target hft3_features_cpp 2>&1; then
+        PYD="$(find_pybind_so)"
+    else
+        fail "pybind module build target failed — parity step cannot run (CORRECTNESS row 3)"
+    fi
+else
+    fail "pybind module configure failed — parity step cannot run (CORRECTNESS row 3)"
+fi
+
+if [[ -z "$PYD" || ! -f "$PYD" ]]; then
+    fail "pybind module hft3_features_cpp*.so not found under $BUILD_DIR — parity step cannot run (CORRECTNESS row 3)"
 else
     pass "pybind module present: $PYD"
 fi
@@ -61,7 +99,7 @@ if [[ -z "$NPZ_PATH" && -n "${HFT3_NPZ_ROOT:-}" ]]; then
     NPZ_PATH="$(find "$HFT3_NPZ_ROOT" -name "*.npz" | head -1)"
 fi
 if [[ -n "$NPZ_PATH" && -f "$PYD" ]]; then
-    python -S "$REPO/scripts/verify_cpp_parity.py" --npz "$NPZ_PATH" \
+    HFT3_FEATURES_CPP_BUILD_DIR="$BUILD_DIR" "$PYTHON_BIN" "$REPO/scripts/verify_cpp_parity.py" --npz "$NPZ_PATH" \
         && pass "64-slot parity confirmed" \
         || fail "verify_cpp_parity.py non-zero exit — slot mismatch or module absent"
 elif [[ ! -f "$PYD" ]]; then
@@ -80,6 +118,8 @@ INCLUDES=(
     "-I$REPO/risk_engine/include"
     "-I$REPO/packages/decision_engine/cpp/include"
     "-I$REPO/packages/features_engine/cpp/include"
+    "-I$REPO/engine/include"
+    "-I$REPO/rithmic_gateway/RApiPlus/13.7.0.0/include"
 )
 # rithmic_adapter.cpp includes RApiPlus.h (Rithmic vendor SDK); c_api.cpp covers rithmic_gateway
 # headers without the SDK dependency.  safety_poller_syntax_check.cpp is a standalone tool with a
@@ -91,6 +131,8 @@ TUS=(
     "packages/features_engine/cpp/src/feature_extractor.cpp"
     "packages/features_engine/cpp/src/event_context.cpp"
     "packages/features_engine/cpp/src/regime_filter.cpp"
+    "engine/src/engine_config.cpp"
+    "engine/src/hft3_engine_main.cpp"
 )
 for tu in "${TUS[@]}"; do
     full="$REPO/$tu"
@@ -112,10 +154,11 @@ log_section "Row 1: ASan + UBSan build"
 ASAN_BUILD="$BUILD_DIR/asan_build"
 mkdir -p "$ASAN_BUILD"
 if cmake -B "$ASAN_BUILD" -S "$REPO" -DCMAKE_BUILD_TYPE=Asan -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+         -DHFT3_PYTHON_EXECUTABLE="$PYTHON_BIN" "${PYBIND_ARGS[@]}" \
          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
          -Wno-dev 2>&1; then
-    if cmake --build "$ASAN_BUILD" --target test_decision_runtime_hardening 2>&1; then
+    if cmake --build "$ASAN_BUILD" --target test_decision_runtime_hardening test_safety_failure_injection 2>&1; then
         ASAN_BIN="$ASAN_BUILD/test_decision_runtime_hardening"
         if [[ -f "$ASAN_BIN" ]]; then
             ASAN_SYMBOLIZER_PATH="$(which llvm-symbolizer 2>/dev/null || true)" \
@@ -151,6 +194,7 @@ log_section "Row 2: TSan build"
 TSAN_BUILD="$BUILD_DIR/tsan_build"
 mkdir -p "$TSAN_BUILD"
 if cmake -B "$TSAN_BUILD" -S "$REPO" -DCMAKE_BUILD_TYPE=Tsan -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+         -DHFT3_PYTHON_EXECUTABLE="$PYTHON_BIN" "${PYBIND_ARGS[@]}" \
          -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" \
          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" \
          -Wno-dev 2>&1; then
@@ -171,6 +215,18 @@ if cmake -B "$TSAN_BUILD" -S "$REPO" -DCMAKE_BUILD_TYPE=Tsan -DCMAKE_C_COMPILER=
     done
 else
     fail "TSan: cmake configure failed"
+fi
+
+# ---------------------------------------------------------------------------
+# Release gate binaries
+# ---------------------------------------------------------------------------
+log_section "Release gate binaries"
+if cmake --build "$BUILD_DIR" \
+        --target test_decision_runtime_hardening test_safety_failure_injection test_engine_loop hft3_engine \
+        2>&1; then
+    pass "release gate binaries built"
+else
+    fail "release gate binary build failed"
 fi
 
 # ---------------------------------------------------------------------------
@@ -196,6 +252,18 @@ if [[ -f "$INJECTION_EXE" ]]; then
                      || fail "test_safety_failure_injection exited non-zero"
 else
     fail "test_safety_failure_injection NOT FOUND — binary pending parallel agent (explicit FAIL, not silent skip)"
+fi
+
+# ---------------------------------------------------------------------------
+# Engine loop gate binary (release)
+# ---------------------------------------------------------------------------
+log_section "Engine loop gate binary (release)"
+ENGINE_LOOP_EXE="$BUILD_DIR/test_engine_loop"
+if [[ -f "$ENGINE_LOOP_EXE" ]]; then
+    "$ENGINE_LOOP_EXE" && pass "test_engine_loop green" \
+                       || fail "test_engine_loop exited non-zero"
+else
+    fail "test_engine_loop not found at $ENGINE_LOOP_EXE"
 fi
 
 # ---------------------------------------------------------------------------

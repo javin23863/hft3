@@ -229,9 +229,15 @@ are insufficient: measured/custom latency must carry a SHA-256 artifact hash,
 `CHI404` host evidence, `latency_proxy_status=measured`, a SHA-256
 `latency_value_or_sample_hash`, and `hft3_native_cpp_rithmic_latency_probe`
 provenance. Source-lock native hot-path evidence must point at recognizable hft3
-native C++ latency evidence, currently `rithmic_latency_probe` or
-`reports/latency_baselines/` artifacts; generic strings such as `evidence.json`
-or `risk_engine_fake_claim.json` are not sufficient.
+native C++ receipt/report artifacts under `reports/`, `runtime/`, or
+`research_cards/`: latency artifacts (`rithmic_latency_probe` or
+`reports/latency_baselines/`), feature parity artifacts (`hft3_features_cpp`,
+`verify_cpp_parity`, `hft_feature_golden`, `hft_event_context_golden`), and
+risk/safety/engine-loop gates (`test_decision_runtime_hardening`,
+`test_safety_failure_injection`, `test_engine_loop`, `hft3_engine`, or the
+named TSan stress targets). Source files, build products, and generic strings
+such as `scripts/run_c_lane.sh`, `build/hft3_engine`, `evidence.json`, or
+`risk_engine_fake_claim.json` are not sufficient.
 
 HBT-2 status precedence:
 

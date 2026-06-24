@@ -3,13 +3,13 @@ Verify parity between the Python MBOFeatureExtractor and the C++ pybind11 module
 
 Usage
 -----
-    python -S scripts/verify_cpp_parity.py --npz <path> [--tick-size 0.25] [--window-ns 1000000000]
+    python scripts/verify_cpp_parity.py --npz <path> [--tick-size 0.25] [--window-ns 1000000000]
 
 Hard-fails (exit 2) if the C++ module cannot be imported.
 
-Note: runs with python -S (no site-packages hook) so hftbacktest constants are
-inlined here rather than imported via hftbacktest.types, which triggers a C
-extension that hangs under -S.
+Note: hftbacktest constants are inlined here rather than imported via
+hftbacktest.types, keeping this parity gate independent of HftBacktest's C
+extension import path while still allowing NumPy from site-packages.
 """
 from __future__ import annotations
 
@@ -29,10 +29,13 @@ sys.path.insert(0, str(_REPO))
 sys.path.insert(0, str(_REPO / "packages" / "features_engine" / "src"))
 sys.path.insert(0, str(_REPO / "packages" / "features_engine"))
 sys.path.insert(0, str(_REPO / "packages"))
-# Make sure build/ is on path so the .pyd can be found
+# Make sure the active CMake build dir is searched before the default build/.
+_CPP_BUILD_DIR = os.environ.get("HFT3_FEATURES_CPP_BUILD_DIR")
 sys.path.insert(0, str(_REPO / "build"))
+if _CPP_BUILD_DIR:
+    sys.path.insert(0, str(Path(_CPP_BUILD_DIR)))
 
-# ── hftbacktest constants (inlined to avoid C-extension hang under python -S) ─
+# ── hftbacktest constants (inlined to avoid importing its C extension) ───────
 # Values from hftbacktest/types.py — do NOT change without cross-checking.
 ADD_ORDER_EVENT     = 10
 CANCEL_ORDER_EVENT  = 11
@@ -71,15 +74,26 @@ cpp_mod = load_cpp_features()
 if cpp_mod is None:
     print(
         "ERROR: hft3_features_cpp not importable. Build it first:\n"
-        "  g++ -O2 -std=c++20 -shared -DMS_WIN64 -DWIN32 \\\n"
-        "      -I packages/features_engine/cpp/include \\\n"
-        "      -I <python-include> -I <pybind11-include> -I <numpy-include> \\\n"
-        "      packages/features_engine/cpp/bindings/py_features.cpp \\\n"
-        "      packages/features_engine/cpp/src/*.cpp \\\n"
-        "      <python-lib> -o build/hft3_features_cpp.cp312-win_amd64.pyd",
+        "  PYBIND11_DIR=\"$(python -m pybind11 --cmakedir)\"\n"
+        "  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR=\"$PYBIND11_DIR\"\n"
+        "  cmake --build build --target hft3_features_cpp\n"
+        "Set HFT3_FEATURES_CPP_BUILD_DIR=<build-dir> when using a non-default build directory.",
         file=sys.stderr,
     )
     sys.exit(2)
+
+if _CPP_BUILD_DIR:
+    cpp_mod_file = getattr(cpp_mod, "__file__", "")
+    try:
+        Path(cpp_mod_file).resolve().relative_to(Path(_CPP_BUILD_DIR).resolve())
+    except (OSError, ValueError):
+        print(
+            "ERROR: hft3_features_cpp was not loaded from HFT3_FEATURES_CPP_BUILD_DIR:\n"
+            f"  HFT3_FEATURES_CPP_BUILD_DIR={_CPP_BUILD_DIR}\n"
+            f"  loaded_module={cpp_mod_file}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
 from features.mbo_features import MBOEvent, MBOFeatureExtractor  # noqa: E402
 from features.feature_index import FeatureIndex, FEATURE_DIM  # noqa: E402
