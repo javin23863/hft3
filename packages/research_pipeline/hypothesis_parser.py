@@ -168,6 +168,11 @@ def _with_instrument_compatibility(
     return metadata
 
 
+canonicalize_instrument = _canonicalize_instrument
+model_metadata = _model_metadata
+with_instrument_compatibility = _with_instrument_compatibility
+
+
 def _slug_from_parentheses(thesis: str) -> Optional[str]:
     """Extract canonical slug from thesis template '(SLUG)' suffix."""
     models = load_model_registry().get("models", {})

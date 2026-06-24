@@ -206,8 +206,15 @@ def _stddev(values: Sequence[float]) -> float:
 
 
 def _sharpe(pnls: Sequence[float]) -> float:
+    if len(pnls) < 2:
+        return 0.0
     std = _stddev(pnls)
     if std == 0.0:
+        mean = _mean(pnls)
+        if mean > 0.0:
+            return 1e9
+        if mean < 0.0:
+            return -1e9
         return 0.0
     return _mean(pnls) / std
 

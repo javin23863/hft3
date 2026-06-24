@@ -11,10 +11,10 @@ from features_engine.src.model_registry import all_slugs, load_model_registry
 from data_layer.llm.packet_runner import run_llm_on_idea_generation_request
 from data_layer.packet.validate import validate_pipeline_idea_set
 from research_pipeline.hypothesis_parser import (
-    _canonicalize_instrument,
-    _model_metadata,
-    _with_instrument_compatibility,
+    canonicalize_instrument,
+    model_metadata,
     parse_hypothesis,
+    with_instrument_compatibility,
 )
 from research_pipeline.feature_recipe import candidate_identity_hash
 from research_pipeline.model_generation import generate_candidates
@@ -267,11 +267,11 @@ def parsed_from_idea(idea: Dict[str, Any]) -> ParsedHypothesis:
     if "signal_threshold" not in param_ranges:
         param_ranges["signal_threshold"] = [0.05, 0.35]
     instrument_universe = [
-        _canonicalize_instrument(str(symbol))
+        canonicalize_instrument(str(symbol))
         for symbol in (idea.get("instrument_ids") or ["MES"])
     ]
-    metadata = _with_instrument_compatibility(
-        _model_metadata(model_id),
+    metadata = with_instrument_compatibility(
+        model_metadata(model_id),
         [str(symbol) for symbol in instrument_universe],
     )
     return ParsedHypothesis(
@@ -360,15 +360,16 @@ def update_idea_statuses_from_results(
     packet: Dict[str, Any],
     results: Iterable[EvaluationResult],
 ) -> None:
+    result_list = list(results)
     outcome: Dict[str, bool] = {}
-    for result in results:
+    for result in result_list:
         idea_id = result.candidate.metadata.get("idea_id")
         if not idea_id:
             continue
         outcome[str(idea_id)] = outcome.get(str(idea_id), False) or result.passes_all_gates()
     tested_ids = {
         str(result.candidate.metadata.get("idea_id"))
-        for result in results
+        for result in result_list
         if result.candidate.metadata.get("idea_id")
     }
     for idea in packet.get("ideas") or []:

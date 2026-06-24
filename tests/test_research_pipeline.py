@@ -428,8 +428,12 @@ def test_tail_loss_gate_uses_signed_tail_pnl_floor():
 
 
 def test_sortino_no_downside_positive_mean_uses_large_sentinel():
-    from research_pipeline.evaluation import _sortino
+    from research_pipeline.evaluation import _sharpe, _sortino
 
+    assert _sharpe([2.0, 2.0, 2.0]) == 1e9
+    assert _sharpe([-2.0, -2.0, -2.0]) == -1e9
+    assert _sharpe([0.0, 0.0]) == 0.0
+    assert _sharpe([2.0]) == 0.0
     assert _sortino([1.0, 2.0, 3.0]) == 1e9
     assert _sortino([0.0, 0.0]) == 0.0
     assert _sortino([-1.0, 3.0, 3.0]) == 0.0
@@ -1587,7 +1591,7 @@ def test_idea_status_updates_only_from_evaluation_results():
         ),
     ]
 
-    update_idea_statuses_from_results(packet, results)
+    update_idea_statuses_from_results(packet, (result for result in results))
 
     by_id = {idea["idea_id"]: idea for idea in packet["ideas"]}
     assert by_id["idea_low"]["status"] == "tested_fail"
