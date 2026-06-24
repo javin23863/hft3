@@ -581,7 +581,7 @@ def test_run_pipeline_idea_set_requires_vectorbt_writes_receipt(tmp_path, monkey
         ]
     )
 
-    assert code == 1
+    assert code == 2
     payload = _last_json_object(capsys.readouterr().out)
     run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_idea_requires_vbt"
     receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))

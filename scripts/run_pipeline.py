@@ -1078,7 +1078,7 @@ def _main_impl(argv: list[str] | None = None, failure_context: dict[str, Any] | 
                 "Error: --idea-set full runs require --vectorbt so generated ideas pass the prefilter before evaluation.",
                 file=sys.stderr,
             )
-            return 1
+            return 2
     else:
         parsed = parse_hypothesis(
             args.thesis,

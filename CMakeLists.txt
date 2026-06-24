@@ -108,6 +108,7 @@ target_include_directories(spsc_queue_stress PRIVATE
     rithmic_gateway/include
 )
 add_test(NAME tsan_spsc_queue_stress COMMAND spsc_queue_stress)
+set_tests_properties(tsan_spsc_queue_stress PROPERTIES LABELS "TSan")
 
 add_executable(risk_manager_atomic_stress
     risk_engine/tests/risk_manager_atomic_stress.cpp
@@ -117,6 +118,7 @@ target_include_directories(risk_manager_atomic_stress PRIVATE
 )
 target_link_libraries(risk_manager_atomic_stress PRIVATE hft_risk)
 add_test(NAME tsan_risk_manager_atomic_stress COMMAND risk_manager_atomic_stress)
+set_tests_properties(tsan_risk_manager_atomic_stress PROPERTIES LABELS "TSan")
 
 add_executable(safety_poller_concurrent
     rithmic_gateway/tests/safety_poller_concurrent.cpp
@@ -127,6 +129,7 @@ target_include_directories(safety_poller_concurrent PRIVATE
 )
 target_link_libraries(safety_poller_concurrent PRIVATE hft_risk)
 add_test(NAME tsan_safety_poller_concurrent COMMAND safety_poller_concurrent)
+set_tests_properties(tsan_safety_poller_concurrent PROPERTIES LABELS "TSan")
 
 # ── pybind11 Python extension ────────────────────────────────────────────────
 # Locate pybind11 via the cmake directory reported by:

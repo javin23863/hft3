@@ -42,7 +42,7 @@ adds the pybind build preflight, the three named TSan targets, and engine-loop
 release coverage. The parity gate pins `HFT3_FEATURES_CPP_BUILD_DIR` to the
 fresh CMake build and refuses stale fallback modules. CHI404 disposable checkout
 `/tmp/hft3-cpp-lane-20260624T175426` ran
-`BUILD_DIR=$PWD/build/run_c_lane_strict_final PYTHON_BIN=python3 bash scripts/run_c_lane.sh --npz /root/hft3/data/npz/RTY.v.0_CORE_CPI_2020_01_14_TIGHT_mbo.npz`
+`BUILD_DIR=$PWD/build/run_c_lane_greptile_twofix PYTHON_BIN=python3 bash scripts/run_c_lane.sh --npz /root/hft3/data/npz/RTY.v.0_CORE_CPI_2020_01_14_TIGHT_mbo.npz`
 with `ALL CHECKS PASSED`; this closes the recorded M2 caveat for this branch.
 
 ---
