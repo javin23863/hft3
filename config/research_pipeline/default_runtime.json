@@ -42,5 +42,8 @@
     "features": [],
     "device": "cpu",
     "seed": 42
+  },
+  "evaluation": {
+    "workers": 1
   }
 }

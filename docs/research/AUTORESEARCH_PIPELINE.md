@@ -89,6 +89,12 @@ while CUDA requests write a blocked `rl_policy_artifact.json` that requires a
 GPU sub-agent handoff. RL artifacts are always non-promotable and cannot bypass
 VectorBT, robustness evidence, or HftBacktest gates.
 
+The legacy post-filter evaluation loop accepts `--evaluation-workers` and the
+runtime config's `evaluation.workers`. The default is `1`. Values greater than
+one use a bounded `ProcessPoolExecutor` for candidate-level independence, but
+high worker counts must be reserved for CHI404 or VastAI. VectorBT paid-screen
+and HftBacktest campaign runners keep their own worker controls.
+
 `--hftbacktest-realism` remains fail-closed: the writer is called only after a
 promoted screening row is strict replay-eligible and carries a robustness
 evidence receipt from the robustness applicator.

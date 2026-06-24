@@ -15,9 +15,10 @@ import re
 import sys
 import threading
 import uuid
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages"), str(REPO / "apps")]
@@ -117,6 +118,9 @@ _DEFAULT_PIPELINE_RUNTIME_CONFIG: dict[str, Any] = {
         "features": [],
         "device": "cpu",
         "seed": 42,
+    },
+    "evaluation": {
+        "workers": 1,
     },
 }
 _VECTORBT_SCOPE_CHOICES = {
@@ -255,6 +259,7 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
     idea_config = _section(config, "llm_ideas")
     search_config = _section(config, "candidate_search")
     rl_config = _section(config, "rl_training")
+    evaluation_config = _section(config, "evaluation")
 
     if args.max_candidates is None:
         args.max_candidates = config.get("max_candidates", 5)
@@ -314,6 +319,10 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
         if not isinstance(features, list):
             raise ValueError("rl_training.features must be a list of feature names")
         args.rl_feature = [str(feature) for feature in features]
+
+    if getattr(args, "evaluation_workers", None) is None:
+        args.evaluation_workers = evaluation_config.get("workers", 1)
+    args.evaluation_workers = _positive_int(args.evaluation_workers, name="evaluation.workers")
 
 
 class _PipelineJsonFormatter(logging.Formatter):
@@ -416,6 +425,9 @@ def _pipeline_config_receipt(
             "device": getattr(args, "rl_device", "cpu"),
             "seed": getattr(args, "rl_seed", 42),
             "training_data": str(getattr(args, "rl_training_data", "") or ""),
+        },
+        "evaluation": {
+            "workers": getattr(args, "evaluation_workers", 1),
         },
     }
     hash_payload = {
@@ -928,6 +940,28 @@ def _run_rl_training_stage(
     return dict(artifact), path
 
 
+def _evaluate_candidate_worker(job: tuple[CandidateModel, str, Path, Path | None, GateThresholds]) -> EvaluationResult:
+    candidate, event_id, repo_root, chi404_summary, gates = job
+    return evaluate_model(candidate, event_id, repo_root, chi404_summary=chi404_summary, gates=gates)
+
+
+def _evaluate_candidates_batch(
+    candidates: Sequence[CandidateModel],
+    *,
+    event_id: str,
+    repo_root: Path,
+    chi404_summary: Path | None,
+    gates: GateThresholds,
+    workers: int,
+) -> list[EvaluationResult]:
+    workers = _positive_int(workers, name="evaluation.workers")
+    jobs = [(candidate, event_id, repo_root, chi404_summary, gates) for candidate in candidates]
+    if workers == 1 or len(jobs) <= 1:
+        return [_evaluate_candidate_worker(job) for job in jobs]
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        return list(executor.map(_evaluate_candidate_worker, jobs))
+
+
 def _main_impl(
     argv: list[str] | None = None,
     failure_context: dict[str, Any] | None = None,
@@ -1026,6 +1060,12 @@ def _main_impl(
     )
     parser.add_argument("--rl-required", action="store_true", help="Fail the run if RL does not train")
     parser.add_argument("--rl-seed", type=int, default=None, help="Seed for RL policy training")
+    parser.add_argument(
+        "--evaluation-workers",
+        type=int,
+        default=None,
+        help="Bounded worker count for legacy candidate evaluation; VectorBT paid-screen uses its own controls",
+    )
     parser.add_argument(
         "--orchestrator-result",
         action="store_true",
@@ -1735,12 +1775,24 @@ def _main_impl(
         print("Warning: no latency data available; backtest will run without CHI404 latency", file=sys.stderr)
 
     gates = GateThresholds(min_trades=0)
-    results = []
     for cand in candidates:
         print(f"Evaluating {cand.model_id} threshold={cand.strategy_params.get('signal_threshold')}...")
-        results.append(
-            evaluate_model(cand, args.event_id, repo_root, chi404_summary=chi404, gates=gates)
-        )
+    logger.info(
+        "candidate_evaluation_start",
+        extra={"payload": {"candidate_count": len(candidates), "workers": args.evaluation_workers}},
+    )
+    results = _evaluate_candidates_batch(
+        candidates,
+        event_id=args.event_id,
+        repo_root=repo_root,
+        chi404_summary=chi404,
+        gates=gates,
+        workers=args.evaluation_workers,
+    )
+    logger.info(
+        "candidate_evaluation_complete",
+        extra={"payload": {"result_count": len(results), "workers": args.evaluation_workers}},
+    )
 
     if idea_packet:
         update_idea_statuses_from_results(idea_packet, results)

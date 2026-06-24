@@ -191,6 +191,13 @@ Gate:
 
 ### Phase 5 - Parallel Evaluation And Caching
 
+Implementation receipt:
+
+- Document ingestion cache was already present from the runtime upgrade.
+- `scripts/run_pipeline.py` now records `evaluation.workers` and uses a bounded `ProcessPoolExecutor` for the legacy candidate evaluation loop when workers > 1.
+- Default workers remain `1`; high-worker verification belongs on CHI404/VastAI, not MSI.
+- VectorBT paid-screen and HftBacktest campaign worker controls remain the canonical high-throughput paths.
+
 Implementation requirements:
 
 - Candidate/event evaluation can use a bounded worker count.
