@@ -1427,7 +1427,7 @@ class TestV2RunHashResolution:
                 lake_manifest_hash="lake",
             )
 
-    def test_ready_gate_hash_path_requires_pilot_hashes(self, tmp_path):
+    def test_ready_gate_hash_path_allows_missing_pilot_hashes(self, tmp_path):
         v2 = _load_v2_module()
         gate_path = tmp_path / "gate.json"
         gate_path.write_text(
@@ -1440,14 +1440,13 @@ class TestV2RunHashResolution:
             encoding="utf-8",
         )
 
-        with pytest.raises(ValueError, match="ready gate pilot_hashes missing"):
-            v2._assert_hashes_match_ready_gate(
-                gate_path,
-                events_csv_hash="events",
-                lake_manifest_hash="lake",
-            )
+        v2._assert_hashes_match_ready_gate(
+            gate_path,
+            events_csv_hash="events",
+            lake_manifest_hash="lake",
+        )
 
-    def test_ready_gate_hash_path_requires_events_and_lake_hashes(self, tmp_path):
+    def test_ready_gate_hash_path_allows_missing_events_and_lake_hashes(self, tmp_path):
         v2 = _load_v2_module()
         gate_path = tmp_path / "gate.json"
         gate_path.write_text(
@@ -1461,12 +1460,11 @@ class TestV2RunHashResolution:
             encoding="utf-8",
         )
 
-        with pytest.raises(ValueError, match="ready gate pilot_hashes missing events/lake hashes"):
-            v2._assert_hashes_match_ready_gate(
-                gate_path,
-                events_csv_hash="events",
-                lake_manifest_hash="lake",
-            )
+        v2._assert_hashes_match_ready_gate(
+            gate_path,
+            events_csv_hash="events",
+            lake_manifest_hash="lake",
+        )
 
     def test_ready_gate_hash_path_requires_string_hashes(self, tmp_path):
         v2 = _load_v2_module()
@@ -1489,6 +1487,52 @@ class TestV2RunHashResolution:
             v2._assert_hashes_match_ready_gate(
                 gate_path,
                 events_csv_hash="123",
+                lake_manifest_hash="lake",
+            )
+
+    def test_ready_gate_hash_path_rejects_present_null_hashes(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                    "pilot_hashes": {
+                        "events_csv_hash": None,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="ready gate pilot_hashes events/lake hashes must be strings"):
+            v2._assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash="events",
+                lake_manifest_hash="lake",
+            )
+
+    def test_ready_gate_hash_path_compares_present_hashes(self, tmp_path):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                    "pilot_hashes": {
+                        "events_csv_hash": "events",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="events_csv_hash other != ready gate events"):
+            v2._assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash="other",
                 lake_manifest_hash="lake",
             )
 

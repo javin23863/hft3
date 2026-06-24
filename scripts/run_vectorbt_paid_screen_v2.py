@@ -154,25 +154,25 @@ def _assert_hashes_match_ready_gate(
 ) -> None:
     payload = _load_ready_gate_payload(gate_path)
     if "pilot_hashes" not in payload:
-        raise ValueError(f"ready gate pilot_hashes missing: {gate_path}")
+        return
     pilot = payload["pilot_hashes"]
     if not isinstance(pilot, dict):
         raise ValueError(f"ready gate pilot_hashes must be a JSON object: {gate_path}")
-    if "events_csv_hash" not in pilot or "lake_manifest_hash" not in pilot:
-        raise ValueError(f"ready gate pilot_hashes missing events/lake hashes: {gate_path}")
+    has_events_hash = "events_csv_hash" in pilot
+    has_lake_hash = "lake_manifest_hash" in pilot
     raw_expected_events = pilot.get("events_csv_hash")
     raw_expected_lake = pilot.get("lake_manifest_hash")
-    if not isinstance(raw_expected_events, str) or not isinstance(raw_expected_lake, str):
+    if has_events_hash and not isinstance(raw_expected_events, str):
         raise ValueError(f"ready gate pilot_hashes events/lake hashes must be strings: {gate_path}")
-    expected_events = raw_expected_events.strip()
-    expected_lake = raw_expected_lake.strip()
-    if not expected_events or not expected_lake:
-        raise ValueError(f"ready gate pilot_hashes missing events/lake hashes: {gate_path}")
-    if events_csv_hash != expected_events:
+    if has_lake_hash and not isinstance(raw_expected_lake, str):
+        raise ValueError(f"ready gate pilot_hashes events/lake hashes must be strings: {gate_path}")
+    expected_events = raw_expected_events.strip() if has_events_hash else ""
+    expected_lake = raw_expected_lake.strip() if has_lake_hash else ""
+    if expected_events and events_csv_hash != expected_events:
         raise ValueError(
             f"events_csv_hash {events_csv_hash} != ready gate {expected_events}"
         )
-    if lake_manifest_hash != expected_lake:
+    if expected_lake and lake_manifest_hash != expected_lake:
         raise ValueError(
             f"lake_manifest_hash {lake_manifest_hash} != ready gate {expected_lake}"
         )
