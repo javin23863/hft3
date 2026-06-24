@@ -520,12 +520,12 @@ def _reward(
 ) -> float:
     if reward_function is not None:
         return _number(reward_function(row, action, next_row, step_index), "reward_function result")
+    if action not in {"enter_long", "enter_short"}:
+        return 0.0
     base = _row_base_reward(row)
     if action == "enter_long":
         return base
-    if action == "enter_short":
-        return -base
-    return 0.0
+    return -base
 
 
 def _evaluate_policy(

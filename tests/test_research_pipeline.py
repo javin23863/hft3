@@ -983,6 +983,27 @@ def test_train_rl_agent_deterministic_and_research_blocked():
     assert artifact_a["policy"]
 
 
+def test_train_rl_agent_default_hold_reward_allows_feature_only_rows():
+    from research_pipeline.rl_agents import train_rl_agent
+
+    rows = [
+        {"order_book_imbalance": -0.4},
+        {"order_book_imbalance": 0.2},
+        {"order_book_imbalance": 0.6},
+    ]
+
+    artifact = train_rl_agent(
+        rows,
+        ["order_book_imbalance"],
+        seed=7,
+        episodes=1,
+        epsilon=0.0,
+    )
+
+    assert artifact["status"] == "trained_research_only"
+    assert artifact["metrics"]["total_eval_reward"] == 0.0
+
+
 def test_train_rl_agent_audits_monotonic_timestamps():
     from research_pipeline.rl_agents import train_rl_agent
 
