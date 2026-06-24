@@ -35,5 +35,12 @@
   "candidate_search": {
     "method": "grid",
     "seed": 42
+  },
+  "rl_training": {
+    "enabled": false,
+    "required": false,
+    "features": [],
+    "device": "cpu",
+    "seed": 42
   }
 }

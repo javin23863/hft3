@@ -80,6 +80,15 @@ VectorBT screening; the emitted `candidate_search` metadata records
 `objective_evaluations=0`. They do not promote candidates and do not replace
 the VectorBT -> robustness evidence -> HftBacktest gate order.
 
+RL policy artifacts are controlled by the runtime config's `rl_training`
+section or the `--rl-training-data`, `--rl-feature`, `--rl-device`,
+`--rl-required`, and `--rl-seed` CLI flags. The current implementation is
+opt-in until real training data and a GPU host command are named. Once enabled,
+it is fail-closed: CPU runs write a small research-only tabular policy artifact,
+while CUDA requests write a blocked `rl_policy_artifact.json` that requires a
+GPU sub-agent handoff. RL artifacts are always non-promotable and cannot bypass
+VectorBT, robustness evidence, or HftBacktest gates.
+
 `--hftbacktest-realism` remains fail-closed: the writer is called only after a
 promoted screening row is strict replay-eligible and carries a robustness
 evidence receipt from the robustness applicator.

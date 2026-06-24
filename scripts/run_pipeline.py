@@ -34,6 +34,12 @@ from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.knowledge_graph import persist_graph_slice
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.parameter_search import SUPPORTED_SEARCH_METHODS
+from research_pipeline.rl_agents import (
+    SUPPORTED_RL_DEVICES,
+    blocked_rl_artifact,
+    train_rl_policy_artifact,
+    write_rl_policy_artifact,
+)
 from research_pipeline.idea_generation import (
     candidates_from_ideas,
     generate_idea_set,
@@ -103,6 +109,13 @@ _DEFAULT_PIPELINE_RUNTIME_CONFIG: dict[str, Any] = {
     },
     "candidate_search": {
         "method": "grid",
+        "seed": 42,
+    },
+    "rl_training": {
+        "enabled": False,
+        "required": False,
+        "features": [],
+        "device": "cpu",
         "seed": 42,
     },
 }
@@ -241,6 +254,7 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
     vectorbt_config = _section(config, "vectorbt")
     idea_config = _section(config, "llm_ideas")
     search_config = _section(config, "candidate_search")
+    rl_config = _section(config, "rl_training")
 
     if args.max_candidates is None:
         args.max_candidates = config.get("max_candidates", 5)
@@ -278,6 +292,28 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
     if getattr(args, "candidate_search_seed", None) is None:
         args.candidate_search_seed = search_config.get("seed", 42)
     args.candidate_search_seed = _nonnegative_int(args.candidate_search_seed, name="candidate_search.seed")
+
+    config_rl_enabled = _bool_default(rl_config.get("enabled", False), name="rl_training.enabled")
+    config_rl_required = _bool_default(rl_config.get("required", False), name="rl_training.required")
+    args.rl_training_enabled = bool(config_rl_enabled or getattr(args, "rl_training_data", None))
+    args.rl_required = bool(getattr(args, "rl_required", False) or config_rl_required)
+    if args.rl_required:
+        args.rl_training_enabled = True
+    if getattr(args, "rl_device", None) is None:
+        args.rl_device = str(rl_config.get("device") or "cpu")
+    args.rl_device = str(args.rl_device).strip().lower()
+    if args.rl_device not in SUPPORTED_RL_DEVICES:
+        raise ValueError("rl_training.device must be one of: " + ", ".join(sorted(SUPPORTED_RL_DEVICES)))
+    if getattr(args, "rl_seed", None) is None:
+        args.rl_seed = rl_config.get("seed", 42)
+    args.rl_seed = _nonnegative_int(args.rl_seed, name="rl_training.seed")
+    if getattr(args, "rl_feature", None) is None:
+        features = rl_config.get("features") or []
+        if isinstance(features, str):
+            features = [features]
+        if not isinstance(features, list):
+            raise ValueError("rl_training.features must be a list of feature names")
+        args.rl_feature = [str(feature) for feature in features]
 
 
 class _PipelineJsonFormatter(logging.Formatter):
@@ -372,6 +408,14 @@ def _pipeline_config_receipt(
         "candidate_search": {
             "method": getattr(args, "candidate_search_method", "grid"),
             "seed": getattr(args, "candidate_search_seed", 42),
+        },
+        "rl_training": {
+            "enabled": bool(getattr(args, "rl_training_enabled", False)),
+            "required": bool(getattr(args, "rl_required", False)),
+            "features": list(getattr(args, "rl_feature", []) or []),
+            "device": getattr(args, "rl_device", "cpu"),
+            "seed": getattr(args, "rl_seed", 42),
+            "training_data": str(getattr(args, "rl_training_data", "") or ""),
         },
     }
     hash_payload = {
@@ -839,6 +883,51 @@ def _canonical_hash(value: Any) -> str:
     return compute_robustness_evidence_receipt_hash(value)
 
 
+def _run_rl_training_stage(
+    args: argparse.Namespace,
+    *,
+    artifact_dir: Path,
+) -> tuple[dict[str, Any] | None, Path | None]:
+    if not bool(getattr(args, "rl_training_enabled", False)):
+        return None, None
+    feature_names = list(getattr(args, "rl_feature", []) or [])
+    training_data = getattr(args, "rl_training_data", None)
+    if not feature_names:
+        artifact = blocked_rl_artifact(
+            reason="missing_rl_feature_names",
+            feature_names=feature_names,
+            device=args.rl_device,
+            seed=args.rl_seed,
+            gpu_training_required=args.rl_device == "cuda",
+        )
+    elif training_data is None:
+        artifact = blocked_rl_artifact(
+            reason="missing_rl_training_data",
+            feature_names=feature_names,
+            device=args.rl_device,
+            seed=args.rl_seed,
+            gpu_training_required=args.rl_device == "cuda",
+        )
+    else:
+        try:
+            artifact = train_rl_policy_artifact(
+                training_data_path=training_data,
+                feature_names=feature_names,
+                device=args.rl_device,
+                seed=args.rl_seed,
+            )
+        except Exception as exc:
+            artifact = blocked_rl_artifact(
+                reason=f"rl_training_error:{exc}",
+                feature_names=feature_names,
+                device=args.rl_device,
+                seed=args.rl_seed,
+                gpu_training_required=args.rl_device == "cuda",
+            )
+    path = write_rl_policy_artifact(artifact_dir / "rl_policy_artifact.json", artifact)
+    return dict(artifact), path
+
+
 def _main_impl(
     argv: list[str] | None = None,
     failure_context: dict[str, Any] | None = None,
@@ -922,6 +1011,21 @@ def _main_impl(
         default=None,
         help="Seed for deterministic candidate parameter search",
     )
+    parser.add_argument("--rl-training-data", type=Path, default=None, help="JSON/JSONL RL training rows")
+    parser.add_argument(
+        "--rl-feature",
+        action="append",
+        default=None,
+        help="Microstructure feature name to expose to the RL policy artifact; repeatable",
+    )
+    parser.add_argument(
+        "--rl-device",
+        choices=sorted(SUPPORTED_RL_DEVICES),
+        default=None,
+        help="RL training device; cuda writes a blocked GPU handoff artifact on MSI",
+    )
+    parser.add_argument("--rl-required", action="store_true", help="Fail the run if RL does not train")
+    parser.add_argument("--rl-seed", type=int, default=None, help="Seed for RL policy training")
     parser.add_argument(
         "--orchestrator-result",
         action="store_true",
@@ -1085,6 +1189,39 @@ def _main_impl(
     (artifact_dir / "request_packet.json").write_text(
         json.dumps(request, indent=2), encoding="utf-8"
     )
+
+    rl_policy_artifact, rl_policy_path = _run_rl_training_stage(args, artifact_dir=artifact_dir)
+    if rl_policy_artifact is not None:
+        logger.info(
+            "rl_training_stage_complete",
+            extra={
+                "payload": {
+                    "status": rl_policy_artifact.get("status"),
+                    "path": str(rl_policy_path) if rl_policy_path else None,
+                    "device": rl_policy_artifact.get("device"),
+                }
+            },
+        )
+        _update_active_run_failure_context(
+            failure_context,
+            rl_policy_artifact=rl_policy_artifact,
+            rl_policy_artifact_path=str(rl_policy_path) if rl_policy_path else None,
+        )
+        if rl_policy_artifact.get("status") != "trained_research_only":
+            payload = {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
+                "status": "blocked_rl_training",
+                "detail": (
+                    "RL training was enabled but did not produce a trained research-only policy artifact. "
+                    "CUDA requests require a named GPU host/sub-agent handoff and are not launched on MSI."
+                ),
+                "request_packet": request,
+                "rl_policy_artifact": rl_policy_artifact,
+                "paths": {"rl_policy_artifact_path": str(rl_policy_path) if rl_policy_path else None},
+            }
+            _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
+            return 2
 
     if args.doc:
         try:
