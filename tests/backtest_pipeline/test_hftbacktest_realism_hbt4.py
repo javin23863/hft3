@@ -409,7 +409,7 @@ def test_hbt4_non_hash_native_evidence_cannot_leave_certification_allowed(
     summary = payload["replay_summary"]
 
     assert summary["official_hftbacktest_replay_status"] == "pass"
-    assert "pass_requires_hash_backed_native_cpp_hot_path_evidence" in summary["fail_closed_reasons"]
+    assert "native_cpp_hot_path_evidence_unrecognized" in summary["fail_closed_reasons"]
     assert summary["replay_realism_status"] == "fail"
     assert summary["certification_allowed"] is False
     assert "submit_buy_or_sell_order" in hbt4_contract

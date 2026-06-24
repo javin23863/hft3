@@ -15,10 +15,10 @@ Usage
 Search order (mirrors apps/workbench/src/sim/cpp_binary.py):
   1. Already imported (cached in sys.modules).
   2. HFT3_FEATURES_CPP_BUILD_DIR, when set by a lane runner.
-  3. build/          (flat - most CMake single-config generators)
-  4. build/Release/  (multi-config, Release)
-  5. build/Debug/    (multi-config, Debug)
-  6. Anything on sys.path (e.g. if installed via pip install -e .)
+  3. Anything on sys.path (e.g. if installed via pip install -e .)
+  4. build/          (flat - most CMake single-config generators)
+  5. build/Release/  (multi-config, Release)
+  6. build/Debug/    (multi-config, Debug)
 
 The module is never None when it is found; returns None only when the shared
 library has not been built yet so that callers can fall back gracefully.
@@ -204,6 +204,16 @@ def load_cpp_features() -> Optional[object]:
         _searched_active_build = active_build
         return None
 
+    # 3. Try sys.path before default build dirs so editable installs are not
+    # shadowed by stale local CMake artifacts.
+    try:
+        _cached = importlib.import_module(_MODULE_NAME)
+        _searched = True
+        _searched_active_build = active_build
+        return _cached
+    except ImportError:
+        pass
+
     for search_dir in _candidate_dirs(repo):
         if not search_dir.is_dir():
             continue
@@ -216,15 +226,6 @@ def load_cpp_features() -> Optional[object]:
             except Exception:
                 sys.modules.pop(_MODULE_NAME, None)
                 continue
-
-    # 3. Try sys.path last — covers editable installs.
-    try:
-        _cached = importlib.import_module(_MODULE_NAME)
-        _searched = True
-        _searched_active_build = active_build
-        return _cached
-    except ImportError:
-        pass
 
     _searched = True
     _searched_active_build = active_build

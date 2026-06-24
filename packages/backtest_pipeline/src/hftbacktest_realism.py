@@ -593,11 +593,12 @@ def _is_raw_sha256_digest(value: Any) -> bool:
 def _contains_sha256_digest(value: Any) -> bool:
     if not isinstance(value, str):
         return False
-    marker = "sha256:"
-    start = value.lower().find(marker)
-    if start < 0:
+    path, sep, fragment = value.partition("#")
+    if not path or sep != "#":
         return False
-    digest = value[start + len(marker) : start + len(marker) + 64]
+    if not fragment.lower().startswith("sha256:"):
+        return False
+    digest = fragment[len("sha256:") :]
     return len(digest) == 64 and all(char in "0123456789abcdefABCDEF" for char in digest)
 
 
@@ -1864,7 +1865,7 @@ def validate_hftbacktest_source_lock(lock: Mapping[str, Any]) -> list[str]:
         reasons.append("native_cpp_hot_path_evidence_missing")
     elif lock.get("native_hot_path_status") != "provided":
         reasons.append("native_cpp_hot_path_evidence_missing")
-    elif not all(_looks_like_native_cpp_hot_path_evidence(item) for item in lock.get("native_hot_path_evidence", [])):
+    elif not _source_lock_has_hash_backed_native_hot_path_evidence(lock):
         reasons.append("native_cpp_hot_path_evidence_unrecognized")
     if "source_lock_hash" in lock:
         expected = compute_hftbacktest_source_lock_hash(lock)

@@ -217,8 +217,36 @@ def test_source_lock_accepts_hash_backed_c_lane_receipt_evidence(
 @pytest.mark.parametrize(
     "fake_evidence",
     [
+        "reports/latency_baselines/order_ack_campaign_20260611T072116Z_summary.json",
+        "reports/cpp_lane/run_c_lane_summary.json",
+        "reports/cpp_lane/run_c_lane_summary.json#sha256:not-a-digest",
+        "reports/cpp_lane/run_c_lane_summary.json#note=sha256:" + "a" * 64,
+        "reports/cpp_lane/run_c_lane_summary.json#note#sha256:" + "a" * 64,
+        "reports/cpp_lane/run_c_lane_summary.json#sha256:" + "a" * 64 + "junk",
+    ],
+)
+def test_source_lock_rejects_receipt_shaped_native_evidence_without_valid_hash(
+    tmp_path: Path,
+    fake_evidence: str,
+) -> None:
+    lock = build_hftbacktest_source_lock(
+        repo_root=tmp_path,
+        upstream_ref="v2.4.2",
+        native_hot_path_evidence=[fake_evidence],
+        native_hot_path_status="provided",
+    )
+
+    reasons = validate_hftbacktest_source_lock(lock)
+
+    assert "native_cpp_hot_path_evidence_unrecognized" in reasons
+
+
+@pytest.mark.parametrize(
+    "fake_evidence",
+    [
         "scripts/run_c_lane.sh",
         "scripts/run_c_lane.sh#sha256:" + "a" * 64,
+        "rithmic_gateway/tools/rithmic_latency_probe#sha256:" + "e" * 64,
         "build/hft3_engine#sha256:" + "b" * 64,
         "engine/src/hft3_engine_main.cpp#sha256:" + "c" * 64,
         "reports/cpp_lane/evidence.json#sha256:" + "d" * 64,

@@ -204,7 +204,7 @@ def test_write_artifacts_persists_latency_model_and_summary_fields(
         screening_artifact_path=screening_path,
         latency_model_path=latency_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=["reports/latency_baselines/order_ack_campaign_20260611T072116Z_summary.json"],
+        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
         run_id="hbt2_test",
     )
 

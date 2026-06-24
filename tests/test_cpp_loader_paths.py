@@ -79,6 +79,77 @@ def test_cpp_loader_override_load_failure_returns_none_without_fallback(
     assert loader._MODULE_NAME not in sys.modules
 
 
+def test_cpp_loader_prefers_editable_install_before_default_build(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    import features_engine.src.features._cpp_loader as loader
+
+    repo = tmp_path / "repo"
+    default_build = repo / "build"
+    default_build.mkdir(parents=True)
+    default_artifact = default_build / "hft3_features_cpp.so"
+    default_artifact.write_bytes(b"placeholder")
+    editable_mod = types.SimpleNamespace(
+        __file__=str(tmp_path / "editable" / "hft3_features_cpp.so")
+    )
+    default_load_attempts = []
+
+    def fail_default_load(entry, repo_root):
+        default_load_attempts.append(entry)
+        raise AssertionError("default build must not shadow editable install")
+
+    monkeypatch.delenv("HFT3_FEATURES_CPP_BUILD_DIR", raising=False)
+    monkeypatch.setattr(loader, "_cached", None)
+    monkeypatch.setattr(loader, "_searched", False)
+    monkeypatch.setattr(loader, "_searched_active_build", None)
+    monkeypatch.setattr(loader, "_repo_root", lambda: repo)
+    monkeypatch.setattr(loader.importlib, "import_module", lambda name: editable_mod)
+    monkeypatch.setattr(loader, "_load_cpp_module_from_path", fail_default_load)
+    monkeypatch.delitem(sys.modules, loader._MODULE_NAME, raising=False)
+
+    assert loader.load_cpp_features() is editable_mod
+    assert default_load_attempts == []
+
+
+def test_cpp_loader_empty_active_build_dir_blocks_editable_and_default_fallbacks(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    import features_engine.src.features._cpp_loader as loader
+
+    repo = tmp_path / "repo"
+    active_build = tmp_path / "active-build"
+    default_build = repo / "build"
+    active_build.mkdir()
+    default_build.mkdir(parents=True)
+    default_artifact = default_build / "hft3_features_cpp.so"
+    default_artifact.write_bytes(b"placeholder")
+    default_load_attempts = []
+    editable_import_attempts = []
+
+    def fail_editable_import(name):
+        editable_import_attempts.append(name)
+        raise AssertionError("active build override must block editable import")
+
+    def fail_default_load(entry, repo_root):
+        default_load_attempts.append(entry)
+        raise AssertionError("active build override must block default fallback")
+
+    monkeypatch.setenv("HFT3_FEATURES_CPP_BUILD_DIR", str(active_build))
+    monkeypatch.setattr(loader, "_cached", None)
+    monkeypatch.setattr(loader, "_searched", False)
+    monkeypatch.setattr(loader, "_searched_active_build", None)
+    monkeypatch.setattr(loader, "_repo_root", lambda: repo)
+    monkeypatch.setattr(loader.importlib, "import_module", fail_editable_import)
+    monkeypatch.setattr(loader, "_load_cpp_module_from_path", fail_default_load)
+    monkeypatch.delitem(sys.modules, loader._MODULE_NAME, raising=False)
+
+    assert loader.load_cpp_features() is None
+    assert editable_import_attempts == []
+    assert default_load_attempts == []
+
+
 def test_cpp_loader_retries_when_active_build_dir_changes_after_miss(
     monkeypatch,
     tmp_path: Path,

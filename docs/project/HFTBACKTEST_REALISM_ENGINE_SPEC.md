@@ -123,10 +123,20 @@ Rules:
 - If `upstream_commit_sha_or_tag` is missing, replay evidence is non-GREEN.
 - If HftBacktest is unavailable and hft3 falls back to a local simulator, the
   result must be `hftbacktest_unavailable`, not `execution_realism_pass`.
-- A `pass` replay summary requires native C++ hot-path evidence with a
-  SHA-256-backed evidence marker in the source lock. A bare recognizable path is
-  enough to record research context, but not enough to turn official
-HftBacktest replay into pass evidence.
+- A valid source lock, and therefore any `pass` replay summary, requires native
+  C++ hot-path evidence with a SHA-256-backed evidence marker. Bare
+  recognizable paths are operator context only, not source-lock evidence.
+- Native hot-path evidence values are receipt artifact references, not source
+  file or binary references. Strict pass evidence must point under approved
+  artifact roots such as `reports/cpp_lane/`, `runtime/reports/`,
+  `runtime/latency_reports/`, or `research_cards/`, use an artifact suffix such
+  as `.json`, `.jsonl`, `.log`, `.md`, `.parquet`, or `.txt`, include a
+  recognized hft3 C++ hot-path token, and include `#sha256:<64-hex-digest>`.
+  Legacy token-only or source/build paths such as
+  `rithmic_gateway/tools/rithmic_latency_probe`, `scripts/run_c_lane.sh`, or
+  `build/hft3_engine` are intentionally rejected with
+  `native_cpp_hot_path_evidence_unrecognized`; regenerate or package them into a
+  C-lane receipt artifact before strict replay eligibility.
 
 ## VectorBT Handoff Gate
 
