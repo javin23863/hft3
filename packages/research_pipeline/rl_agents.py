@@ -17,6 +17,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 DEFAULT_ACTION_SPACE = ("hold", "enter_long", "enter_short", "exit")
 PROMOTION_BLOCKED_STATUS = "blocked_downstream_validation_required"
+_FEATURE_ZERO_EPSILON = 1e-9
 _TIMESTAMP_FIELDS = ("timestamp_ns", "ts_ns", "timestamp", "decision_time")
 _LEAKY_FEATURE_RE = re.compile(
     r"(^|_)(future|lead|next|target|label|outcome|reward)(_|$)|"
@@ -99,7 +100,11 @@ def train_rl_agent(
         max_updates=max_updates,
     )
     budget.validate()
-    rows = _validate_rows(data, feature_names)
+    rows = _validate_rows(
+        data,
+        feature_names,
+        require_reward=reward_function is None,
+    )
     if len(rows) < 2:
         raise ValueError("RL training requires at least two rows for train/eval split")
     chronology = _chronology_audit(rows)
@@ -368,6 +373,8 @@ def _validate_action_space(action_space: Sequence[str]) -> tuple[str, ...]:
 def _validate_rows(
     data: Sequence[Mapping[str, Any]],
     feature_names: Sequence[str],
+    *,
+    require_reward: bool,
 ) -> list[dict[str, float]]:
     if isinstance(data, (str, bytes)) or not isinstance(data, Sequence):
         raise ValueError("data must be a sequence of row objects")
@@ -380,9 +387,16 @@ def _validate_rows(
             if feature not in row:
                 raise ValueError(f"row {row_idx} missing feature {feature!r}")
             clean[feature] = _number(row[feature], f"row {row_idx} feature {feature}")
+        has_reward = False
         for reward_key in ("reward", "next_return", "return"):
             if reward_key in row:
                 clean[reward_key] = _number(row[reward_key], f"row {row_idx} {reward_key}")
+                has_reward = True
+        if require_reward and not has_reward:
+            raise ValueError(
+                f"row {row_idx} must contain at least one reward key "
+                "('reward', 'next_return', or 'return') when reward_function is None"
+            )
         for timestamp_key in _TIMESTAMP_FIELDS:
             if timestamp_key in row:
                 clean[timestamp_key] = _number(row[timestamp_key], f"row {row_idx} {timestamp_key}")
@@ -468,6 +482,8 @@ def _require_training_budget(value: Any) -> None:
 
 
 def _feature_bin(value: float) -> str:
+    if abs(value) <= _FEATURE_ZERO_EPSILON:
+        return "zero"
     if value < 0:
         return "neg"
     if value > 0:

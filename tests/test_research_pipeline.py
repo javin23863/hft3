@@ -983,7 +983,20 @@ def test_train_rl_agent_deterministic_and_research_blocked():
     assert artifact_a["policy"]
 
 
-def test_train_rl_agent_default_hold_reward_allows_feature_only_rows():
+def test_train_rl_agent_default_reward_requires_reward_key():
+    from research_pipeline.rl_agents import train_rl_agent
+
+    rows = [
+        {"order_book_imbalance": -0.4},
+        {"order_book_imbalance": 0.2},
+        {"order_book_imbalance": 0.6},
+    ]
+
+    with pytest.raises(ValueError, match="must contain at least one reward key"):
+        train_rl_agent(rows, ["order_book_imbalance"], seed=7, episodes=1, epsilon=0.0)
+
+
+def test_train_rl_agent_custom_reward_allows_feature_only_rows():
     from research_pipeline.rl_agents import train_rl_agent
 
     rows = [
@@ -995,6 +1008,7 @@ def test_train_rl_agent_default_hold_reward_allows_feature_only_rows():
     artifact = train_rl_agent(
         rows,
         ["order_book_imbalance"],
+        reward_function=lambda row, action, next_row, step_index: 0.0,
         seed=7,
         episodes=1,
         epsilon=0.0,
@@ -1002,6 +1016,16 @@ def test_train_rl_agent_default_hold_reward_allows_feature_only_rows():
 
     assert artifact["status"] == "trained_research_only"
     assert artifact["metrics"]["total_eval_reward"] == 0.0
+
+
+def test_train_rl_agent_feature_bin_uses_zero_epsilon():
+    from research_pipeline.rl_agents import _feature_bin
+
+    assert _feature_bin(0.0) == "zero"
+    assert _feature_bin(1e-10) == "zero"
+    assert _feature_bin(-1e-10) == "zero"
+    assert _feature_bin(1e-8) == "pos"
+    assert _feature_bin(-1e-8) == "neg"
 
 
 def test_train_rl_agent_audits_monotonic_timestamps():
