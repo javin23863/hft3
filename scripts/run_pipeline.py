@@ -38,7 +38,7 @@ from research_pipeline.parameter_search import SUPPORTED_SEARCH_METHODS
 from research_pipeline.rl_agents import (
     SUPPORTED_RL_DEVICES,
     blocked_rl_artifact,
-    train_rl_policy_artifact,
+    train_or_load_rl_policy_artifact,
     write_rl_policy_artifact,
 )
 from research_pipeline.runtime_policy import effective_evaluation_workers
@@ -119,6 +119,10 @@ _DEFAULT_PIPELINE_RUNTIME_CONFIG: dict[str, Any] = {
         "features": [],
         "device": "cpu",
         "seed": 42,
+        "cache": {
+            "enabled": True,
+            "root": "runtime/research_pipeline/rl_policy_cache",
+        },
     },
     "evaluation": {
         "workers": 1,
@@ -348,6 +352,7 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
 
     config_rl_enabled = _bool_default(rl_config.get("enabled", False), name="rl_training.enabled")
     config_rl_required = _bool_default(rl_config.get("required", False), name="rl_training.required")
+    rl_cache_config = _section(rl_config, "cache")
     args.rl_training_enabled = bool(config_rl_enabled or getattr(args, "rl_training_data", None))
     args.rl_required = bool(getattr(args, "rl_required", False) or config_rl_required)
     if args.rl_required:
@@ -367,6 +372,8 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
         if not isinstance(features, list):
             raise ValueError("rl_training.features must be a list of feature names")
         args.rl_feature = [str(feature) for feature in features]
+    args.rl_cache_enabled = _bool_default(rl_cache_config.get("enabled", True), name="rl_training.cache.enabled")
+    args.rl_cache_root = rl_cache_config.get("root") or "runtime/research_pipeline/rl_policy_cache"
 
     if getattr(args, "evaluation_workers", None) is None:
         args.evaluation_workers = evaluation_config.get("workers", 1)
@@ -495,6 +502,10 @@ def _pipeline_config_receipt(
             "device": getattr(args, "rl_device", "cpu"),
             "seed": getattr(args, "rl_seed", 42),
             "training_data": str(getattr(args, "rl_training_data", "") or ""),
+            "cache": {
+                "enabled": bool(getattr(args, "rl_cache_enabled", True)),
+                "root": str(getattr(args, "rl_cache_root", "runtime/research_pipeline/rl_policy_cache")),
+            },
         },
         "evaluation": {
             "workers": getattr(args, "evaluation_workers", 1),
@@ -979,6 +990,7 @@ def _run_rl_training_stage(
     args: argparse.Namespace,
     *,
     artifact_dir: Path,
+    repo_root: Path,
 ) -> tuple[dict[str, Any] | None, Path | None]:
     if not bool(getattr(args, "rl_training_enabled", False)):
         return None, None
@@ -1002,11 +1014,20 @@ def _run_rl_training_stage(
         )
     else:
         try:
-            artifact = train_rl_policy_artifact(
+            cache_enabled = bool(getattr(args, "rl_cache_enabled", True))
+            cache_root = None
+            if cache_enabled:
+                cache_root = _resolve_config_path(
+                    repo_root,
+                    getattr(args, "rl_cache_root", "runtime/research_pipeline/rl_policy_cache"),
+                )
+            artifact = train_or_load_rl_policy_artifact(
                 training_data_path=training_data,
                 feature_names=feature_names,
                 device=args.rl_device,
                 seed=args.rl_seed,
+                cache_enabled=cache_enabled,
+                cache_root=cache_root,
             )
         except Exception as exc:
             artifact = blocked_rl_artifact(
@@ -1315,7 +1336,11 @@ def _main_impl(
         json.dumps(request, indent=2), encoding="utf-8"
     )
 
-    rl_policy_artifact, rl_policy_path = _run_rl_training_stage(args, artifact_dir=artifact_dir)
+    rl_policy_artifact, rl_policy_path = _run_rl_training_stage(
+        args,
+        artifact_dir=artifact_dir,
+        repo_root=repo_root,
+    )
     if rl_policy_artifact is not None:
         logger.info(
             "rl_training_stage_complete",

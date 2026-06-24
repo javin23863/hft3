@@ -130,6 +130,8 @@ PDF requirement: RL training should be the default path, with a debugging escape
 Implementation receipt:
 
 - `packages/research_pipeline/rl_agents.py` adds non-promotable RL policy artifacts.
+- `packages/research_pipeline/rl_agents.py` adds cache receipts and validated
+  same-input policy reuse for CPU artifacts.
 - `scripts/run_pipeline.py` accepts `--rl-training-data`, `--rl-feature`, `--rl-device`, `--rl-required`, and `--rl-seed`.
 - Enabled RL writes `rl_policy_artifact.json` before document/candidate work; blocked RL stops the run with `status=blocked_rl_training`.
 - CPU is limited to small research-only tabular policy artifacts. CUDA writes a blocked GPU handoff artifact and does not launch on MSI.
@@ -141,7 +143,8 @@ Implementation requirements:
 - Missing training data fails closed when RL is enabled.
 - RL policy artifact records features, device, duration, and training-data receipt.
 - RL feature names validate against the microstructure feature registry.
-- A cache may reuse a matching policy only when training data, feature list, code/config receipt, and device policy match.
+- The cache reuses a matching policy only when training data SHA256, feature
+  list, trainer source hash, device, seed, and row cap match.
 
 Device rule:
 
@@ -197,7 +200,11 @@ Implementation receipt:
 - `scripts/run_pipeline.py` now records `evaluation.workers`, `evaluation.worker_policy`, and uses a bounded `ProcessPoolExecutor` for the legacy candidate evaluation loop when effective workers > 1.
 - Default workers remain `1`; MSI is capped by `evaluation.msi_max_workers`, while CHI404/Vast-style hosts are capped by `evaluation.max_workers`.
 - VectorBT paid-screen and HftBacktest campaign worker controls remain the canonical high-throughput paths.
-- RL cache reuse and same-inputs-twice RL cache-hit tests remain deferred until a real training-data path, resumable training command, and GPU host are named.
+- RL CPU artifact cache reuse is implemented under
+  `runtime/research_pipeline/rl_policy_cache`; same-inputs-twice tests prove
+  miss then hit, and changed seed invalidates the cache key. Deep RL/GPU
+  training remains deferred until a real training-data path, resumable training
+  command, and GPU host are named.
 
 Implementation requirements:
 

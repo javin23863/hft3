@@ -41,7 +41,11 @@
     "required": false,
     "features": [],
     "device": "cpu",
-    "seed": 42
+    "seed": 42,
+    "cache": {
+      "enabled": true,
+      "root": "runtime/research_pipeline/rl_policy_cache"
+    }
   },
   "evaluation": {
     "workers": 1,

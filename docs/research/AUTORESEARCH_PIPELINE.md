@@ -89,6 +89,14 @@ while CUDA requests write a blocked `rl_policy_artifact.json` that requires a
 GPU sub-agent handoff. RL artifacts are always non-promotable and cannot bypass
 VectorBT, robustness evidence, or HftBacktest gates.
 
+RL CPU policy artifacts are cached under
+`runtime/research_pipeline/rl_policy_cache` by default. Cache receipts include
+the training-data SHA256, normalized feature list, device, seed, row cap,
+artifact schema, and trainer source hash. A per-run `rl_policy_artifact.json`
+is still written every time and records `cache_receipt.status` as `miss`,
+`hit`, `disabled`, or `blocked`; cached artifacts are validated before reuse.
+CUDA handoff artifacts are not written through to the cache.
+
 The legacy post-filter evaluation loop accepts `--evaluation-workers` and the
 runtime config's `evaluation.workers`. The default is `1`. Values greater than
 one use a bounded `ProcessPoolExecutor` for candidate-level independence. MSI

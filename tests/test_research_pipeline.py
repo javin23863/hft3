@@ -136,6 +136,15 @@ def test_pipeline_runtime_config_defaults_from_json(tmp_path):
                 },
                 "llm_ideas": {"max_ideas": 4, "review_memory_limit": 2},
                 "candidate_search": {"method": "bayesian", "seed": 13},
+                "rl_training": {
+                    "features": ["order_book_imbalance"],
+                    "device": "cpu",
+                    "seed": 99,
+                    "cache": {
+                        "enabled": False,
+                        "root": "runtime/test_rl_cache",
+                    },
+                },
                 "evaluation": {"workers": 3},
                 "gate_profiles": {
                     "default_profile": "high_volatility",
@@ -185,6 +194,10 @@ def test_pipeline_runtime_config_defaults_from_json(tmp_path):
     assert args.review_memory_limit == 2
     assert args.candidate_search_method == "bayesian"
     assert args.candidate_search_seed == 13
+    assert args.rl_feature == ["order_book_imbalance"]
+    assert args.rl_seed == 99
+    assert args.rl_cache_enabled is False
+    assert args.rl_cache_root == "runtime/test_rl_cache"
     assert args.evaluation_workers == 3
     assert args.gate_profile == "high_volatility"
     assert args.gate_min_trades == 10
@@ -299,6 +312,10 @@ def test_pipeline_runtime_config_hash_includes_idea_sampling_override(tmp_path):
 
     assert receipt_a["effective"]["llm_ideas"]["temperature"] == 0.11
     assert receipt_b["effective"]["llm_ideas"]["temperature"] == 0.22
+    assert receipt_a["effective"]["rl_training"]["cache"] == {
+        "enabled": True,
+        "root": "runtime/research_pipeline/rl_policy_cache",
+    }
     assert receipt_a["pipeline_runtime_config_hash"] != receipt_b["pipeline_runtime_config_hash"]
 
 
