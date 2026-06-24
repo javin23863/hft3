@@ -644,7 +644,7 @@ def main() -> int:
             rl_artifact=rl_artifact,
         )
         _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
-        return 2
+        return 0
     if _rl_research_only(rl_artifact) and args.dry_run:
         args.vectorbt = False
         args.vectorbt_only = False

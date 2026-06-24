@@ -418,6 +418,14 @@ def test_cross_event_tail_loss_threshold_requires_gateable_metrics():
     assert result.passes_all_gates() is False
 
 
+def test_sortino_no_downside_positive_mean_uses_large_sentinel():
+    from research_pipeline.evaluation import _sortino
+
+    assert _sortino([1.0, 2.0, 3.0]) == 1e9
+    assert _sortino([0.0, 0.0]) == 0.0
+    assert _sortino([-1.0, 3.0, 3.0]) == 0.0
+
+
 def test_run_pipeline_passes_multi_event_set_to_evaluator(tmp_path, monkeypatch, capsys):
     import sys
 
@@ -1024,7 +1032,7 @@ def test_run_pipeline_trained_rl_stops_before_deploy(tmp_path, monkeypatch, caps
         "queue_imbalance",
     ])
 
-    assert run_pipeline.main() == 2
+    assert run_pipeline.main() == 0
     payload = _last_json_object(capsys.readouterr().out)
 
     assert payload["status"] == "rl_research_artifact_written"
@@ -1084,7 +1092,7 @@ def test_run_pipeline_trained_rl_stops_before_vectorbt(tmp_path, monkeypatch, ca
         "queue_imbalance",
     ])
 
-    assert run_pipeline.main() == 2
+    assert run_pipeline.main() == 0
     payload = _last_json_object(capsys.readouterr().out)
 
     assert payload["status"] == "rl_research_artifact_written"

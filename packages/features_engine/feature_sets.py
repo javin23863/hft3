@@ -135,8 +135,8 @@ def _level_price_qty(raw: Any) -> tuple[float, float]:
     parsed_qty = float(qty)
     if not math.isfinite(parsed_price) or not math.isfinite(parsed_qty):
         raise ValueError(f"non-finite depth level {raw!r}")
-    if parsed_qty <= 0.0:
-        raise ValueError(f"non-positive depth quantity {raw!r}")
+    if parsed_qty < 0.0:
+        raise ValueError(f"negative depth quantity {raw!r}")
     return parsed_price, parsed_qty
 
 

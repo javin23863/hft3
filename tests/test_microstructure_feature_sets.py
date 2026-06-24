@@ -60,10 +60,17 @@ def test_microstructure_features_reject_non_finite_levels():
         micro_price(snapshot)
 
 
-def test_microstructure_features_reject_non_positive_quantity():
+def test_microstructure_features_skip_zero_quantity_levels():
     snapshot = {"bids": [(99.0, 0.0)], "asks": [(101.0, 10.0)]}
 
-    with pytest.raises(ValueError, match="non-positive depth quantity"):
+    assert micro_price(snapshot) == pytest.approx(0.0)
+    assert order_book_imbalance(snapshot) == pytest.approx(-1.0)
+
+
+def test_microstructure_features_reject_negative_quantity():
+    snapshot = {"bids": [(99.0, -1.0)], "asks": [(101.0, 10.0)]}
+
+    with pytest.raises(ValueError, match="negative depth quantity"):
         micro_price(snapshot)
 
 

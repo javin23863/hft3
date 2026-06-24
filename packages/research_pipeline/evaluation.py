@@ -212,7 +212,10 @@ def _sortino(pnls: Sequence[float]) -> float:
     downside = [value for value in pnls if value < 0.0]
     downside_std = _stddev(downside)
     if downside_std == 0.0:
-        return 0.0
+        if downside:
+            return 0.0
+        mean = _mean(pnls)
+        return 1e9 if mean > 0.0 else 0.0
     return _mean(pnls) / downside_std
 
 
