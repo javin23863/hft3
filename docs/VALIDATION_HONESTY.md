@@ -15,7 +15,7 @@ scope:           <touched path prefix or lane name>
 verify-run:      <full command> → exit <code>; <summary tail> | WAIVED (user: …) | not-run
 plan-drift:      pass | fail | not-run
 data-mode:       fixture | production | live | mixed | n/a
-pr-ai-review:    pending | run | unavailable(no-pr|no-connector|not-authenticated) | waived-by-user
+pr-ai-review:    pending | run | unavailable(<reason>) | waived-by-user
 review-surface:  <PR/MR/CL URL or id>; head=<sha>; split-needed yes|no | none(blocked: <reason>) | none(waived-by-user: <reason>)
 known-gaps:      <list> | none | unverified (verify waived)
 ```
@@ -24,7 +24,7 @@ known-gaps:      <list> | none | unverified (verify waived)
 
 - `merge-ready: yes` requires `scope-green: yes`, verify-run showing **exit 0**, `plan-drift: pass`, reviewer merge-ready, and either graph rebuilt when graph gates are active or `graph-gate: waived-by-owner` reported while the temporary waiver is active.
 - For PR AI, `merge-ready: yes` requires either `pr-ai-review: run` with a current-head PR/MR/CL review surface using `head=<sha>`, or `pr-ai-review: waived-by-user` with `review-surface: none(waived-by-user: <reason>)`.
-- `unavailable(no-pr|no-connector|not-authenticated)` means the workflow is blocked; it is not a normal successful GrepLoop state.
+- `unavailable(<reason>)` means the workflow is blocked; it is not a normal successful GrepLoop state.
 - `known-gaps: none` requires **scope-green: yes** and **no open items** in any lane addendum below.
 - User waived verify → `known-gaps: unverified (verify waived)` (never `none` or `none declared`).
 

@@ -245,6 +245,53 @@ known-gaps:      connector status malformed
     assert any("pr-ai-review must be" in e for e in errs)
 
 
+def test_pr_ai_unavailable_accepts_connector_specific_reason():
+    text = """
+merge-ready:     no
+scope-green:     yes
+scope:           workbench/
+verify-run:      python -m pytest tests/test_workbench/ -q -> exit 0
+plan-drift:      pass
+data-mode:       fixture
+pr-ai-review:    unavailable(chatgpt-codex-connector-not-connected)
+review-surface:  PR #13; head=6321d6a3fd4f1c009c08b4fbd52bf1b4b8f4cadd
+known-gaps:      connector unavailable
+"""
+    assert not validate_status_block(text)
+
+
+def test_pr_ai_unavailable_requires_reason():
+    text = """
+merge-ready:     no
+scope-green:     yes
+scope:           workbench/
+verify-run:      python -m pytest tests/test_workbench/ -q -> exit 0
+plan-drift:      pass
+data-mode:       fixture
+pr-ai-review:    unavailable()
+review-surface:  PR #13; head=6321d6a3fd4f1c009c08b4fbd52bf1b4b8f4cadd
+known-gaps:      connector unavailable
+"""
+    errs = validate_status_block(text)
+    assert any("pr-ai-review must be" in e for e in errs)
+
+
+def test_pr_ai_unavailable_rejects_whitespace_reason():
+    text = """
+merge-ready:     no
+scope-green:     yes
+scope:           workbench/
+verify-run:      python -m pytest tests/test_workbench/ -q -> exit 0
+plan-drift:      pass
+data-mode:       fixture
+pr-ai-review:    unavailable(   )
+review-surface:  PR #13; head=6321d6a3fd4f1c009c08b4fbd52bf1b4b8f4cadd
+known-gaps:      connector unavailable
+"""
+    errs = validate_status_block(text)
+    assert any("pr-ai-review must be" in e for e in errs)
+
+
 def test_pr_ai_pending_allowed_before_merge_ready():
     text = """
 merge-ready:     no

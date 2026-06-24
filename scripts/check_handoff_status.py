@@ -27,11 +27,9 @@ _FORBIDDEN_WHEN_NOT_GREEN = (
 _VALID_PR_AI = {
     "pending",
     "run",
-    "unavailable(no-pr)",
-    "unavailable(no-connector)",
-    "unavailable(not-authenticated)",
     "waived-by-user",
 }
+_UNAVAILABLE_PR_AI = re.compile(r"unavailable\([^)\s][^)]*\)\Z", re.I)
 _REVIEW_SURFACE_ID = re.compile(
     r"\b(?:pr|mr|cl)\s*(?:#|!|:)?\s*\d+\b"
     r"|https?://\S+/(?:pull|pulls|merge_requests|-/merge_requests|reviews|changes)/\d+",
@@ -91,10 +89,10 @@ def validate_status_block(text: str, *, strict_merge: bool = True) -> list[str]:
             "plan-drift must be pass, fail, or not-run"
         )
 
-    if pr_ai not in _VALID_PR_AI:
+    if pr_ai not in _VALID_PR_AI and not _UNAVAILABLE_PR_AI.fullmatch(pr_ai):
         errors.append(
             "pr-ai-review must be pending, run, "
-            "unavailable(no-pr|no-connector|not-authenticated), or waived-by-user"
+            "unavailable(<reason>), or waived-by-user"
         )
     if (
         pr_ai == "run"
