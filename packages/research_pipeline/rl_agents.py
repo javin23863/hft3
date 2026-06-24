@@ -486,9 +486,7 @@ def _feature_bin(value: float) -> str:
         return "zero"
     if value < 0:
         return "neg"
-    if value > 0:
-        return "pos"
-    return "zero"
+    return "pos"
 
 
 def _state_key(row: Mapping[str, float] | None, feature_names: Sequence[str]) -> str:

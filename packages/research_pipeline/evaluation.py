@@ -93,7 +93,7 @@ def aggregate_evaluation_results(
         num_trades=total_trades,
         win_rate=win_rate,
         expectancy=expectancy,
-        tail_loss=_worst_signed_tail_pnl(results),
+        tail_loss=_worst_signed_tail_pnl(ordered_results),
         gates=gates,
         sharpe=sharpe,
         sortino=sortino,
