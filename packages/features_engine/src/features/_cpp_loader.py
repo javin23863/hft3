@@ -182,7 +182,13 @@ def load_cpp_features() -> Optional[object]:
         if not search_dir.is_dir():
             continue
         for entry in _iter_extension_candidates(search_dir):
-            _cached = _load_cpp_module_from_path(entry, repo)
+            try:
+                _cached = _load_cpp_module_from_path(entry, repo)
+            except Exception:
+                sys.modules.pop(_MODULE_NAME, None)
+                _cached = None
+                _searched = True
+                return None
             _searched = True
             return _cached
 

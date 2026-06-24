@@ -44,3 +44,31 @@ def test_cpp_loader_rejects_stale_sys_module_when_active_build_dir_is_set(
 
     assert loader.load_cpp_features() is None
     assert loader._MODULE_NAME not in sys.modules
+
+
+def test_cpp_loader_override_load_failure_returns_none_without_fallback(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    import features_engine.src.features._cpp_loader as loader
+
+    active_build = tmp_path / "active-build"
+    active_build.mkdir()
+    corrupt_module = active_build / "hft3_features_cpp.so"
+    corrupt_module.write_bytes(b"not a shared library")
+    calls = []
+
+    def fail_load(entry, repo):
+        calls.append(entry)
+        raise ImportError("synthetic corrupt extension")
+
+    monkeypatch.setenv("HFT3_FEATURES_CPP_BUILD_DIR", str(active_build))
+    monkeypatch.setattr(loader, "_cached", None)
+    monkeypatch.setattr(loader, "_searched", False)
+    monkeypatch.setattr(loader, "_load_cpp_module_from_path", fail_load)
+    monkeypatch.delitem(sys.modules, loader._MODULE_NAME, raising=False)
+
+    assert loader.load_cpp_features() is None
+    assert calls == [corrupt_module]
+    assert loader._searched is True
+    assert loader._MODULE_NAME not in sys.modules
