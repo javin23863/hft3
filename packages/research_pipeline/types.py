@@ -112,6 +112,7 @@ class EvaluationResult:
     max_drawdown: float = 0.0
     risk_metrics_source: str = "not_computed"
     risk_metrics_gateable: bool = False
+    risk_metric_warning: Optional[str] = None
     event_results: List[Dict[str, Any]] = field(default_factory=list)
     workbench_out: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
@@ -179,6 +180,7 @@ class PipelineReport:
                     "max_drawdown": r.max_drawdown,
                     "risk_metrics_source": r.risk_metrics_source,
                     "risk_metrics_gateable": r.risk_metrics_gateable,
+                    "risk_metric_warning": r.risk_metric_warning,
                     "error": r.error,
                     "event_results": r.event_results,
                 }

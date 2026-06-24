@@ -275,6 +275,26 @@ def _candidate_payload(candidates: list[CandidateModel]) -> list[dict]:
     ]
 
 
+def _emit_risk_metric_gate_warnings(results: list, gates: GateThresholds) -> None:
+    if not gates.requires_gateable_risk_metrics():
+        return
+    seen: set[tuple[str, str]] = set()
+    for result in results:
+        if result.risk_metrics_gateable:
+            continue
+        warning = result.risk_metric_warning or "risk_metric_gates_not_applied:unknown"
+        event_id = result.event_id or result.candidate.candidate_id
+        key = (event_id, warning)
+        if key in seen:
+            continue
+        seen.add(key)
+        print(
+            "Warning: risk metric gates requested but not applied "
+            f"for {event_id}: {warning}",
+            file=sys.stderr,
+        )
+
+
 def _rl_artifact_blocked(rl_artifact: dict | None) -> bool:
     return bool(rl_artifact and rl_artifact.get("status") != "trained_research_only")
 
@@ -1039,6 +1059,7 @@ def main() -> int:
         results.append(
             evaluate_candidate_events(cand, event_ids, repo_root, chi404_summary=chi404, gates=gates)
         )
+    _emit_risk_metric_gate_warnings(results, gates)
 
     if idea_packet:
         update_idea_statuses_from_results(idea_packet, results)

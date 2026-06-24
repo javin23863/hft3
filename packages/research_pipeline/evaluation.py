@@ -58,12 +58,20 @@ def aggregate_evaluation_results(
             tail_loss=0.0,
             gates=gates,
             error="no_event_results",
+            risk_metric_warning=(
+                "risk_metric_gates_not_applied:no_event_results"
+                if gates.requires_gateable_risk_metrics()
+                else None
+            ),
         )
     dated_results = [
         (_event_date_key(result.event_id), position, result)
         for position, result in enumerate(results)
     ]
     date_keys = [date_key for date_key, _, _ in dated_results if date_key is not None]
+    missing_date_event_ids = [
+        result.event_id for date_key, _, result in dated_results if date_key is None
+    ]
     risk_metrics_gateable = len(date_keys) == len(results)
     duplicate_date_keys = (
         {
@@ -97,16 +105,27 @@ def aggregate_evaluation_results(
             "tail_loss": signed_tail_loss_value(result.tail_loss),
             "error": result.error,
             "passes": _passes_basic_event_gates(result, gates),
-            "risk_metric_warning": (
-                "same_date_event_window"
-                if _event_date_key(result.event_id) in duplicate_date_keys
-                else None
+            "risk_metric_warning": _event_risk_metric_warning(
+                result.event_id,
+                duplicate_date_keys,
             ),
         }
         for result in ordered_results
     ]
     errors = [f"{result.event_id}:{result.error}" for result in ordered_results if result.error]
     risk_metrics_gateable = risk_metrics_gateable and not errors and len(net_pnls) >= 2
+    non_gateable_reasons: list[str] = []
+    if len(net_pnls) < 2:
+        non_gateable_reasons.append("insufficient_event_count")
+    if missing_date_event_ids:
+        non_gateable_reasons.append("missing_event_date")
+    if errors:
+        non_gateable_reasons.append("event_errors")
+    risk_metric_warning = (
+        f"risk_metric_gates_not_applied:{','.join(non_gateable_reasons)}"
+        if gates.requires_gateable_risk_metrics() and not risk_metrics_gateable
+        else None
+    )
     return EvaluationResult(
         candidate=candidate,
         event_id=",".join(result.event_id for result in ordered_results),
@@ -125,6 +144,7 @@ def aggregate_evaluation_results(
             else "cross_event_net_pnl_diagnostic"
         ),
         risk_metrics_gateable=risk_metrics_gateable,
+        risk_metric_warning=risk_metric_warning,
         event_results=event_payloads,
         error=";".join(errors) if errors else None,
     )
@@ -139,6 +159,18 @@ def _event_date_key(event_id: str) -> tuple[int, int, int] | None:
         return None
     year, month, day = match.groups()
     return int(year), int(month), int(day)
+
+
+def _event_risk_metric_warning(
+    event_id: str,
+    duplicate_date_keys: set[tuple[int, int, int]],
+) -> str | None:
+    date_key = _event_date_key(event_id)
+    if date_key is None:
+        return "missing_event_date"
+    if date_key in duplicate_date_keys:
+        return "same_date_event_window"
+    return None
 
 
 def _worst_signed_tail_pnl(results: Sequence[EvaluationResult]) -> float:

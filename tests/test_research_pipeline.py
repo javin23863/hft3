@@ -743,6 +743,66 @@ def test_cross_event_risk_metrics_fail_closed_without_dated_event_order():
 
     assert aggregate.risk_metrics_source == "cross_event_net_pnl_diagnostic"
     assert aggregate.risk_metrics_gateable is False
+    assert aggregate.risk_metric_warning == "risk_metric_gates_not_applied:missing_event_date"
+    assert [event["risk_metric_warning"] for event in aggregate.event_results] == [
+        "missing_event_date",
+        "missing_event_date",
+    ]
+    assert aggregate.passes_all_gates() is False
+
+
+def test_cross_event_risk_metrics_warn_on_insufficient_event_count():
+    from research_pipeline.evaluation import aggregate_evaluation_results
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    candidate = CandidateModel(
+        candidate_id="cand_cross_single",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis="cross-event",
+    )
+    gates = GateThresholds(min_trades=0, min_sharpe=0.5)
+    aggregate = aggregate_evaluation_results(
+        candidate,
+        [EvaluationResult(candidate, "CPI_2024_09_11_TIGHT", 10.0, 5, 0.6, 2.0, -1.0, gates)],
+        gates=gates,
+    )
+
+    assert aggregate.risk_metrics_gateable is False
+    assert aggregate.risk_metric_warning == "risk_metric_gates_not_applied:insufficient_event_count"
+    assert aggregate.passes_all_gates() is False
+
+
+def test_cross_event_risk_metrics_warn_on_event_errors():
+    from research_pipeline.evaluation import aggregate_evaluation_results
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    candidate = CandidateModel(
+        candidate_id="cand_cross_error",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis="cross-event",
+    )
+    gates = GateThresholds(min_trades=0, min_sharpe=0.5)
+    per_event = [
+        EvaluationResult(candidate, "CPI_2024_09_11_TIGHT", 10.0, 5, 0.6, 2.0, -1.0, gates),
+        EvaluationResult(
+            candidate,
+            "NFP_2024_10_04",
+            0.0,
+            0,
+            0.0,
+            0.0,
+            0.0,
+            gates,
+            error="missing_data",
+        ),
+    ]
+
+    aggregate = aggregate_evaluation_results(candidate, per_event, gates=gates)
+
+    assert aggregate.risk_metrics_gateable is False
+    assert aggregate.risk_metric_warning == "risk_metric_gates_not_applied:event_errors"
     assert aggregate.passes_all_gates() is False
 
 
@@ -892,6 +952,7 @@ def test_run_pipeline_passes_multi_event_set_to_evaluator(tmp_path, monkeypatch,
             sharpe=0.5,
             sortino=0.5,
             max_drawdown=0.0,
+            risk_metric_warning="risk_metric_gates_not_applied:missing_event_date",
         )
 
     monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_test_cross_event")
@@ -919,17 +980,24 @@ def test_run_pipeline_passes_multi_event_set_to_evaluator(tmp_path, monkeypatch,
     ])
 
     assert run_pipeline.main() == 0
-    payload = _last_json_object(capsys.readouterr().out)
+    captured_io = capsys.readouterr()
+    payload = _last_json_object(captured_io.out)
 
     assert captured["event_ids"] == ["CPI_1", "NFP_1", "FOMC_1"]
     assert captured["gates"].min_sharpe == 0.25
     assert captured["gates"].min_sortino == 0.50
     assert captured["gates"].max_drawdown == 4.0
+    assert "risk metric gates requested but not applied" in captured_io.err
+    assert "missing_event_date" in captured_io.err
     assert payload["report"]["event_id"] == "CPI_1"
     assert payload["report"]["event_ids"] == ["CPI_1", "NFP_1", "FOMC_1"]
     assert payload["response_packet"]["event_id"] == "CPI_1"
     assert payload["response_packet"]["event_ids"] == ["CPI_1", "NFP_1", "FOMC_1"]
     assert payload["response_packet"]["results"][0]["sharpe"] == 0.5
+    assert (
+        payload["response_packet"]["results"][0]["risk_metric_warning"]
+        == "risk_metric_gates_not_applied:missing_event_date"
+    )
 
 
 def test_run_pipeline_rejects_nonfinite_risk_gate_arg(tmp_path, monkeypatch, capsys):

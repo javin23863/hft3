@@ -87,6 +87,7 @@ def build_pipeline_response(
                 "max_drawdown": r.max_drawdown,
                 "risk_metrics_source": r.risk_metrics_source,
                 "risk_metrics_gateable": r.risk_metrics_gateable,
+                "risk_metric_warning": r.risk_metric_warning,
                 "event_results": r.event_results,
                 "error": r.error,
             }
