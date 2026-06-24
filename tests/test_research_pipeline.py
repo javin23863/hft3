@@ -493,6 +493,50 @@ def test_run_pipeline_dry_run_writes_runtime_receipt(tmp_path, monkeypatch, caps
     assert receipt["candidate_prefilter"]["accepted_count"] == 1
 
 
+def test_run_pipeline_log_handlers_are_call_local(tmp_path):
+    import scripts.run_pipeline as run_pipeline
+
+    contexts = []
+    try:
+        run_a = tmp_path / "run_a"
+        run_b = tmp_path / "run_b"
+        run_a.mkdir()
+        run_b.mkdir()
+        log_a, handler_a, token_a = run_pipeline._configure_run_logging(run_a, "run_a")
+        contexts.append((handler_a, token_a))
+        run_pipeline.logger.info("a_only")
+
+        log_b, handler_b, token_b = run_pipeline._configure_run_logging(run_b, "run_b")
+        contexts.append((handler_b, token_b))
+        run_pipeline.logger.info("b_only")
+
+        assert handler_a in run_pipeline.logger.handlers
+        assert handler_b in run_pipeline.logger.handlers
+
+        run_pipeline._close_run_logging(handler_b, token_b)
+        contexts.pop()
+        run_pipeline.logger.info("a_after_b")
+    finally:
+        while contexts:
+            handler, token = contexts.pop()
+            run_pipeline._close_run_logging(handler, token)
+
+    events_a = [
+        json.loads(line)["event"]
+        for line in log_a.read_text(encoding="utf-8").splitlines()
+    ]
+    events_b = [
+        json.loads(line)["event"]
+        for line in log_b.read_text(encoding="utf-8").splitlines()
+    ]
+    assert "a_only" in events_a
+    assert "a_after_b" in events_a
+    assert "b_only" not in events_a
+    assert "b_only" in events_b
+    assert "a_only" not in events_b
+    assert "a_after_b" not in events_b
+
+
 def test_run_pipeline_full_evaluation_orchestrator_result_uses_marker(
     tmp_path, monkeypatch, capsys
 ):

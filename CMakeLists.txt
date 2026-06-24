@@ -7,9 +7,13 @@ endif()
 # Allow caller to pass Python interpreter path (needed on Windows where bare
 # "python" may stall due to site-hook issues).
 if(DEFINED ENV{HFT3_PYTHON_EXECUTABLE})
-    set(Python_EXECUTABLE "$ENV{HFT3_PYTHON_EXECUTABLE}" CACHE FILEPATH "Python interpreter" FORCE)
+    set(Python3_EXECUTABLE "$ENV{HFT3_PYTHON_EXECUTABLE}" CACHE FILEPATH "Python 3 interpreter" FORCE)
+    set(PYTHON_EXECUTABLE "$ENV{HFT3_PYTHON_EXECUTABLE}" CACHE FILEPATH "Python interpreter" FORCE)
 elseif(DEFINED HFT3_PYTHON_EXECUTABLE)
-    set(Python_EXECUTABLE "${HFT3_PYTHON_EXECUTABLE}" CACHE FILEPATH "Python interpreter" FORCE)
+    set(Python3_EXECUTABLE "${HFT3_PYTHON_EXECUTABLE}" CACHE FILEPATH "Python 3 interpreter" FORCE)
+    set(PYTHON_EXECUTABLE "${HFT3_PYTHON_EXECUTABLE}" CACHE FILEPATH "Python interpreter" FORCE)
+elseif(DEFINED Python3_EXECUTABLE)
+    set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" CACHE FILEPATH "Python interpreter" FORCE)
 endif()
 
 project(hft3 CXX)

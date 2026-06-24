@@ -75,7 +75,7 @@ else
     fail "pybind11 CMake dir unavailable — install pybind11 or set HFT3_PYBIND11_DIR"
 fi
 if cmake -B "$BUILD_DIR" -S "$REPO" -DCMAKE_BUILD_TYPE=Release \
-         -DHFT3_PYTHON_EXECUTABLE="$PYTHON_BIN" "${PYBIND_ARGS[@]}" -Wno-dev 2>&1; then
+         -DPython3_EXECUTABLE="$PYTHON_BIN" "${PYBIND_ARGS[@]}" -Wno-dev 2>&1; then
     if cmake --build "$BUILD_DIR" --target hft3_features_cpp 2>&1; then
         PYD="$(find_pybind_so)"
     else
@@ -154,7 +154,7 @@ log_section "Row 1: ASan + UBSan build"
 ASAN_BUILD="$BUILD_DIR/asan_build"
 mkdir -p "$ASAN_BUILD"
 if cmake -B "$ASAN_BUILD" -S "$REPO" -DCMAKE_BUILD_TYPE=Asan -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
-         -DHFT3_PYTHON_EXECUTABLE="$PYTHON_BIN" "${PYBIND_ARGS[@]}" \
+         -DPython3_EXECUTABLE="$PYTHON_BIN" "${PYBIND_ARGS[@]}" \
          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
          -Wno-dev 2>&1; then
@@ -194,7 +194,7 @@ log_section "Row 2: TSan build"
 TSAN_BUILD="$BUILD_DIR/tsan_build"
 mkdir -p "$TSAN_BUILD"
 if cmake -B "$TSAN_BUILD" -S "$REPO" -DCMAKE_BUILD_TYPE=Tsan -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
-         -DHFT3_PYTHON_EXECUTABLE="$PYTHON_BIN" "${PYBIND_ARGS[@]}" \
+         -DPython3_EXECUTABLE="$PYTHON_BIN" "${PYBIND_ARGS[@]}" \
          -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" \
          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" \
          -Wno-dev 2>&1; then

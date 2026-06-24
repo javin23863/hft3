@@ -105,3 +105,13 @@ def test_cpp_loader_retries_when_active_build_dir_changes_after_miss(
     monkeypatch.setenv("HFT3_FEATURES_CPP_BUILD_DIR", str(second_build))
     assert loader.load_cpp_features() is loaded_mod
     assert calls == [module_path]
+
+
+def test_run_c_lane_uses_standard_cmake_python_hint() -> None:
+    script = (_REPO / "scripts" / "run_c_lane.sh").read_text(encoding="utf-8")
+    cmake = (_REPO / "CMakeLists.txt").read_text(encoding="utf-8")
+
+    assert "-DPython3_EXECUTABLE=\"$PYTHON_BIN\"" in script
+    assert "-DHFT3_PYTHON_EXECUTABLE=\"$PYTHON_BIN\"" not in script
+    assert "set(Python3_EXECUTABLE" in cmake
+    assert "set(PYTHON_EXECUTABLE" in cmake

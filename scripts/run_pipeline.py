@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import contextvars
 import hashlib
 import json
 import logging
@@ -12,6 +13,7 @@ import math
 import os
 import re
 import sys
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -124,6 +126,11 @@ _VECTORBT_BUDGET_ARGS = {
 _PIPELINE_RESULT_MARKER = "HFT3_PIPELINE_RESULT="
 _LOG_HANDLER_ATTR = "_hft3_pipeline_run_handler"
 logger = logging.getLogger("hft3.research_pipeline.run_pipeline")
+_LOG_HANDLER_LOCK = threading.Lock()
+_ACTIVE_LOG_RUN_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "hft3_pipeline_run_id",
+    default=None,
+)
 
 
 def _json_default(value: Any) -> str:
@@ -273,20 +280,42 @@ class _PipelineJsonFormatter(logging.Formatter):
         return json.dumps(payload, default=_json_default)
 
 
-def _configure_run_logging(artifact_dir: Path, run_id: str) -> Path:
+class _RunLogFilter(logging.Filter):
+    def __init__(self, run_id: str) -> None:
+        super().__init__()
+        self.run_id = run_id
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return _ACTIVE_LOG_RUN_ID.get() == self.run_id
+
+
+def _configure_run_logging(
+    artifact_dir: Path,
+    run_id: str,
+) -> tuple[Path, logging.FileHandler, contextvars.Token[str | None]]:
     log_path = artifact_dir / "pipeline_run.log"
-    for handler in list(logger.handlers):
-        if getattr(handler, _LOG_HANDLER_ATTR, False):
-            logger.removeHandler(handler)
-            handler.close()
+    token = _ACTIVE_LOG_RUN_ID.set(run_id)
     handler = logging.FileHandler(log_path, encoding="utf-8")
     setattr(handler, _LOG_HANDLER_ATTR, True)
+    handler.addFilter(_RunLogFilter(run_id))
     handler.setFormatter(_PipelineJsonFormatter(run_id))
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
+    with _LOG_HANDLER_LOCK:
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
     logger.info("pipeline_run_logging_configured", extra={"payload": {"log_path": str(log_path)}})
-    return log_path
+    return log_path, handler, token
+
+
+def _close_run_logging(
+    handler: logging.Handler,
+    token: contextvars.Token[str | None],
+) -> None:
+    with _LOG_HANDLER_LOCK:
+        if handler in logger.handlers:
+            logger.removeHandler(handler)
+    handler.close()
+    _ACTIVE_LOG_RUN_ID.reset(token)
 
 
 def _pipeline_config_receipt(
@@ -782,7 +811,11 @@ def _strict_replay_eligible_ids(
     return eligible, ineligible
 
 
-def _main_impl(argv: list[str] | None = None, failure_context: dict[str, Any] | None = None) -> int:
+def _main_impl(
+    argv: list[str] | None = None,
+    failure_context: dict[str, Any] | None = None,
+    log_contexts: list[tuple[logging.Handler, contextvars.Token[str | None]]] | None = None,
+) -> int:
     if failure_context is None:
         failure_context = {}
     parser = argparse.ArgumentParser(description="Autoresearch pipeline")
@@ -892,7 +925,9 @@ def _main_impl(argv: list[str] | None = None, failure_context: dict[str, Any] | 
         run_id = _run_id()
         artifact_dir = repo_root / "research_cards" / "pipeline_runs" / run_id
         artifact_dir.mkdir(parents=True, exist_ok=True)
-        _configure_run_logging(artifact_dir, run_id)
+        _log_path, log_handler, log_token = _configure_run_logging(artifact_dir, run_id)
+        if log_contexts is not None:
+            log_contexts.append((log_handler, log_token))
         _set_active_run_failure_context(
             failure_context,
             run_id=run_id,
@@ -977,7 +1012,9 @@ def _main_impl(argv: list[str] | None = None, failure_context: dict[str, Any] | 
     )
     artifact_dir = repo_root / "research_cards" / "pipeline_runs" / run_id
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    _configure_run_logging(artifact_dir, run_id)
+    _log_path, log_handler, log_token = _configure_run_logging(artifact_dir, run_id)
+    if log_contexts is not None:
+        log_contexts.append((log_handler, log_token))
     _set_active_run_failure_context(
         failure_context,
         run_id=run_id,
@@ -1590,8 +1627,9 @@ def _main_impl(argv: list[str] | None = None, failure_context: dict[str, Any] | 
 
 def main(argv: list[str] | None = None) -> int:
     failure_context: dict[str, Any] = {}
+    log_contexts: list[tuple[logging.Handler, contextvars.Token[str | None]]] = []
     try:
-        return _main_impl(argv, failure_context=failure_context)
+        return _main_impl(argv, failure_context=failure_context, log_contexts=log_contexts)
     except Exception as exc:
         try:
             _emit_pipeline_failure_receipt(exc, failure_context)
@@ -1602,6 +1640,9 @@ def main(argv: list[str] | None = None) -> int:
             )
         print(f"Error: pipeline failed: {exc}", file=sys.stderr)
         return 1
+    finally:
+        for handler, token in reversed(log_contexts):
+            _close_run_logging(handler, token)
 
 
 if __name__ == "__main__":
