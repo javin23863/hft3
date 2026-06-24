@@ -319,6 +319,53 @@ def test_pipeline_runtime_config_hash_includes_idea_sampling_override(tmp_path):
     assert receipt_a["pipeline_runtime_config_hash"] != receipt_b["pipeline_runtime_config_hash"]
 
 
+def test_rl_training_stage_cache_miss_then_hit(tmp_path):
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    training_path = tmp_path / "rl_rows.jsonl"
+    rows = [
+        {"order_book_imbalance": 0.5, "spread": 1.0, "reward": 0.10},
+        {"order_book_imbalance": -0.5, "spread": 1.0, "reward": -0.20},
+        {"order_book_imbalance": 0.0, "spread": 2.0, "reward": 0.00},
+    ]
+    training_path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+    artifact_dir = tmp_path / "research_cards" / "pipeline_runs" / "rl_cache_test"
+    args = argparse.Namespace(
+        rl_training_enabled=True,
+        rl_feature=["order_book_imbalance", "spread"],
+        rl_training_data=training_path,
+        rl_device="cpu",
+        rl_seed=9,
+        rl_cache_enabled=True,
+        rl_cache_root="runtime/test_rl_policy_cache",
+    )
+
+    first, first_path = run_pipeline._run_rl_training_stage(
+        args,
+        artifact_dir=artifact_dir,
+        repo_root=tmp_path,
+    )
+    second, second_path = run_pipeline._run_rl_training_stage(
+        args,
+        artifact_dir=artifact_dir,
+        repo_root=tmp_path,
+    )
+
+    assert first_path == artifact_dir / "rl_policy_artifact.json"
+    assert second_path == first_path
+    assert first["cache_receipt"]["status"] == "miss"
+    assert second["cache_receipt"]["status"] == "hit"
+    assert first["cache_receipt"]["cache_key"] == second["cache_receipt"]["cache_key"]
+    assert first["promotable"] is False
+    assert second["promotable"] is False
+    cache_path = tmp_path / "runtime" / "test_rl_policy_cache" / f"{first['cache_receipt']['cache_key']}.json"
+    assert first["cache_receipt"]["cache_path"] == str(cache_path)
+    assert second["cache_receipt"]["cache_path"] == str(cache_path)
+    assert cache_path.is_file()
+
+
 def test_candidate_prefilter_rejects_malformed_and_bounds():
     import scripts.run_pipeline as run_pipeline
     from research_pipeline.types import CandidateModel
