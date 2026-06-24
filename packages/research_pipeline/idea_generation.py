@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple
 
 from features_engine.src.model_registry import all_slugs, load_model_registry
 
@@ -358,7 +358,7 @@ def candidates_from_ideas(
 
 def update_idea_statuses_from_results(
     packet: Dict[str, Any],
-    results: Iterable[EvaluationResult],
+    results: Sequence[EvaluationResult],
 ) -> None:
     result_list = list(results)
     outcome: Dict[str, bool] = {}

@@ -41,15 +41,15 @@ def generate_candidates(
         cid = param_hash_from_dict(model_id, params)
         yield attach_feature_recipe_to_candidate(
             CandidateModel(
-            candidate_id=cid,
-            model_id=model_id,
-            strategy_params=params,
-            thesis=parsed.thesis,
-            metadata={
-                "source_model": parsed.primary_model_id,
-                "strategy_family": model_id,
-                "parameter_search": selection.metadata,
-            },
+                candidate_id=cid,
+                model_id=model_id,
+                strategy_params=params,
+                thesis=parsed.thesis,
+                metadata={
+                    "source_model": parsed.primary_model_id,
+                    "strategy_family": model_id,
+                    "parameter_search": selection.metadata,
+                },
             ),
             parsed=parsed,
             target_event_id=target_event_id,

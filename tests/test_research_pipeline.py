@@ -1784,7 +1784,7 @@ def test_idea_status_updates_only_from_evaluation_results():
         ),
     ]
 
-    update_idea_statuses_from_results(packet, (result for result in results))
+    update_idea_statuses_from_results(packet, results)
 
     by_id = {idea["idea_id"]: idea for idea in packet["ideas"]}
     assert by_id["idea_low"]["status"] == "tested_fail"
