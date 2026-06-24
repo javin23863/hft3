@@ -165,9 +165,6 @@ def load_cpp_features() -> Optional[object]:
         else:
             return _cached
 
-    if _searched:
-        return _cached
-
     # 1. Already in sys.modules (e.g. from a prior import or pip-install).
     mod = sys.modules.get(_MODULE_NAME)
     if mod is not None:
@@ -177,12 +174,6 @@ def load_cpp_features() -> Optional[object]:
             _cached = mod
             _searched = True
             return _cached
-
-    mod = sys.modules.get(_MODULE_NAME)
-    if mod is not None:
-        _cached = mod
-        _searched = True
-        return _cached
 
     # 2. Search the requested build dir first. In lane-runner mode, a broken
     # artifact must not fall through to a stale default build or site package.
