@@ -130,8 +130,9 @@ def train_rl_agent(
     for _episode in range(episodes):
         if updates_used >= resolved_max_updates:
             break
-        offset = rng.randrange(len(train_rows))
-        steps_this_episode = min(max_steps_per_episode, len(train_rows) - offset)
+        steps_this_episode = min(max_steps_per_episode, len(train_rows))
+        max_offset = len(train_rows) - steps_this_episode
+        offset = rng.randrange(max_offset + 1) if max_offset > 0 else 0
         for local_step in range(steps_this_episode):
             if updates_used >= resolved_max_updates:
                 break

@@ -231,6 +231,43 @@ def test_symbol_aliases_are_cached_per_process(tmp_path, monkeypatch):
         hypothesis_parser._symbol_aliases.cache_clear()
 
 
+def test_symbol_aliases_do_not_cache_absent_file(tmp_path, monkeypatch):
+    from research_pipeline import hypothesis_parser
+
+    aliases = tmp_path / "aliases.yaml"
+
+    try:
+        monkeypatch.setattr(hypothesis_parser, "_SYMBOL_ALIASES_PATH", aliases)
+        hypothesis_parser._symbol_aliases.cache_clear()
+        assert hypothesis_parser._symbol_aliases() == {}
+
+        aliases.write_text("MES:\n  - micro test symbol\n", encoding="utf-8")
+        assert hypothesis_parser.canonicalize_instrument("micro test symbol") == "MES"
+    finally:
+        hypothesis_parser._symbol_aliases.cache_clear()
+
+
+def test_model_alias_matching_requires_word_boundary(monkeypatch):
+    from research_pipeline import hypothesis_parser
+
+    monkeypatch.setattr(
+        hypothesis_parser,
+        "load_model_registry",
+        lambda: {
+            "models": {
+                "ES": {
+                    "kind": "hypothesis",
+                    "display_name": "ES",
+                    "aliases": ["es"],
+                }
+            }
+        },
+    )
+
+    assert hypothesis_parser._match_model("best process estimate") == "SPREAD_BLOWOUT_RECOMPRESSION"
+    assert hypothesis_parser._match_model("trade ES after CPI") == "ES"
+
+
 def test_parse_hypothesis_uses_model_alias_and_registry_ranges():
     from research_pipeline.hypothesis_parser import parse_hypothesis
 
@@ -308,15 +345,16 @@ def test_parameter_search_grid_and_vectorbt_ranges_are_deterministic():
     selected = select_parameters(grid, max_candidates=4, search_method="grid")
 
     assert "holding_period_bars" not in base_grid
-    assert base_grid["stop_loss_pct"] == [None, 0.05, 0.175, 0.3]
-    assert base_grid["take_profit_pct"] == [None, 0.05, 0.175, 0.3]
+    assert base_grid["stop_loss_pct"] == [0.05, 0.175, 0.3]
+    assert base_grid["take_profit_pct"] == [0.05, 0.175, 0.3]
     assert grid["signal_threshold"] == [0.02, 0.085, 0.15]
     assert grid["holding_period_bars"] == [1, 6, 10]
-    assert grid["stop_loss_pct"] == [None, 0.05, 0.175, 0.3]
-    assert grid["take_profit_pct"] == [None, 0.05, 0.175, 0.3]
+    assert grid["stop_loss_pct"] == [0.05, 0.175, 0.3]
+    assert grid["take_profit_pct"] == [0.05, 0.175, 0.3]
     assert [item.params for item in selected] == [item.params for item in select_parameters(grid, max_candidates=4)]
     assert selected[0].metadata["method_status"] == "ok"
-    assert selected[0].metadata["grid_size"] == 144
+    assert selected[0].metadata["grid_size"] == 81
+    assert all(value is not None for item in selected for value in item.params.values())
 
 
 def test_parameter_grid_skips_optional_risk_params_without_ranges():
@@ -1028,6 +1066,23 @@ def test_train_rl_agent_deterministic_and_research_blocked():
     assert artifact_a["metrics"]["audit_status"] == "chronology_not_audited"
     assert artifact_a["q_table"]
     assert artifact_a["policy"]
+
+
+def test_train_rl_agent_episode_start_preserves_budget_when_possible():
+    from research_pipeline.rl_agents import train_rl_agent
+
+    artifact = train_rl_agent(
+        _rl_rows(),
+        ["order_book_imbalance", "queue_imbalance"],
+        seed=7,
+        episodes=1,
+        max_steps_per_episode=4,
+        train_fraction=0.8,
+        epsilon=0.0,
+    )
+
+    assert artifact["training_budget"]["updates_used"] == 4
+    assert artifact["training_budget"]["budget_exhausted"] is True
 
 
 def test_train_rl_agent_default_reward_requires_reward_key():

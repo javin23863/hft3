@@ -57,11 +57,9 @@ def _hypothesis_slugs() -> List[str]:
     return sorted(k for k, v in reg.items() if v.get("kind") == "hypothesis")
 
 
-@lru_cache(maxsize=1)
-def _symbol_aliases() -> Dict[str, List[str]]:
-    if not _SYMBOL_ALIASES_PATH.is_file():
-        return {}
-    with open(_SYMBOL_ALIASES_PATH, encoding="utf-8") as f:
+@lru_cache(maxsize=4)
+def _symbol_aliases_for_path(path: str) -> Dict[str, List[str]]:
+    with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     aliases: Dict[str, List[str]] = {}
     for canonical, values in data.items():
@@ -70,6 +68,19 @@ def _symbol_aliases() -> Dict[str, List[str]]:
             items.extend(str(value) for value in values)
         aliases[str(canonical).upper()] = items
     return aliases
+
+
+def _symbol_aliases() -> Dict[str, List[str]]:
+    if not _SYMBOL_ALIASES_PATH.is_file():
+        return {}
+    return _symbol_aliases_for_path(str(_SYMBOL_ALIASES_PATH.resolve()))
+
+
+def _clear_symbol_alias_cache() -> None:
+    _symbol_aliases_for_path.cache_clear()
+
+
+_symbol_aliases.cache_clear = _clear_symbol_alias_cache  # type: ignore[attr-defined]
 
 
 def _normalize_alias_text(value: str) -> str:
@@ -191,6 +202,17 @@ def _legacy_slug_from_thesis(thesis: str) -> Optional[str]:
     return legacy_to_slug().get(legacy)
 
 
+def _normalize_model_match_text(value: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", value.lower()).split())
+
+
+def _contains_model_alias(haystack: str, alias: str) -> bool:
+    normalized = _normalize_model_match_text(alias)
+    if not normalized:
+        return False
+    return re.search(rf"\b{re.escape(normalized)}\b", haystack) is not None
+
+
 def _match_model(thesis: str) -> str:
     slug_paren = _slug_from_parentheses(thesis)
     if slug_paren is not None:
@@ -198,14 +220,14 @@ def _match_model(thesis: str) -> str:
     legacy_slug = _legacy_slug_from_thesis(thesis)
     if legacy_slug is not None:
         return legacy_slug
-    lower = thesis.lower()
+    lower = _normalize_model_match_text(thesis)
     alias_matches: List[tuple[int, str]] = []
     for slug, entry in load_model_registry().get("models", {}).items():
         candidates = [slug.replace("_", " "), str(entry.get("display_name") or "")]
         candidates.extend(str(alias) for alias in entry.get("aliases") or [])
         for candidate in candidates:
-            normalized = candidate.strip().lower()
-            if normalized and normalized in lower:
+            normalized = _normalize_model_match_text(candidate)
+            if normalized and _contains_model_alias(lower, normalized):
                 alias_matches.append((len(normalized), slug))
     if alias_matches:
         return sorted(alias_matches, reverse=True)[0][1]
@@ -215,8 +237,8 @@ def _match_model(thesis: str) -> str:
     for slug, entry in load_model_registry().get("models", {}).items():
         if entry.get("kind") != "hypothesis":
             continue
-        display = str(entry.get("display_name") or "").lower()
-        if display and display in lower:
+        display = str(entry.get("display_name") or "")
+        if display and _contains_model_alias(lower, display):
             return slug
     return "SPREAD_BLOWOUT_RECOMPRESSION"
 
