@@ -84,6 +84,20 @@ def test_paid_gate_resolves_family_status_fields() -> None:
     assert resolved["vectorbt_result"] == "screen_pass"
 
 
+def test_paid_gate_resolves_paid_compute_gate_evaluation() -> None:
+    paid_compute = _pilot_artifact(screening_scope="paid_compute")
+    vectorbt_results = paid_compute["promoted"][0]["vectorbt_results"]
+    vectorbt_results.pop("pilot_gate_evaluation", None)
+    vectorbt_results["paid_compute_gate_evaluation"] = {
+        "scope": "paid_compute",
+        "failures": [],
+    }
+
+    _errors, summary = evaluate_feature_family_paid_gate(paid_compute, repo_root=_REPO)
+
+    assert summary["resolved_fields"]["vectorbt_result"] == "paid_compute_gate_pass"
+
+
 def test_ready_gate_includes_feature_family_summary(tmp_path: Path) -> None:
     pilot_path = tmp_path / "pilot.json"
     pilot = _pilot_artifact()
