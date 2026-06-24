@@ -919,6 +919,45 @@ def test_train_rl_agent_rejects_camel_case_label_like_feature_names(feature_name
         train_rl_agent(rows, [feature_name])
 
 
+@pytest.mark.parametrize(
+    "feature_name",
+    ["daily_pnl_net", "session_profit_outcome", "dailyPNLNet", "grossPnlNet"],
+)
+def test_train_rl_agent_rejects_prefixed_pnl_profit_label_like_feature_names(feature_name):
+    from research_pipeline.rl_agents import train_rl_agent
+
+    rows = [
+        {feature_name: 0.1, "order_book_imbalance": 0.2, "reward": 0.01},
+        {feature_name: -0.2, "order_book_imbalance": -0.1, "reward": -0.01},
+    ]
+
+    with pytest.raises(ValueError, match="non-PIT or label-like"):
+        train_rl_agent(rows, [feature_name])
+
+
+def test_train_rl_agent_allows_pit_financial_feature_names():
+    from research_pipeline.rl_agents import train_rl_agent
+
+    feature_names = [
+        "realized_vol_20d",
+        "log_return_1bar",
+        "close_return_zscore",
+        "vol_return_ma",
+        "book_profit_factor",
+        "post_event_imbalance",
+    ]
+    rows = [
+        {name: 0.1 * (idx + 1) for idx, name in enumerate(feature_names)} | {"reward": 0.01},
+        {name: -0.1 * (idx + 1) for idx, name in enumerate(feature_names)} | {"reward": -0.01},
+        {name: 0.05 * (idx + 1) for idx, name in enumerate(feature_names)} | {"reward": 0.02},
+    ]
+
+    artifact = train_rl_agent(rows, feature_names, episodes=1, max_steps_per_episode=2)
+
+    assert artifact["status"] == "trained_research_only"
+    assert artifact["feature_names"] == feature_names
+
+
 def test_train_rl_agent_does_not_wrap_training_rows():
     from research_pipeline.rl_agents import train_rl_agent
 

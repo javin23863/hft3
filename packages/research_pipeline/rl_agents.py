@@ -19,12 +19,9 @@ DEFAULT_ACTION_SPACE = ("hold", "enter_long", "enter_short", "exit")
 PROMOTION_BLOCKED_STATUS = "blocked_downstream_validation_required"
 _TIMESTAMP_FIELDS = ("timestamp_ns", "ts_ns", "timestamp", "decision_time")
 _LEAKY_FEATURE_RE = re.compile(
-    r"(^|_)(future|lead|next|target|label|outcome|reward|return|pnl|profit|"
-    r"realized|post|after)(_|$)",
-    re.IGNORECASE,
-)
-_LEAKY_COMPACT_RE = re.compile(
-    r"(future|lead|next|target|label|outcome|reward|return|pnl|profit|realized|post|after)",
+    r"(^|_)(future|lead|next|target|label|outcome|reward)(_|$)|"
+    r"^(return|pnl|profit|realized|post|after)$|"
+    r"(^|_)(pnl|profit)_(net|target|label|outcome)(_|$)",
     re.IGNORECASE,
 )
 
@@ -335,7 +332,6 @@ def _validate_feature_names(feature_names: Sequence[str]) -> tuple[str, ...]:
         name
         for name in names
         if _LEAKY_FEATURE_RE.search(_normalise_feature_name(name))
-        or _LEAKY_COMPACT_RE.search(_compact_feature_name(name))
     ]
     if leaky:
         raise ValueError(
@@ -345,12 +341,10 @@ def _validate_feature_names(feature_names: Sequence[str]) -> tuple[str, ...]:
 
 
 def _normalise_feature_name(name: str) -> str:
-    with_boundaries = re.sub(r"(?<!^)(?=[A-Z])", "_", name)
+    with_pnl_boundaries = re.sub(r"(?i)pnl", "_pnl_", name)
+    with_acronym_boundaries = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", "_", with_pnl_boundaries)
+    with_boundaries = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", with_acronym_boundaries)
     return re.sub(r"[^A-Za-z0-9]+", "_", with_boundaries).lower().strip("_")
-
-
-def _compact_feature_name(name: str) -> str:
-    return re.sub(r"[^A-Za-z0-9]+", "", name).lower()
 
 
 def _validate_action_space(action_space: Sequence[str]) -> tuple[str, ...]:
