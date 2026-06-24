@@ -41,6 +41,7 @@ from research_pipeline.rl_agents import (
     train_rl_policy_artifact,
     write_rl_policy_artifact,
 )
+from research_pipeline.runtime_policy import effective_evaluation_workers
 from research_pipeline.idea_generation import (
     candidates_from_ideas,
     generate_idea_set,
@@ -121,6 +122,8 @@ _DEFAULT_PIPELINE_RUNTIME_CONFIG: dict[str, Any] = {
     },
     "evaluation": {
         "workers": 1,
+        "max_workers": 8,
+        "msi_max_workers": 1,
     },
     "gate_profiles": {
         "default_profile": "normal",
@@ -368,6 +371,11 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
     if getattr(args, "evaluation_workers", None) is None:
         args.evaluation_workers = evaluation_config.get("workers", 1)
     args.evaluation_workers = _positive_int(args.evaluation_workers, name="evaluation.workers")
+    args.evaluation_workers_requested = args.evaluation_workers
+    args.evaluation_workers, args.evaluation_worker_policy = effective_evaluation_workers(
+        args.evaluation_workers,
+        config,
+    )
 
     profiles = _gate_profiles(config)
     if getattr(args, "gate_profile", None) is None:
@@ -490,6 +498,7 @@ def _pipeline_config_receipt(
         },
         "evaluation": {
             "workers": getattr(args, "evaluation_workers", 1),
+            "worker_policy": dict(getattr(args, "evaluation_worker_policy", {}) or {}),
         },
         "gate_profiles": {
             "profile": getattr(args, "gate_profile", "normal"),

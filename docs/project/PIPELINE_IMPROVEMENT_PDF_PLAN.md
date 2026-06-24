@@ -194,9 +194,10 @@ Gate:
 Implementation receipt:
 
 - Document ingestion cache was already present from the runtime upgrade.
-- `scripts/run_pipeline.py` now records `evaluation.workers` and uses a bounded `ProcessPoolExecutor` for the legacy candidate evaluation loop when workers > 1.
-- Default workers remain `1`; high-worker verification belongs on CHI404/VastAI, not MSI.
+- `scripts/run_pipeline.py` now records `evaluation.workers`, `evaluation.worker_policy`, and uses a bounded `ProcessPoolExecutor` for the legacy candidate evaluation loop when effective workers > 1.
+- Default workers remain `1`; MSI is capped by `evaluation.msi_max_workers`, while CHI404/Vast-style hosts are capped by `evaluation.max_workers`.
 - VectorBT paid-screen and HftBacktest campaign worker controls remain the canonical high-throughput paths.
+- RL cache reuse and same-inputs-twice RL cache-hit tests remain deferred until a real training-data path, resumable training command, and GPU host are named.
 
 Implementation requirements:
 
@@ -228,7 +229,8 @@ Implementation requirements:
 
 Gate:
 
-- Tests reject candidates with insufficient Sharpe, insufficient Sortino, or excessive drawdown under the selected profile.
+- Tests reject candidates under the selected legacy profile using the metrics emitted by `EvaluationResult`: net PnL, trade count, tail loss, and win rate.
+- Sharpe, Sortino, and drawdown profile gates remain owned by VectorBT/robustness layers that emit those metrics, not by this legacy evaluation slice.
 
 ### Phase 7 - Docs, Review, And PR Gate
 

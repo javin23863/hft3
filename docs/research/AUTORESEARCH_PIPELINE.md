@@ -91,9 +91,10 @@ VectorBT, robustness evidence, or HftBacktest gates.
 
 The legacy post-filter evaluation loop accepts `--evaluation-workers` and the
 runtime config's `evaluation.workers`. The default is `1`. Values greater than
-one use a bounded `ProcessPoolExecutor` for candidate-level independence, but
-high worker counts must be reserved for CHI404 or VastAI. VectorBT paid-screen
-and HftBacktest campaign runners keep their own worker controls.
+one use a bounded `ProcessPoolExecutor` for candidate-level independence. MSI
+is capped by `evaluation.msi_max_workers` (default `1`), while CHI404/Vast-style
+hosts are capped by `evaluation.max_workers`. VectorBT paid-screen and
+HftBacktest campaign runners keep their own worker controls.
 
 Legacy evaluation gates can be selected with `gate_profiles.default_profile` or
 `--gate-profile`, with explicit CLI overrides for min net PnL, min trades, max

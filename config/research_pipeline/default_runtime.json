@@ -44,7 +44,9 @@
     "seed": 42
   },
   "evaluation": {
-    "workers": 1
+    "workers": 1,
+    "max_workers": 8,
+    "msi_max_workers": 1
   },
   "gate_profiles": {
     "default_profile": "normal",

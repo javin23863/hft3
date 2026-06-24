@@ -226,6 +226,35 @@ def test_pipeline_runtime_config_rejects_false_abort_policy(tmp_path):
         run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
 
 
+def test_evaluation_workers_are_capped_on_msi(monkeypatch):
+    from research_pipeline import runtime_policy
+
+    monkeypatch.setattr(runtime_policy.platform, "node", lambda: "MSI")
+
+    effective, policy = runtime_policy.effective_evaluation_workers(
+        128,
+        {"evaluation": {"max_workers": 64, "msi_max_workers": 1}},
+    )
+
+    assert effective == 1
+    assert policy["requested_workers"] == 128
+    assert policy["cap_reason"] == "msi_local_cap"
+
+
+def test_evaluation_workers_are_capped_on_remote(monkeypatch):
+    from research_pipeline import runtime_policy
+
+    monkeypatch.setattr(runtime_policy.platform, "node", lambda: "chi404")
+
+    effective, policy = runtime_policy.effective_evaluation_workers(
+        128,
+        {"evaluation": {"max_workers": 64, "msi_max_workers": 1}},
+    )
+
+    assert effective == 64
+    assert policy["cap_reason"] == "max_workers_cap"
+
+
 def test_pipeline_runtime_config_hash_includes_idea_sampling_override(tmp_path):
     import argparse
 
