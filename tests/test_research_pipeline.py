@@ -449,6 +449,12 @@ def test_pipeline_runtime_config_defaults_from_json(tmp_path):
                         }
                     },
                 },
+                "edge_evaluation": {
+                    "statistics": {"min_psr": 0.95, "min_dsr": 0.9},
+                    "validation": {"cscv": True, "cscv_subsets": 4, "max_pbo": 0.2},
+                    "cost_model": {"commission_per_trade": 1.25, "slippage_bps": 0.5},
+                    "risk": {"min_tail_ratio": 1.1, "max_cvar_95": 25.0},
+                },
             }
         ),
         encoding="utf-8",
@@ -494,6 +500,15 @@ def test_pipeline_runtime_config_defaults_from_json(tmp_path):
     assert args.gate_profile == "high_volatility"
     assert args.gate_min_trades == 10
     assert args.gate_min_win_rate == 0.45
+    assert args.min_psr == 0.95
+    assert args.min_dsr == 0.9
+    assert args.cscv is True
+    assert args.cscv_subsets == 4
+    assert args.max_pbo == 0.2
+    assert args.commission_per_trade == 1.25
+    assert args.slippage_bps == 0.5
+    assert args.min_tail_ratio == 1.1
+    assert args.max_cvar_95 == 25.0
     assert run_pipeline._vectorbt_run_budget(args, cfg) == {
         "max_trials": 3,
         "max_total_trials": 21,
@@ -528,6 +543,75 @@ def test_pipeline_runtime_config_rejects_false_abort_policy(tmp_path):
     )
 
     with pytest.raises(ValueError, match="abort_on_budget_exhaustion must be true"):
+        run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+
+
+def test_pipeline_runtime_config_rejects_invalid_edge_probabilities(tmp_path):
+    import argparse
+
+    import pytest
+    import scripts.run_pipeline as run_pipeline
+
+    cfg_path = tmp_path / "runtime.json"
+    cfg_path.write_text(
+        json.dumps({"edge_evaluation": {"validation": {"max_pbo": 1.2}}}),
+        encoding="utf-8",
+    )
+    cfg = run_pipeline.load_pipeline_runtime_config(cfg_path)
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+    )
+
+    with pytest.raises(ValueError, match="max_pbo must be between 0 and 1"):
+        run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+
+
+@pytest.mark.parametrize(
+    ("attr", "message"),
+    [
+        ("min_tail_ratio", "min_tail_ratio must be nonnegative"),
+        ("max_cvar_95", "max_cvar_95 must be nonnegative"),
+        ("max_cvar_99", "max_cvar_99 must be nonnegative"),
+    ],
+)
+def test_pipeline_runtime_config_rejects_invalid_cli_edge_risk_thresholds(attr, message):
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    cfg = run_pipeline.load_pipeline_runtime_config()
+    values = {
+        "min_tail_ratio": None,
+        "max_cvar_95": None,
+        "max_cvar_99": None,
+    }
+    values[attr] = -1.0
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+        **values,
+    )
+
+    with pytest.raises(ValueError, match=message):
         run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
 
 
@@ -1594,6 +1678,11 @@ def test_run_pipeline_full_evaluation_orchestrator_result_uses_marker(
     run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_full_marker"
     receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
     assert receipt["status"] == "candidate_deployed"
+    trials = json.loads((run_dir / "num_trials.json").read_text(encoding="utf-8"))
+    assert trials["generated_candidates"] == 1
+    assert trials["evaluated_candidates"] == 1
+    edge_summary = json.loads((run_dir / "edge_evaluation_summary.json").read_text(encoding="utf-8"))
+    assert edge_summary["schema_version"] == "hft3_edge_evaluation_summary_v1"
 
 
 def test_run_pipeline_failure_writes_receipt(tmp_path, monkeypatch, capsys):
@@ -2199,7 +2288,8 @@ def test_idea_vectorbt_reject_all_marks_queued_ideas_tested_fail():
 
 def test_idea_set_deployment_requires_passing_existing_gate():
     import scripts.run_pipeline as run_pipeline
-    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+    from research_pipeline.deployment import deploy_best
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds, ParsedHypothesis, PipelineReport
 
     gate = GateThresholds(min_net_pnl=0.0, min_trades=1)
     failing = EvaluationResult(
@@ -2238,6 +2328,27 @@ def test_idea_set_deployment_requires_passing_existing_gate():
     assert run_pipeline._deployment_allowed(False, [failing]) is True
     assert run_pipeline._deployment_allowed(True, [failing]) is False
     assert run_pipeline._deployment_allowed(True, [failing, passing]) is True
+    report = PipelineReport(
+        run_id="no_fallback",
+        thesis="x",
+        event_id="CPI_2024_09_11_TIGHT",
+        parsed=ParsedHypothesis(
+            thesis="x",
+            instrument_universe=["MES"],
+            entry_rules=[],
+            exit_rules=[],
+            indicators=[],
+            feature_list=[],
+            param_ranges={},
+            primary_model_id="BOOK_PRESSURE",
+        ),
+        candidates_tested=1,
+        results=[failing],
+        selected=None,
+        artifact_dir=str(REPO / "research_cards" / "pipeline_runs" / "no_fallback"),
+    )
+    assert deploy_best(REPO, report) is None
+    assert report.selected is None
     assert run_pipeline._idea_set_missing_prefilter(
         idea_set_enabled=True,
         dry_run=False,
@@ -2265,6 +2376,148 @@ def test_gate_thresholds():
     assert gates.passes(1.0, 2, 0.0, 0.5)
     assert not gates.passes(-1.0, 2, 0.0, 0.5)
     assert not gates.passes(1.0, 0, 0.0, 0.5)
+
+    edge_gates = GateThresholds(
+        min_psr=0.8,
+        min_dsr=0.7,
+        max_pbo=0.25,
+        min_tail_ratio=1.0,
+        max_cvar_95=5.0,
+        require_sample_size=True,
+        min_observations=3,
+    )
+    assert edge_gates.passes(
+        1.0,
+        3,
+        0.0,
+        0.5,
+        psr=0.9,
+        dsr=0.8,
+        pbo=0.1,
+        tail_ratio=1.2,
+        cvar_95=2.0,
+        sample_size_pass=True,
+        observations=3,
+    )
+    assert not edge_gates.passes(1.0, 3, 0.0, 0.5, psr=0.7, dsr=0.8, pbo=0.1)
+    assert not edge_gates.passes(1.0, 3, 0.0, 0.5, psr=0.9, dsr=0.6, pbo=0.1)
+    assert not edge_gates.passes(1.0, 3, 0.0, 0.5, psr=0.9, dsr=0.8, pbo=0.3)
+    assert not edge_gates.passes(
+        1.0,
+        3,
+        0.0,
+        0.5,
+        psr=0.9,
+        dsr=0.8,
+        pbo=0.1,
+        sample_size_pass=False,
+        observations=3,
+    )
+
+
+def test_evaluate_model_aggregate_costs_use_reported_trade_count(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    import research_pipeline.evaluation as evaluation
+    from research_pipeline.types import CandidateModel, GateThresholds
+
+    class FakeEngine:
+        def __init__(self, repo_root):
+            self.repo_root = repo_root
+
+        def run(self, *args, **kwargs):
+            return {
+                "report": {"net_pnl": 100.0, "num_trades": 4},
+                "diagnostics": {"win_rate": 0.5, "expectancy": 25.0},
+            }
+
+    monkeypatch.setattr(evaluation, "resolve_model_id", lambda model_id: model_id)
+    engine_mod = types.ModuleType("workbench.src.run.engine")
+    engine_mod.WorkbenchEngine = FakeEngine
+    monkeypatch.setitem(sys.modules, "workbench.src.run.engine", engine_mod)
+
+    result = evaluation.evaluate_model(
+        CandidateModel(candidate_id="c", model_id="BOOK_PRESSURE", strategy_params={}, thesis="x"),
+        "CPI_2024_09_11_TIGHT",
+        tmp_path,
+        gates=GateThresholds(min_trades=0),
+        cost_config={"commission_per_trade": 1.25},
+    )
+
+    assert result.num_trades == 4
+    assert result.cost_breakdown["commission"] == pytest.approx(5.0)
+    assert result.net_pnl == pytest.approx(95.0)
+
+
+def test_evaluate_model_zero_pnl_charges_reported_trade_count_costs(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    import research_pipeline.evaluation as evaluation
+    from research_pipeline.types import CandidateModel, GateThresholds
+
+    class FakeEngine:
+        def __init__(self, repo_root):
+            self.repo_root = repo_root
+
+        def run(self, *args, **kwargs):
+            return {
+                "report": {"net_pnl": 0.0, "num_trades": 4},
+                "diagnostics": {"win_rate": 0.5, "expectancy": 0.0},
+            }
+
+    monkeypatch.setattr(evaluation, "resolve_model_id", lambda model_id: model_id)
+    engine_mod = types.ModuleType("workbench.src.run.engine")
+    engine_mod.WorkbenchEngine = FakeEngine
+    monkeypatch.setitem(sys.modules, "workbench.src.run.engine", engine_mod)
+
+    result = evaluation.evaluate_model(
+        CandidateModel(candidate_id="c", model_id="BOOK_PRESSURE", strategy_params={}, thesis="x"),
+        "CPI_2024_09_11_TIGHT",
+        tmp_path,
+        gates=GateThresholds(min_trades=0),
+        cost_config={"commission_per_trade": 1.25},
+    )
+
+    assert result.num_trades == 4
+    assert result.cost_breakdown["commission"] == pytest.approx(5.0)
+    assert result.net_pnl == pytest.approx(-5.0)
+    assert result.tail_loss == pytest.approx(-5.0)
+
+
+def test_evaluate_model_no_loss_tail_ratio_passes_gate(tmp_path, monkeypatch):
+    import math
+    import sys
+    import types
+
+    import research_pipeline.evaluation as evaluation
+    from research_pipeline.types import CandidateModel, GateThresholds
+
+    class FakeEngine:
+        def __init__(self, repo_root):
+            self.repo_root = repo_root
+
+        def run(self, *args, **kwargs):
+            return {
+                "report": {"net_pnl": 6.0, "num_trades": 3, "pnl_series": [1.0, 2.0, 3.0]},
+                "diagnostics": {"win_rate": 1.0, "expectancy": 2.0},
+            }
+
+    monkeypatch.setattr(evaluation, "resolve_model_id", lambda model_id: model_id)
+    engine_mod = types.ModuleType("workbench.src.run.engine")
+    engine_mod.WorkbenchEngine = FakeEngine
+    monkeypatch.setitem(sys.modules, "workbench.src.run.engine", engine_mod)
+
+    result = evaluation.evaluate_model(
+        CandidateModel(candidate_id="c", model_id="BOOK_PRESSURE", strategy_params={}, thesis="x"),
+        "CPI_2024_09_11_TIGHT",
+        tmp_path,
+        gates=GateThresholds(min_tail_ratio=1.0),
+    )
+
+    assert result.tail_ratio == math.inf
+    assert result.passes_all_gates()
 
 
 def test_build_knowledge_graph_and_persist_idempotent(tmp_path, monkeypatch):

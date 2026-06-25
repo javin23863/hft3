@@ -28,6 +28,7 @@ PHASE_ORDER: List[str] = [
     "regate-manifest",
     "vast-launch",
     "post-screen",
+    "edge-evaluation",
 ]
 
 # ponytail: cumulative allow-list per phase id (repo-relative paths or prefixes ending /)
@@ -70,6 +71,26 @@ PHASE_ALLOWED: Dict[str, List[str]] = {
         "scripts/aggregate_vbt_promoted_ids.py",
         "scripts/run_hftbacktest_realism.py",
         "runtime/reports/vbt_full_promoted_ids.json",
+    ],
+    "edge-evaluation": [
+        "config/autoresearch/default.yaml",
+        "config/research_pipeline/default_runtime.json",
+        "docs/ai/PONYTAIL.md",
+        "docs/project/EDGE_TESTING_ALPHA_EVALUATION_PLAN.md",
+        "docs/research/AUTORESEARCH_PIPELINE.md",
+        "packages/research_pipeline/statistics.py",
+        "packages/research_pipeline/power_analysis.py",
+        "packages/research_pipeline/cost_model.py",
+        "packages/research_pipeline/cross_validation.py",
+        "packages/research_pipeline/regime.py",
+        "packages/research_pipeline/types.py",
+        "packages/research_pipeline/evaluation.py",
+        "packages/research_pipeline/deployment.py",
+        "scripts/run_pipeline.py",
+        "scripts/run_plan_drift_review.py",
+        "tests/test_research_pipeline.py",
+        "tests/test_research_pipeline_edge_modules.py",
+        "tests/test_plan_drift_review.py",
     ],
 }
 

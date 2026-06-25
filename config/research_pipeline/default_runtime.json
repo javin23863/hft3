@@ -88,5 +88,35 @@
         "max_drawdown": 1000000000.0
       }
     }
+  },
+  "edge_evaluation": {
+    "statistics": {
+      "min_psr": null,
+      "min_dsr": null,
+      "alpha": 0.05,
+      "power": 0.8,
+      "sr_benchmark": 0.0,
+      "require_sample_size": false,
+      "min_observations": null
+    },
+    "validation": {
+      "cscv": false,
+      "cscv_subsets": 8,
+      "rolling_validation": false,
+      "rolling_window": null,
+      "rolling_step": 1,
+      "max_pbo": null
+    },
+    "cost_model": {
+      "spread_cost": 0.0,
+      "commission_per_trade": 0.0,
+      "slippage_bps": 0.0,
+      "market_impact_coeff": 0.0
+    },
+    "risk": {
+      "min_tail_ratio": null,
+      "max_cvar_95": null,
+      "max_cvar_99": null
+    }
   }
 }

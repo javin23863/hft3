@@ -23,7 +23,16 @@ from typing import Any, Mapping, Sequence
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages"), str(REPO / "apps")]
 
-from research_pipeline.evaluation import evaluate_candidate_events, evaluate_model, parse_event_ids
+from research_pipeline.cross_validation import (
+    combinatorial_symmetric_cross_validation,
+    rolling_window_validation,
+)
+from research_pipeline.evaluation import (
+    evaluate_candidate_events,
+    evaluate_model,
+    parse_event_ids,
+    refresh_selection_bias_metrics,
+)
 from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.parameter_search import SUPPORTED_SEARCH_METHODS
@@ -214,6 +223,36 @@ _DEFAULT_PIPELINE_RUNTIME_CONFIG: dict[str, Any] = {
             },
         },
     },
+    "edge_evaluation": {
+        "statistics": {
+            "min_psr": None,
+            "min_dsr": None,
+            "alpha": 0.05,
+            "power": 0.8,
+            "sr_benchmark": 0.0,
+            "require_sample_size": False,
+            "min_observations": None,
+        },
+        "validation": {
+            "cscv": False,
+            "cscv_subsets": 8,
+            "rolling_validation": False,
+            "rolling_window": None,
+            "rolling_step": 1,
+            "max_pbo": None,
+        },
+        "cost_model": {
+            "spread_cost": 0.0,
+            "commission_per_trade": 0.0,
+            "slippage_bps": 0.0,
+            "market_impact_coeff": 0.0,
+        },
+        "risk": {
+            "min_tail_ratio": None,
+            "max_cvar_95": None,
+            "max_cvar_99": None,
+        },
+    },
 }
 _VECTORBT_SCOPE_CHOICES = {
     "pilot",
@@ -324,6 +363,33 @@ def _float_default(value: Any, *, name: str) -> float:
         raise ValueError(f"{name} must be numeric") from exc
     if not math.isfinite(parsed):
         raise ValueError(f"{name} must be finite")
+    return parsed
+
+
+def _optional_float_default(value: Any, *, name: str) -> float | None:
+    if value is None:
+        return None
+    return _float_default(value, name=name)
+
+
+def _optional_nonnegative_float(value: Any, *, name: str) -> float | None:
+    parsed = _optional_float_default(value, name=name)
+    if parsed is not None and parsed < 0.0:
+        raise ValueError(f"{name} must be nonnegative")
+    return parsed
+
+
+def _probability_default(value: Any, *, name: str) -> float:
+    parsed = _float_default(value, name=name)
+    if parsed <= 0.0 or parsed >= 1.0:
+        raise ValueError(f"{name} must be between 0 and 1")
+    return parsed
+
+
+def _optional_probability_threshold(value: Any, *, name: str) -> float | None:
+    parsed = _optional_float_default(value, name=name)
+    if parsed is not None and not 0.0 <= parsed <= 1.0:
+        raise ValueError(f"{name} must be between 0 and 1")
     return parsed
 
 
@@ -534,6 +600,35 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
     rl_config = _section(config, "rl_training")
     evaluation_config = _section(config, "evaluation")
     gate_config = _section(config, "gate_profiles")
+    edge_config = _section(config, "edge_evaluation")
+    edge_stats = _section(edge_config, "statistics")
+    edge_validation = _section(edge_config, "validation")
+    edge_cost = _section(edge_config, "cost_model")
+    edge_risk = _section(edge_config, "risk")
+    for attr in (
+        "min_psr",
+        "min_dsr",
+        "alpha",
+        "power",
+        "sr_benchmark",
+        "require_sample_size",
+        "min_observations",
+        "cscv",
+        "cscv_subsets",
+        "rolling_validation",
+        "rolling_window",
+        "rolling_step",
+        "max_pbo",
+        "spread_cost",
+        "commission_per_trade",
+        "slippage_bps",
+        "market_impact_coeff",
+        "min_tail_ratio",
+        "max_cvar_95",
+        "max_cvar_99",
+    ):
+        if not hasattr(args, attr):
+            setattr(args, attr, None)
 
     if args.max_candidates is None:
         args.max_candidates = config.get("max_candidates", 5)
@@ -625,6 +720,110 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
     profile = profiles[args.gate_profile]
     _apply_gate_profile_thresholds(args, profile)
     _gate_thresholds_from_args(args)
+
+    if args.min_psr is None:
+        args.min_psr = _optional_probability_threshold(edge_stats.get("min_psr"), name="edge_evaluation.statistics.min_psr")
+    else:
+        args.min_psr = _optional_probability_threshold(args.min_psr, name="edge_evaluation.statistics.min_psr")
+    if args.min_dsr is None:
+        args.min_dsr = _optional_probability_threshold(edge_stats.get("min_dsr"), name="edge_evaluation.statistics.min_dsr")
+    else:
+        args.min_dsr = _optional_probability_threshold(args.min_dsr, name="edge_evaluation.statistics.min_dsr")
+    if args.alpha is None:
+        args.alpha = edge_stats.get("alpha", 0.05)
+    args.alpha = _probability_default(args.alpha, name="edge_evaluation.statistics.alpha")
+    if args.power is None:
+        args.power = edge_stats.get("power", 0.8)
+    args.power = _probability_default(args.power, name="edge_evaluation.statistics.power")
+    if args.sr_benchmark is None:
+        args.sr_benchmark = edge_stats.get("sr_benchmark", 0.0)
+    args.sr_benchmark = _float_default(args.sr_benchmark, name="edge_evaluation.statistics.sr_benchmark")
+    if args.require_sample_size is None:
+        args.require_sample_size = edge_stats.get("require_sample_size", False)
+    args.require_sample_size = _bool_default(
+        args.require_sample_size,
+        name="edge_evaluation.statistics.require_sample_size",
+    )
+    if args.min_observations is None:
+        args.min_observations = _optional_positive_int(
+            edge_stats.get("min_observations"),
+            name="edge_evaluation.statistics.min_observations",
+        )
+    else:
+        args.min_observations = _positive_int(
+            args.min_observations,
+            name="edge_evaluation.statistics.min_observations",
+        )
+
+    if args.cscv is None:
+        args.cscv = edge_validation.get("cscv", False)
+    args.cscv = _bool_default(args.cscv, name="edge_evaluation.validation.cscv")
+    if args.cscv_subsets is None:
+        args.cscv_subsets = edge_validation.get("cscv_subsets", 8)
+    args.cscv_subsets = _positive_int(args.cscv_subsets, name="edge_evaluation.validation.cscv_subsets")
+    if args.rolling_validation is None:
+        args.rolling_validation = edge_validation.get("rolling_validation", False)
+    args.rolling_validation = _bool_default(
+        args.rolling_validation,
+        name="edge_evaluation.validation.rolling_validation",
+    )
+    if args.rolling_window is None:
+        args.rolling_window = _optional_positive_int(
+            edge_validation.get("rolling_window"),
+            name="edge_evaluation.validation.rolling_window",
+        )
+    else:
+        args.rolling_window = _positive_int(
+            args.rolling_window,
+            name="edge_evaluation.validation.rolling_window",
+        )
+    if args.rolling_step is None:
+        args.rolling_step = edge_validation.get("rolling_step", 1)
+    args.rolling_step = _positive_int(args.rolling_step, name="edge_evaluation.validation.rolling_step")
+    if args.max_pbo is None:
+        args.max_pbo = _optional_probability_threshold(edge_validation.get("max_pbo"), name="edge_evaluation.validation.max_pbo")
+    else:
+        args.max_pbo = _optional_probability_threshold(args.max_pbo, name="edge_evaluation.validation.max_pbo")
+    if args.cscv and args.cscv_subsets % 2:
+        raise ValueError("edge_evaluation.validation.cscv_subsets must be even when CSCV is enabled")
+
+    if args.spread_cost is None:
+        args.spread_cost = edge_cost.get("spread_cost", 0.0)
+    args.spread_cost = _optional_nonnegative_float(args.spread_cost, name="edge_evaluation.cost_model.spread_cost")
+    if args.commission_per_trade is None:
+        args.commission_per_trade = edge_cost.get("commission_per_trade", 0.0)
+    args.commission_per_trade = _optional_nonnegative_float(
+        args.commission_per_trade,
+        name="edge_evaluation.cost_model.commission_per_trade",
+    )
+    if args.slippage_bps is None:
+        args.slippage_bps = edge_cost.get("slippage_bps", 0.0)
+    args.slippage_bps = _optional_nonnegative_float(args.slippage_bps, name="edge_evaluation.cost_model.slippage_bps")
+    if args.market_impact_coeff is None:
+        args.market_impact_coeff = edge_cost.get("market_impact_coeff", 0.0)
+    args.market_impact_coeff = _optional_nonnegative_float(
+        args.market_impact_coeff,
+        name="edge_evaluation.cost_model.market_impact_coeff",
+    )
+
+    if args.min_tail_ratio is None:
+        args.min_tail_ratio = _optional_nonnegative_float(
+            edge_risk.get("min_tail_ratio"),
+            name="edge_evaluation.risk.min_tail_ratio",
+        )
+    else:
+        args.min_tail_ratio = _optional_nonnegative_float(
+            args.min_tail_ratio,
+            name="edge_evaluation.risk.min_tail_ratio",
+        )
+    if args.max_cvar_95 is None:
+        args.max_cvar_95 = _optional_nonnegative_float(edge_risk.get("max_cvar_95"), name="edge_evaluation.risk.max_cvar_95")
+    else:
+        args.max_cvar_95 = _optional_nonnegative_float(args.max_cvar_95, name="edge_evaluation.risk.max_cvar_95")
+    if args.max_cvar_99 is None:
+        args.max_cvar_99 = _optional_nonnegative_float(edge_risk.get("max_cvar_99"), name="edge_evaluation.risk.max_cvar_99")
+    else:
+        args.max_cvar_99 = _optional_nonnegative_float(args.max_cvar_99, name="edge_evaluation.risk.max_cvar_99")
 
 
 class _PipelineJsonFormatter(logging.Formatter):
@@ -751,6 +950,36 @@ def _pipeline_config_receipt(
             "threshold_cli_overrides": dict(getattr(args, "_gate_threshold_cli_overrides", {}) or {}),
             "profile_cli_override": bool(getattr(args, "_gate_profile_cli_override", False)),
             "candidate_gate_plan": copy.deepcopy(dict(gate_profile_plan or {})) or None,
+        },
+        "edge_evaluation": {
+            "statistics": {
+                "min_psr": args.min_psr,
+                "min_dsr": args.min_dsr,
+                "alpha": args.alpha,
+                "power": args.power,
+                "sr_benchmark": args.sr_benchmark,
+                "require_sample_size": args.require_sample_size,
+                "min_observations": args.min_observations,
+            },
+            "validation": {
+                "cscv": args.cscv,
+                "cscv_subsets": args.cscv_subsets,
+                "rolling_validation": args.rolling_validation,
+                "rolling_window": args.rolling_window,
+                "rolling_step": args.rolling_step,
+                "max_pbo": args.max_pbo,
+            },
+            "cost_model": {
+                "spread_cost": args.spread_cost,
+                "commission_per_trade": args.commission_per_trade,
+                "slippage_bps": args.slippage_bps,
+                "market_impact_coeff": args.market_impact_coeff,
+            },
+            "risk": {
+                "min_tail_ratio": args.min_tail_ratio,
+                "max_cvar_95": args.max_cvar_95,
+                "max_cvar_99": args.max_cvar_99,
+            },
         },
     }
     hash_payload = {
@@ -935,6 +1164,182 @@ def _optional_float(value: str | None) -> float | None:
 
 def _deployment_allowed(idea_set_enabled: bool, results: list[EvaluationResult]) -> bool:
     return (not idea_set_enabled) or any(r.passes_all_gates() for r in results)
+
+
+def _edge_gate_thresholds(
+    args: argparse.Namespace,
+    *,
+    base: GateThresholds | None = None,
+) -> GateThresholds:
+    base = base or _gate_thresholds_from_args(args)
+    return GateThresholds(
+        min_net_pnl=base.min_net_pnl,
+        min_trades=base.min_trades,
+        max_tail_loss=base.max_tail_loss,
+        min_win_rate=base.min_win_rate,
+        min_sharpe=base.min_sharpe,
+        min_sortino=base.min_sortino,
+        max_drawdown=base.max_drawdown,
+        min_psr=args.min_psr,
+        min_dsr=args.min_dsr,
+        max_pbo=args.max_pbo,
+        min_tail_ratio=args.min_tail_ratio,
+        max_cvar_95=args.max_cvar_95,
+        max_cvar_99=args.max_cvar_99,
+        require_sample_size=bool(args.require_sample_size),
+        min_observations=args.min_observations,
+    )
+
+
+def _edge_cost_config(args: argparse.Namespace) -> dict[str, float]:
+    return {
+        "spread_cost": float(args.spread_cost or 0.0),
+        "commission_per_trade": float(args.commission_per_trade or 0.0),
+        "slippage_bps": float(args.slippage_bps or 0.0),
+        "market_impact_coeff": float(args.market_impact_coeff or 0.0),
+    }
+
+
+def _sample_variance(values: list[float]) -> float:
+    finite = [float(value) for value in values if math.isfinite(float(value))]
+    if len(finite) < 2:
+        return 0.0
+    avg = sum(finite) / len(finite)
+    return sum((value - avg) ** 2 for value in finite) / (len(finite) - 1)
+
+
+def _candidate_pnl_matrix(results: list[EvaluationResult]) -> list[list[float]]:
+    series = [list(result.pnl_series) for result in results if result.pnl_series]
+    if len(series) < 2:
+        return []
+    width = min(len(row) for row in series)
+    if width < 2:
+        return []
+    return [[row[idx] for row in series] for idx in range(width)]
+
+
+def _edge_validation_summary(results: list[EvaluationResult], args: argparse.Namespace) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    if args.cscv:
+        matrix = _candidate_pnl_matrix(results)
+        if matrix:
+            summary["cscv"] = combinatorial_symmetric_cross_validation(
+                matrix,
+                subsets=args.cscv_subsets,
+            )
+        else:
+            summary["cscv"] = {
+                "status": "skipped",
+                "reason": "requires at least two candidates with at least two aligned observations",
+            }
+    if args.rolling_validation:
+        if args.rolling_window is None:
+            summary["rolling_validation"] = {
+                "status": "skipped",
+                "reason": "rolling_window_not_configured",
+            }
+        else:
+            summary["rolling_validation"] = {
+                result.candidate.candidate_id: rolling_window_validation(
+                    result.pnl_series,
+                    window=args.rolling_window,
+                    step=args.rolling_step,
+                )
+                for result in results
+                if result.pnl_series
+            }
+    return summary
+
+
+def _apply_validation_summary_to_results(
+    results: list[EvaluationResult],
+    validation_summary: Mapping[str, Any],
+) -> None:
+    cscv = validation_summary.get("cscv")
+    if not isinstance(cscv, Mapping) or cscv.get("status") == "skipped":
+        return
+    for result in results:
+        result.pbo = _optional_float(str(cscv.get("pbo"))) if cscv.get("pbo") is not None else None
+        result.performance_degradation = (
+            _optional_float(str(cscv.get("median_performance_degradation")))
+            if cscv.get("median_performance_degradation") is not None
+            else None
+        )
+        result.probability_of_loss = (
+            _optional_float(str(cscv.get("probability_of_loss")))
+            if cscv.get("probability_of_loss") is not None
+            else None
+        )
+
+
+def _write_edge_evaluation_artifacts(
+    artifact_dir: Path,
+    *,
+    generated_count: int,
+    results: list[EvaluationResult],
+    trial_sr_variance: float,
+    validation_summary: Mapping[str, Any],
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    num_trials_payload = {
+        "schema_version": "hft3_num_trials_v1",
+        "generated_candidates": generated_count,
+        "evaluated_candidates": len(results),
+        "num_trials": generated_count,
+        "trial_sr_variance": trial_sr_variance,
+        "candidate_sharpes": {
+            result.candidate.candidate_id: result.sharpe for result in results
+        },
+    }
+    num_trials_path = _write_json(artifact_dir / "num_trials.json", num_trials_payload)
+    edge_payload = {
+        "schema_version": "hft3_edge_evaluation_summary_v1",
+        "statistics": {
+            "min_psr": args.min_psr,
+            "min_dsr": args.min_dsr,
+            "alpha": args.alpha,
+            "power": args.power,
+            "sr_benchmark": args.sr_benchmark,
+            "require_sample_size": args.require_sample_size,
+            "min_observations": args.min_observations,
+        },
+        "cost_model": _edge_cost_config(args),
+        "validation": dict(validation_summary),
+        "risk": {
+            "min_tail_ratio": args.min_tail_ratio,
+            "max_cvar_95": args.max_cvar_95,
+            "max_cvar_99": args.max_cvar_99,
+        },
+        "results": [
+            {
+                "candidate_id": result.candidate.candidate_id,
+                "model_id": result.candidate.model_id,
+                "gross_pnl": result.gross_pnl,
+                "net_pnl": result.net_pnl,
+                "cost_total": result.cost_total,
+                "cost_breakdown": result.cost_breakdown,
+                "num_trades": result.num_trades,
+                "sharpe": result.sharpe,
+                "psr": result.psr,
+                "dsr": result.dsr,
+                "adjusted_p_value": result.adjusted_p_value,
+                "pbo": result.pbo,
+                "sample_size_pass": result.sample_size_pass,
+                "required_sample_size": result.required_sample_size,
+                "cvar_95": result.cvar_95,
+                "cvar_99": result.cvar_99,
+                "tail_ratio": result.tail_ratio,
+                "passes": result.passes_all_gates(),
+                "error": result.error,
+            }
+            for result in results
+        ],
+    }
+    edge_path = _write_json(artifact_dir / "edge_evaluation_summary.json", edge_payload)
+    return {
+        "num_trials_path": str(num_trials_path),
+        "edge_evaluation_summary_path": str(edge_path),
+    }
 
 
 def _idea_set_missing_prefilter(
@@ -1366,17 +1771,57 @@ def _run_rl_training_stage(
 
 
 def _evaluate_candidate_worker(
-    job: tuple[CandidateModel, tuple[str, ...], Path, Path | None, GateThresholds],
+    job: tuple[
+        CandidateModel,
+        tuple[str, ...],
+        Path,
+        Path | None,
+        GateThresholds,
+        int,
+        float,
+        float,
+        float,
+        Mapping[str, Any],
+    ],
 ) -> EvaluationResult:
-    candidate, event_ids, repo_root, chi404_summary, gates = job
+    (
+        candidate,
+        event_ids,
+        repo_root,
+        chi404_summary,
+        gates,
+        num_trials,
+        sr_benchmark,
+        alpha,
+        power,
+        cost_config,
+    ) = job
     if len(event_ids) == 1:
-        return evaluate_model(candidate, event_ids[0], repo_root, chi404_summary=chi404_summary, gates=gates)
+        return evaluate_model(
+            candidate,
+            event_ids[0],
+            repo_root,
+            chi404_summary=chi404_summary,
+            gates=gates,
+            num_trials=num_trials,
+            trial_sr_variance=0.0,
+            sr_benchmark=sr_benchmark,
+            alpha=alpha,
+            power=power,
+            cost_config=cost_config,
+        )
     return evaluate_candidate_events(
         candidate,
         event_ids,
         repo_root,
         chi404_summary=chi404_summary,
         gates=gates,
+        num_trials=num_trials,
+        trial_sr_variance=0.0,
+        sr_benchmark=sr_benchmark,
+        alpha=alpha,
+        power=power,
+        cost_config=cost_config,
     )
 
 
@@ -1389,6 +1834,11 @@ def _evaluate_candidates_batch(
     chi404_summary: Path | None,
     gates_by_candidate_id: Mapping[str, GateThresholds],
     workers: int,
+    num_trials: int | None = None,
+    sr_benchmark: float = 0.0,
+    alpha: float = 0.05,
+    power: float = 0.8,
+    cost_config: Mapping[str, Any] | None = None,
 ) -> list[EvaluationResult]:
     workers = _positive_int(workers, name="evaluation.workers")
     raw_event_ids: str | Sequence[str]
@@ -1399,8 +1849,20 @@ def _evaluate_candidates_batch(
     else:
         raw_event_ids = []
     parsed_event_ids = tuple(parse_event_ids(raw_event_ids))
+    effective_num_trials = num_trials if num_trials is not None else len(candidates)
     jobs = [
-        (candidate, parsed_event_ids, repo_root, chi404_summary, gates_by_candidate_id[candidate.candidate_id])
+        (
+            candidate,
+            parsed_event_ids,
+            repo_root,
+            chi404_summary,
+            gates_by_candidate_id[candidate.candidate_id],
+            effective_num_trials,
+            sr_benchmark,
+            alpha,
+            power,
+            dict(cost_config or {}),
+        )
         for candidate in candidates
     ]
     if workers == 1 or len(jobs) <= 1:
@@ -1439,6 +1901,36 @@ def _main_impl(
     parser.add_argument("--dry-run", action="store_true", help="Parse and generate only")
     parser.add_argument("--no-llm", action="store_true", help="Heuristic hypothesis parse only")
     parser.add_argument("--repo-root", type=Path, default=REPO)
+    parser.add_argument("--min-psr", type=float, default=None, help="Minimum probabilistic Sharpe ratio gate")
+    parser.add_argument("--min-dsr", type=float, default=None, help="Minimum deflated Sharpe ratio gate")
+    parser.add_argument("--alpha", type=float, default=None, help="Significance level for power/sample-size checks")
+    parser.add_argument("--power", type=float, default=None, help="Statistical power target for sample-size checks")
+    parser.add_argument("--sr-benchmark", type=float, default=None, help="Sharpe benchmark for PSR/DSR")
+    parser.add_argument(
+        "--require-sample-size",
+        action="store_true",
+        default=None,
+        help="Fail gates when the power-analysis sample-size check fails",
+    )
+    parser.add_argument("--min-observations", type=int, default=None, help="Minimum PnL observations gate")
+    parser.add_argument("--cscv", action="store_true", default=None, help="Enable CSCV/PBO validation")
+    parser.add_argument("--cscv-subsets", type=int, default=None, help="Even number of CSCV time subsets")
+    parser.add_argument(
+        "--rolling-validation",
+        action="store_true",
+        default=None,
+        help="Enable rolling window validation summaries",
+    )
+    parser.add_argument("--rolling-window", type=int, default=None, help="Rolling validation window length")
+    parser.add_argument("--rolling-step", type=int, default=None, help="Rolling validation step length")
+    parser.add_argument("--max-pbo", type=float, default=None, help="Maximum probability of backtest overfitting gate")
+    parser.add_argument("--spread-cost", type=float, default=None, help="Per-trade spread cost estimate")
+    parser.add_argument("--commission-per-trade", type=float, default=None, help="Per-trade commission/fee estimate")
+    parser.add_argument("--slippage-bps", type=float, default=None, help="Slippage estimate in basis points")
+    parser.add_argument("--market-impact-coeff", type=float, default=None, help="Square-root market-impact coefficient")
+    parser.add_argument("--min-tail-ratio", type=float, default=None, help="Minimum tail ratio gate")
+    parser.add_argument("--max-cvar-95", type=float, default=None, help="Maximum CVaR 95 loss gate")
+    parser.add_argument("--max-cvar-99", type=float, default=None, help="Maximum CVaR 99 loss gate")
     parser.add_argument("--vectorbt", action="store_true", help="Enable VectorBT pre-filter before HftBacktest")
     parser.add_argument(
         "--vectorbt-only",
@@ -2327,6 +2819,8 @@ def _main_impl(
     if chi404 is None:
         print("Warning: no latency data available; backtest will run without CHI404 latency", file=sys.stderr)
 
+    generated_count = len(candidates)
+    cost_config = _edge_cost_config(args)
     gate_profile_plan = _candidate_gate_profile_plan(
         args,
         runtime_config,
@@ -2343,9 +2837,13 @@ def _main_impl(
     )
     logger.info("gate_profile_selected", extra={"payload": gate_profile_plan})
     _update_active_run_failure_context(failure_context, gate_profile_plan=gate_profile_plan)
-    gates_by_candidate_id = {
+    base_gates_by_candidate_id = {
         candidate_id: _gate_thresholds_from_values(resolution["thresholds"])
         for candidate_id, resolution in gate_profile_plan["by_candidate"].items()
+    }
+    gates_by_candidate_id = {
+        candidate_id: _edge_gate_thresholds(args, base=base_gates)
+        for candidate_id, base_gates in base_gates_by_candidate_id.items()
     }
     for cand in candidates:
         gate_profile = gate_profile_plan["by_candidate"][cand.candidate_id]["profile"]
@@ -2360,6 +2858,12 @@ def _main_impl(
                 "candidate_count": len(candidates),
                 "workers": args.evaluation_workers,
                 "gate_profile_plan": gate_profile_plan,
+                "edge_evaluation": {
+                    "min_psr": args.min_psr,
+                    "min_dsr": args.min_dsr,
+                    "max_pbo": args.max_pbo,
+                    "require_sample_size": args.require_sample_size,
+                },
             }
         },
     )
@@ -2370,11 +2874,42 @@ def _main_impl(
         chi404_summary=chi404,
         gates_by_candidate_id=gates_by_candidate_id,
         workers=args.evaluation_workers,
+        num_trials=generated_count,
+        sr_benchmark=args.sr_benchmark,
+        alpha=args.alpha,
+        power=args.power,
+        cost_config=cost_config,
     )
     _emit_risk_metric_gate_warnings(results)
+    sharpes = [result.sharpe for result in results if result.sharpe is not None]
+    trial_sr_variance = _sample_variance([float(value) for value in sharpes])
+    validation_summary = _edge_validation_summary(results, args)
+    _apply_validation_summary_to_results(results, validation_summary)
+    for result in results:
+        refresh_selection_bias_metrics(
+            result,
+            num_trials=generated_count,
+            trial_sr_variance=trial_sr_variance,
+            sr_benchmark=args.sr_benchmark,
+        )
+    edge_paths = _write_edge_evaluation_artifacts(
+        artifact_dir,
+        generated_count=generated_count,
+        results=results,
+        trial_sr_variance=trial_sr_variance,
+        validation_summary=validation_summary,
+        args=args,
+    )
     logger.info(
         "candidate_evaluation_complete",
-        extra={"payload": {"result_count": len(results), "workers": args.evaluation_workers}},
+        extra={
+            "payload": {
+                "result_count": len(results),
+                "workers": args.evaluation_workers,
+                "trial_sr_variance": trial_sr_variance,
+                "edge_paths": edge_paths,
+            }
+        },
     )
 
     if idea_packet:
@@ -2430,6 +2965,12 @@ def _main_impl(
         "report": report.to_dict(),
         "response_packet": response,
         "gate_profile_plan": gate_profile_plan,
+        "edge_evaluation": {
+            "num_trials": generated_count,
+            "trial_sr_variance": trial_sr_variance,
+            "validation": validation_summary,
+            "paths": edge_paths,
+        },
     }
     if document_cache:
         payload["document_cache"] = document_cache
