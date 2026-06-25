@@ -332,7 +332,7 @@ def _from_llm_dict(thesis: str, data: Dict[str, Any]) -> ParsedHypothesis:
 
 
 def _from_hypothesis_packet(thesis: str, data: Dict[str, Any]) -> ParsedHypothesis:
-    return _parse_dict_common(thesis, data, "openai_compatible")
+    return _parse_dict_common(thesis, data, "hypothesis_packet")
 
 
 def parse_hypothesis(

@@ -23,7 +23,7 @@ from typing import Any, Mapping, Sequence
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages"), str(REPO / "apps")]
 
-from research_pipeline.evaluation import evaluate_model
+from research_pipeline.evaluation import evaluate_candidate_events, evaluate_model, parse_event_ids
 from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.parameter_search import SUPPORTED_SEARCH_METHODS
@@ -190,18 +190,27 @@ _DEFAULT_PIPELINE_RUNTIME_CONFIG: dict[str, Any] = {
                 "min_trades": 0,
                 "max_tail_loss": 1000000000.0,
                 "min_win_rate": 0.0,
+                "min_sharpe": -1000000000.0,
+                "min_sortino": -1000000000.0,
+                "max_drawdown": 1000000000.0,
             },
             "high_volatility": {
                 "min_net_pnl": 0.0,
                 "min_trades": 10,
                 "max_tail_loss": 5000.0,
                 "min_win_rate": 0.45,
+                "min_sharpe": -1000000000.0,
+                "min_sortino": -1000000000.0,
+                "max_drawdown": 1000000000.0,
             },
             "low_volatility": {
                 "min_net_pnl": 0.0,
                 "min_trades": 5,
                 "max_tail_loss": 2500.0,
                 "min_win_rate": 0.40,
+                "min_sharpe": -1000000000.0,
+                "min_sortino": -1000000000.0,
+                "max_drawdown": 1000000000.0,
             },
         },
     },
@@ -348,6 +357,9 @@ def _gate_thresholds_from_args(args: argparse.Namespace) -> GateThresholds:
         min_trades=_nonnegative_int(args.gate_min_trades, name="gate_profiles.min_trades"),
         max_tail_loss=_float_default(args.gate_max_tail_loss, name="gate_profiles.max_tail_loss"),
         min_win_rate=_float_default(args.gate_min_win_rate, name="gate_profiles.min_win_rate"),
+        min_sharpe=_float_default(args.gate_min_sharpe, name="gate_profiles.min_sharpe"),
+        min_sortino=_float_default(args.gate_min_sortino, name="gate_profiles.min_sortino"),
+        max_drawdown=_float_default(args.gate_max_drawdown, name="gate_profiles.max_drawdown"),
     )
 
 
@@ -373,6 +385,9 @@ def _apply_gate_profile_thresholds(
     args.gate_min_trades = thresholds["min_trades"]
     args.gate_max_tail_loss = thresholds["max_tail_loss"]
     args.gate_min_win_rate = thresholds["min_win_rate"]
+    args.gate_min_sharpe = thresholds["min_sharpe"]
+    args.gate_min_sortino = thresholds["min_sortino"]
+    args.gate_max_drawdown = thresholds["max_drawdown"]
 
 
 def _gate_threshold_values(args: argparse.Namespace, profile: Mapping[str, Any]) -> dict[str, Any]:
@@ -398,6 +413,21 @@ def _gate_threshold_values(args: argparse.Namespace, profile: Mapping[str, Any])
             if cli_overrides.get("min_win_rate")
             else profile.get("min_win_rate", 0.0)
         ),
+        "min_sharpe": (
+            getattr(args, "gate_min_sharpe", None)
+            if cli_overrides.get("min_sharpe")
+            else profile.get("min_sharpe", -1e9)
+        ),
+        "min_sortino": (
+            getattr(args, "gate_min_sortino", None)
+            if cli_overrides.get("min_sortino")
+            else profile.get("min_sortino", -1e9)
+        ),
+        "max_drawdown": (
+            getattr(args, "gate_max_drawdown", None)
+            if cli_overrides.get("max_drawdown")
+            else profile.get("max_drawdown", 1e9)
+        ),
     }
 
 
@@ -407,6 +437,9 @@ def _gate_thresholds_from_values(values: Mapping[str, Any]) -> GateThresholds:
         min_trades=_nonnegative_int(values.get("min_trades", 0), name="gate_profiles.min_trades"),
         max_tail_loss=_float_default(values.get("max_tail_loss", 1e9), name="gate_profiles.max_tail_loss"),
         min_win_rate=_float_default(values.get("min_win_rate", 0.0), name="gate_profiles.min_win_rate"),
+        min_sharpe=_float_default(values.get("min_sharpe", -1e9), name="gate_profiles.min_sharpe"),
+        min_sortino=_float_default(values.get("min_sortino", -1e9), name="gate_profiles.min_sortino"),
+        max_drawdown=_float_default(values.get("max_drawdown", 1e9), name="gate_profiles.max_drawdown"),
     )
 
 
@@ -461,6 +494,9 @@ def _apply_registry_gate_profile(
     args.gate_min_trades = thresholds["min_trades"]
     args.gate_max_tail_loss = thresholds["max_tail_loss"]
     args.gate_min_win_rate = thresholds["min_win_rate"]
+    args.gate_min_sharpe = thresholds["min_sharpe"]
+    args.gate_min_sortino = thresholds["min_sortino"]
+    args.gate_max_drawdown = thresholds["max_drawdown"]
     _gate_thresholds_from_args(args)
     return resolution
 
@@ -577,6 +613,9 @@ def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[s
         "min_trades": getattr(args, "gate_min_trades", None) is not None,
         "max_tail_loss": getattr(args, "gate_max_tail_loss", None) is not None,
         "min_win_rate": getattr(args, "gate_min_win_rate", None) is not None,
+        "min_sharpe": getattr(args, "gate_min_sharpe", None) is not None,
+        "min_sortino": getattr(args, "gate_min_sortino", None) is not None,
+        "max_drawdown": getattr(args, "gate_max_drawdown", None) is not None,
     }
     if getattr(args, "gate_profile", None) is None:
         args.gate_profile = str(gate_config.get("default_profile") or "normal")
@@ -705,6 +744,9 @@ def _pipeline_config_receipt(
                 "min_trades": getattr(args, "gate_min_trades", 0),
                 "max_tail_loss": getattr(args, "gate_max_tail_loss", 1e9),
                 "min_win_rate": getattr(args, "gate_min_win_rate", 0.0),
+                "min_sharpe": getattr(args, "gate_min_sharpe", -1e9),
+                "min_sortino": getattr(args, "gate_min_sortino", -1e9),
+                "max_drawdown": getattr(args, "gate_max_drawdown", 1e9),
             },
             "threshold_cli_overrides": dict(getattr(args, "_gate_threshold_cli_overrides", {}) or {}),
             "profile_cli_override": bool(getattr(args, "_gate_profile_cli_override", False)),
@@ -1323,29 +1365,57 @@ def _run_rl_training_stage(
     return dict(artifact), path
 
 
-def _evaluate_candidate_worker(job: tuple[CandidateModel, str, Path, Path | None, GateThresholds]) -> EvaluationResult:
-    candidate, event_id, repo_root, chi404_summary, gates = job
-    return evaluate_model(candidate, event_id, repo_root, chi404_summary=chi404_summary, gates=gates)
+def _evaluate_candidate_worker(
+    job: tuple[CandidateModel, tuple[str, ...], Path, Path | None, GateThresholds],
+) -> EvaluationResult:
+    candidate, event_ids, repo_root, chi404_summary, gates = job
+    if len(event_ids) == 1:
+        return evaluate_model(candidate, event_ids[0], repo_root, chi404_summary=chi404_summary, gates=gates)
+    return evaluate_candidate_events(
+        candidate,
+        event_ids,
+        repo_root,
+        chi404_summary=chi404_summary,
+        gates=gates,
+    )
 
 
 def _evaluate_candidates_batch(
     candidates: Sequence[CandidateModel],
     *,
-    event_id: str,
+    event_id: str | None = None,
+    event_ids: Sequence[str] | None = None,
     repo_root: Path,
     chi404_summary: Path | None,
     gates_by_candidate_id: Mapping[str, GateThresholds],
     workers: int,
 ) -> list[EvaluationResult]:
     workers = _positive_int(workers, name="evaluation.workers")
+    raw_event_ids: str | Sequence[str]
+    if event_ids is not None:
+        raw_event_ids = event_ids
+    elif event_id is not None:
+        raw_event_ids = event_id
+    else:
+        raw_event_ids = []
+    parsed_event_ids = tuple(parse_event_ids(raw_event_ids))
     jobs = [
-        (candidate, event_id, repo_root, chi404_summary, gates_by_candidate_id[candidate.candidate_id])
+        (candidate, parsed_event_ids, repo_root, chi404_summary, gates_by_candidate_id[candidate.candidate_id])
         for candidate in candidates
     ]
     if workers == 1 or len(jobs) <= 1:
         return [_evaluate_candidate_worker(job) for job in jobs]
     with ProcessPoolExecutor(max_workers=workers) as executor:
         return list(executor.map(_evaluate_candidate_worker, jobs))
+
+
+def _emit_risk_metric_gate_warnings(results: Sequence[EvaluationResult]) -> None:
+    for result in results:
+        if result.risk_metric_warning:
+            print(
+                f"Warning: {result.candidate.candidate_id} {result.risk_metric_warning}",
+                file=sys.stderr,
+            )
 
 
 def _main_impl(
@@ -1458,6 +1528,27 @@ def _main_impl(
     parser.add_argument("--gate-max-tail-loss", type=float, default=None)
     parser.add_argument("--gate-min-win-rate", type=float, default=None)
     parser.add_argument(
+        "--gate-min-sharpe",
+        "--min-sharpe",
+        dest="gate_min_sharpe",
+        type=float,
+        default=None,
+    )
+    parser.add_argument(
+        "--gate-min-sortino",
+        "--min-sortino",
+        dest="gate_min_sortino",
+        type=float,
+        default=None,
+    )
+    parser.add_argument(
+        "--gate-max-drawdown",
+        "--max-drawdown",
+        dest="gate_max_drawdown",
+        type=float,
+        default=None,
+    )
+    parser.add_argument(
         "--orchestrator-result",
         action="store_true",
         help="Emit single-line HFT3_PIPELINE_RESULT for paid-screen worker subprocesses",
@@ -1489,7 +1580,20 @@ def _main_impl(
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
+    try:
+        event_ids = parse_event_ids(args.event_id)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    primary_event_id = event_ids[0]
+
     if args.autoresearch:
+        if len(event_ids) > 1:
+            print(
+                "Error: --autoresearch accepts exactly one event id; multi-event autoresearch is not wired yet.",
+                file=sys.stderr,
+            )
+            return 2
         from research_pipeline.generation_loop import (
             load_autoresearch_config,
             make_default_robustness_fn,
@@ -1530,7 +1634,7 @@ def _main_impl(
         code, report = run_autoresearch_loop(
             repo_root=repo_root,
             thesis=args.thesis,
-            event_id=args.event_id,
+            event_id=primary_event_id,
             cfg=cfg,
             campaign_id=args.campaign_id,
             resume=bool(args.resume),
@@ -1550,6 +1654,13 @@ def _main_impl(
 
     if args.resume and not args.autoresearch:
         print("Error: --resume requires --autoresearch.", file=sys.stderr)
+        return 2
+
+    if len(event_ids) > 1 and (args.vectorbt or args.vectorbt_only or args.hftbacktest_realism):
+        print(
+            "Error: multi-event VectorBT/HftBacktest screening is not implemented; run one event per screening pass.",
+            file=sys.stderr,
+        )
         return 2
 
     if args.hftbacktest_realism and args.vectorbt_only:
@@ -1580,7 +1691,8 @@ def _main_impl(
     request = build_pipeline_request(
         request_id=run_id,
         thesis=args.thesis,
-        event_id=args.event_id,
+        event_id=primary_event_id,
+        event_ids=event_ids,
         repo_root=repo_root,
         max_candidates=args.max_candidates,
         document_ref=doc_ref,
@@ -1602,7 +1714,8 @@ def _main_impl(
         extra={
             "payload": {
                 "artifact_dir": str(artifact_dir),
-                "event_id": args.event_id,
+                "event_id": primary_event_id,
+                "event_ids": event_ids,
                 "vectorbt": bool(args.vectorbt),
                 "vectorbt_only": bool(args.vectorbt_only),
                 "dry_run": bool(args.dry_run),
@@ -1696,7 +1809,7 @@ def _main_impl(
                 idea_packet,
                 max_candidates=args.max_candidates,
                 expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
-                target_event_id=args.event_id,
+                target_event_id=primary_event_id,
                 target_symbol_resolver=lambda idea_parsed: _resolve_target_symbol(
                     idea_parsed, args.symbol
                 ),
@@ -1783,7 +1896,7 @@ def _main_impl(
                 parsed,
                 max_candidates=args.max_candidates,
                 expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
-                target_event_id=args.event_id,
+                target_event_id=primary_event_id,
                 target_symbol=target_symbol,
                 search_method=args.candidate_search_method,
                 search_seed=args.candidate_search_seed,
@@ -1812,7 +1925,7 @@ def _main_impl(
         filter_result = filter_candidates(
             candidates=candidates,
             parsed=parsed,
-            event_id=args.event_id,
+            event_id=primary_event_id,
             repo_root=repo_root,
             gates=vbt_gates,
             screening_scope=args.vectorbt_scope,
@@ -1910,7 +2023,8 @@ def _main_impl(
             report = PipelineReport(
                 run_id=run_id,
                 thesis=args.thesis,
-                event_id=args.event_id,
+                event_id=primary_event_id,
+                event_ids=event_ids,
                 parsed=parsed,
                 candidates_tested=int(filter_result.total_candidates),
                 results=[],
@@ -2147,7 +2261,8 @@ def _main_impl(
         report = PipelineReport(
             run_id=run_id,
             thesis=args.thesis,
-            event_id=args.event_id,
+            event_id=primary_event_id,
+            event_ids=event_ids,
             parsed=parsed,
             candidates_tested=0,
             results=[],
@@ -2250,12 +2365,13 @@ def _main_impl(
     )
     results = _evaluate_candidates_batch(
         candidates,
-        event_id=args.event_id,
+        event_ids=event_ids,
         repo_root=repo_root,
         chi404_summary=chi404,
         gates_by_candidate_id=gates_by_candidate_id,
         workers=args.evaluation_workers,
     )
+    _emit_risk_metric_gate_warnings(results)
     logger.info(
         "candidate_evaluation_complete",
         extra={"payload": {"result_count": len(results), "workers": args.evaluation_workers}},
@@ -2270,7 +2386,8 @@ def _main_impl(
     report = PipelineReport(
         run_id=run_id,
         thesis=args.thesis,
-        event_id=args.event_id,
+        event_id=primary_event_id,
+        event_ids=event_ids,
         parsed=parsed,
         candidates_tested=len(results),
         results=results,

@@ -585,12 +585,18 @@ def test_model_registry_volatility_regime_selects_gate_profile():
         "min_trades": 10,
         "max_tail_loss": 5000.0,
         "min_win_rate": 0.45,
+        "min_sharpe": -1000000000.0,
+        "min_sortino": -1000000000.0,
+        "max_drawdown": 1000000000.0,
     }
     assert resolution["threshold_cli_overrides"] == {
         "min_net_pnl": False,
         "min_trades": False,
         "max_tail_loss": False,
         "min_win_rate": False,
+        "min_sharpe": False,
+        "min_sortino": False,
+        "max_drawdown": False,
     }
     assert args.gate_profile == "high_volatility"
     assert args.gate_min_trades == 10
@@ -745,12 +751,23 @@ def test_pipeline_config_receipt_includes_candidate_gate_plan(tmp_path):
                 "source": "model_registry_volatility_regime",
                 "volatility_regime": "high_volatility",
                 "profile": "high_volatility",
-                "thresholds": {"min_net_pnl": 0.0, "min_trades": 10, "max_tail_loss": 5000.0, "min_win_rate": 0.45},
+                "thresholds": {
+                    "min_net_pnl": 0.0,
+                    "min_trades": 10,
+                    "max_tail_loss": 5000.0,
+                    "min_win_rate": 0.45,
+                    "min_sharpe": -1000000000.0,
+                    "min_sortino": -1000000000.0,
+                    "max_drawdown": 1000000000.0,
+                },
                 "threshold_cli_overrides": {
                     "min_net_pnl": False,
                     "min_trades": False,
                     "max_tail_loss": False,
                     "min_win_rate": False,
+                    "min_sharpe": False,
+                    "min_sortino": False,
+                    "max_drawdown": False,
                 },
             }
         },
@@ -890,7 +907,39 @@ def test_rl_training_stage_cache_miss_then_hit(tmp_path):
     cache_path = tmp_path / "runtime" / "test_rl_policy_cache" / f"{first['cache_receipt']['cache_key']}.json"
     assert first["cache_receipt"]["cache_path"] == str(cache_path)
     assert second["cache_receipt"]["cache_path"] == str(cache_path)
+    assert first["training_summary"]["train_eval_split"]["train_rows"] == 2
+    assert first["training_summary"]["train_eval_split"]["eval_rows"] == 1
+    assert first["training_summary"]["training_budget"]["updates_used"] == 2
     assert cache_path.is_file()
+
+
+def test_rl_training_rejects_label_like_feature_names():
+    from research_pipeline.rl_agents import validate_rl_features
+
+    with pytest.raises(ValueError, match="non-PIT or label-like"):
+        validate_rl_features(["reward"])
+
+
+def test_rl_training_rejects_non_monotonic_timestamps(tmp_path):
+    from research_pipeline.rl_agents import train_rl_policy_artifact
+
+    training_path = tmp_path / "rl_rows.json"
+    training_path.write_text(
+        json.dumps(
+            [
+                {"timestamp_ns": 2, "order_book_imbalance": 0.5, "reward": 0.10},
+                {"timestamp_ns": 1, "order_book_imbalance": -0.5, "reward": -0.20},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="strictly increasing"):
+        train_rl_policy_artifact(
+            training_data_path=training_path,
+            feature_names=["order_book_imbalance"],
+            device="cpu",
+        )
 
 
 def test_candidate_prefilter_rejects_malformed_and_bounds():
@@ -981,6 +1030,42 @@ def test_evaluate_candidates_batch_uses_bounded_executor(monkeypatch, tmp_path):
     assert captured["max_workers"] == 2
     assert [job[0].candidate_id for job in captured["jobs"]] == ["c1", "c2"]
     assert [result.gates.min_trades for result in results] == [1, 2]
+
+
+def test_evaluate_candidates_batch_aggregates_multiple_events(monkeypatch, tmp_path):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    candidate = CandidateModel("c_multi", "BOOK_PRESSURE", {}, "book")
+    captured = {}
+
+    def fake_evaluate_events(cand, event_ids, repo_root, **kwargs):
+        captured["event_ids"] = list(event_ids)
+        return EvaluationResult(
+            candidate=cand,
+            event_id=",".join(event_ids),
+            net_pnl=1.0,
+            num_trades=2,
+            win_rate=1.0,
+            expectancy=0.5,
+            tail_loss=0.0,
+            gates=kwargs["gates"],
+            risk_metrics_gateable=True,
+        )
+
+    monkeypatch.setattr(run_pipeline, "evaluate_candidate_events", fake_evaluate_events)
+
+    results = run_pipeline._evaluate_candidates_batch(
+        [candidate],
+        event_ids=["CPI_2024_09_11_TIGHT", "FOMC_2024_09_18_TIGHT"],
+        repo_root=tmp_path,
+        chi404_summary=None,
+        gates_by_candidate_id={"c_multi": GateThresholds(min_trades=1)},
+        workers=1,
+    )
+
+    assert captured["event_ids"] == ["CPI_2024_09_11_TIGHT", "FOMC_2024_09_18_TIGHT"]
+    assert results[0].event_id == "CPI_2024_09_11_TIGHT,FOMC_2024_09_18_TIGHT"
 
 
 def test_document_ingestion_cache_miss_then_hit(tmp_path, monkeypatch):
@@ -3515,7 +3600,7 @@ def test_parse_hypothesis_uses_packet_runner(monkeypatch):
         repo_root=REPO,
     )
     assert parsed.primary_model_id == "SPREAD_BLOWOUT_RECOMPRESSION"
-    assert parsed.source == "openai_compatible"
+    assert parsed.source == "hypothesis_packet"
 
 
 NPZ = REPO / "data" / "npz" / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"

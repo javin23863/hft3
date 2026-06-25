@@ -205,6 +205,8 @@ def _level_price_qty(raw: Any) -> tuple[float, float]:
         raise ValueError(f"invalid depth level {raw!r}")
     parsed_price = _finite_number(price, "depth price")
     parsed_qty = _finite_number(qty, "depth quantity")
+    if parsed_price <= 0.0:
+        raise ValueError(f"non-positive depth price {raw!r}")
     if parsed_qty < 0.0:
         raise ValueError(f"negative depth quantity {raw!r}")
     return parsed_price, parsed_qty

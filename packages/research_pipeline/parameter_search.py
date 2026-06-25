@@ -13,6 +13,8 @@ import random
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
+from features_engine.src.model_registry import load_model_registry
+
 from research_pipeline.types import ParsedHypothesis
 
 DEFAULT_HOLDING_PERIODS_BARS = [15, 30, 60]
@@ -32,11 +34,17 @@ class SearchSelection:
 
 
 def model_ids_for_search(parsed: ParsedHypothesis, *, hybrid_models: bool = True) -> list[str]:
-    """Return primary model plus keyword-adjacent uppercase model ids."""
+    """Return primary model plus registry-approved adjacent hypothesis model ids."""
     models = [parsed.primary_model_id]
     if hybrid_models:
+        registry = load_model_registry().get("models", {})
         for feature_id in parsed.feature_list:
-            if feature_id and feature_id.isupper() and feature_id not in models:
+            entry = registry.get(feature_id) if feature_id else None
+            if (
+                isinstance(entry, Mapping)
+                and entry.get("kind") == "hypothesis"
+                and feature_id not in models
+            ):
                 models.append(feature_id)
     return models[:3]
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -22,6 +23,14 @@ SUPPORTED_RL_DEVICES = {"cpu", "cuda"}
 RL_POLICY_CACHE_SCHEMA_VERSION = "hft3_rl_policy_cache_v1"
 RL_POLICY_CACHE_INPUT_VERSION = "hft3_rl_policy_cache_inputs_v1"
 RL_POLICY_ALGORITHM = "tabular_q_learning_research_cpu_smoke"
+_TIMESTAMP_FIELDS = ("timestamp_ns", "ts_ns", "timestamp", "decision_time")
+_LEAKY_FEATURE_RE = re.compile(
+    r"(^|_)(future|lead|next|target|label|outcome|reward)(_|$)|"
+    r"^(return|pnl|profit|realized|post|after)$|"
+    r"(^|_)(pnl|profit)_(net|target|label|outcome)(_|$)|"
+    r"(^|_)(net|gross|realized|daily|cumulative)_(pnl|profit|return)(_|$)",
+    re.IGNORECASE,
+)
 
 
 def available_rl_feature_names() -> set[str]:
@@ -37,6 +46,19 @@ def validate_rl_features(feature_names: Sequence[str]) -> list[str]:
         raise ValueError("rl feature names must not be empty")
     if len(set(clean)) != len(clean):
         raise ValueError("rl feature names must be unique")
+    invalid_delimiters = [name for name in clean if "|" in name or "=" in name]
+    if invalid_delimiters:
+        raise ValueError(
+            "rl feature names must not contain state-key delimiters: "
+            + ", ".join(invalid_delimiters)
+        )
+    leaky = [
+        name
+        for name in clean
+        if _LEAKY_FEATURE_RE.search(_normalise_feature_name(name))
+    ]
+    if leaky:
+        raise ValueError("rl feature names include non-PIT or label-like fields: " + ", ".join(leaky))
     allowed = available_rl_feature_names()
     unknown = sorted(name for name in clean if name not in allowed)
     if unknown:
@@ -147,8 +169,11 @@ def train_rl_policy_artifact(
         raise ValueError("rl training data requires at least two rows")
     if len(rows) > max_rows:
         rows = rows[:max_rows]
+    chronology = _chronology_audit(rows)
     parsed_rows = _validate_rows(rows, features)
     policy = _train_tabular_policy(parsed_rows, features)
+    train_rows = max(0, len(parsed_rows) - 1)
+    eval_rows = len(parsed_rows) - train_rows
     return {
         "schema_version": "hft3_rl_policy_artifact_v1",
         "process": "tabular_q_learning_research_cpu_smoke",
@@ -171,6 +196,17 @@ def train_rl_policy_artifact(
         "training_summary": {
             "row_count": len(parsed_rows),
             "max_rows": max_rows,
+            "train_eval_split": {
+                "train_rows": train_rows,
+                "eval_rows": eval_rows,
+                "chronology_status": chronology["status"],
+                "timestamp_field": chronology.get("timestamp_field"),
+            },
+            "training_budget": {
+                "max_rows": max_rows,
+                "updates_used": train_rows,
+                "budget_exhausted": False,
+            },
             "state_count": len(policy["q_table"]),
             "action_space": ["hold", "enter_long", "enter_short"],
         },
@@ -420,6 +456,32 @@ def _validate_cache_receipt(receipt: Any) -> None:
             raise ValueError("rl policy artifact cache_receipt cache_key must be a string")
         if not isinstance(receipt.get("invalidation_inputs"), Mapping):
             raise ValueError("rl policy artifact cache_receipt invalidation_inputs must be an object")
+
+
+def _normalise_feature_name(name: str) -> str:
+    with_pnl_boundaries = re.sub(r"pnl", "_pnl_", name, flags=re.IGNORECASE)
+    with_acronym_boundaries = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", "_", with_pnl_boundaries)
+    with_boundaries = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", with_acronym_boundaries)
+    return re.sub(r"[^A-Za-z0-9]+", "_", with_boundaries).lower().strip("_")
+
+
+def _chronology_audit(rows: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+    present = [
+        field
+        for field in _TIMESTAMP_FIELDS
+        if all(isinstance(row, Mapping) and field in row for row in rows)
+    ]
+    if not present:
+        return {"status": "missing_timestamp"}
+    field = present[0]
+    timestamps = [
+        _finite_float(row[field], f"row {idx} {field}")
+        for idx, row in enumerate(rows)
+    ]
+    for prev, cur in zip(timestamps, timestamps[1:]):
+        if cur <= prev:
+            raise ValueError(f"rl training data timestamp {field!r} must be strictly increasing")
+    return {"status": "monotonic_timestamp", "timestamp_field": field}
 
 
 def _validate_rows(rows: Sequence[Mapping[str, Any]], feature_names: Sequence[str]) -> list[dict[str, float]]:

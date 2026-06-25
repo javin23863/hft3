@@ -14,6 +14,7 @@ from research_pipeline.hypothesis_parser import (
     parse_hypothesis,
     with_instrument_compatibility,
 )
+from research_pipeline.feature_recipe import candidate_identity_hash
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.review_memory import (
     build_review_memory,
@@ -309,6 +310,7 @@ def candidates_from_ideas(
     target_event_id: str | None = None,
     target_symbol_resolver: Callable[[ParsedHypothesis], str] | None = None,
     search_method: str = "grid",
+    hybrid: bool = True,
     search_seed: int = 42,
 ) -> List[CandidateModel]:
     queued = static_filter_ideas(packet)
@@ -341,6 +343,7 @@ def candidates_from_ideas(
                 target_event_id=target_event_id,
                 target_symbol=target_symbol,
                 search_method=search_method,
+                hybrid=hybrid,
                 search_seed=search_seed,
             ),
         )
@@ -358,10 +361,11 @@ def candidates_from_ideas(
                 generation_errors.append(exc)
                 _mark_static_reject(idea, "candidate_generation_failed")
                 continue
-            if candidate.candidate_id in seen:
+            identity_key = candidate_identity_hash(candidate)
+            if identity_key in seen:
                 next_round.append((idea, generator))
                 continue
-            seen.add(candidate.candidate_id)
+            seen.add(identity_key)
             candidate.metadata.update(
                 {
                     "idea_id": idea.get("idea_id"),
@@ -389,15 +393,16 @@ def update_idea_statuses_from_results(
     packet: Dict[str, Any],
     results: Iterable[EvaluationResult],
 ) -> None:
+    result_list = list(results)
     outcome: Dict[str, bool] = {}
-    for result in results:
+    for result in result_list:
         idea_id = result.candidate.metadata.get("idea_id")
         if not idea_id:
             continue
         outcome[str(idea_id)] = outcome.get(str(idea_id), False) or result.passes_all_gates()
     tested_ids = {
         str(result.candidate.metadata.get("idea_id"))
-        for result in results
+        for result in result_list
         if result.candidate.metadata.get("idea_id")
     }
     for idea in packet.get("ideas") or []:

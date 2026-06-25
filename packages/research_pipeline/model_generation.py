@@ -20,6 +20,7 @@ def generate_candidates(
     target_symbol: str = "MES",
     research_clock: str = "scheduled_event",
     search_method: str = "grid",
+    hybrid: bool = True,
     search_seed: int = 42,
 ) -> Iterator[CandidateModel]:
     """Yield param variants for primary model and keyword-adjacent slugs.
@@ -34,6 +35,7 @@ def generate_candidates(
         max_candidates=max_candidates,
         expand_for_vectorbt=expand_for_vectorbt,
         search_method=search_method,
+        hybrid_models=hybrid,
         seed=search_seed,
     ):
         if count >= max_candidates:
