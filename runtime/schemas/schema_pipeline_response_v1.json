@@ -19,6 +19,7 @@
     "request_id": { "type": "string" },
     "run_id": { "type": "string" },
     "event_id": { "type": "string" },
+    "event_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
     "llm_model": { "type": ["string", "null"] },
     "llm_status": {
       "type": "string",
@@ -54,6 +55,15 @@
           "net_pnl": { "type": "number" },
           "num_trades": { "type": "integer" },
           "passes": { "type": "boolean" },
+          "sharpe": { "type": "number" },
+          "sortino": { "type": "number" },
+          "max_drawdown": { "type": "number" },
+          "risk_metrics_source": { "type": "string" },
+          "risk_metrics_gateable": { "type": "boolean" },
+          "event_results": {
+            "type": "array",
+            "items": { "type": "object" }
+          },
           "error": { "type": ["string", "null"] }
         }
       }

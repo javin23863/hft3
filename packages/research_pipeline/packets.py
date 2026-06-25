@@ -18,6 +18,7 @@ def build_pipeline_request(
     event_id: str,
     repo_root: Path,
     max_candidates: int,
+    event_ids: Optional[List[str]] = None,
     document_ref: Optional[str] = None,
 ) -> Dict[str, Any]:
     of = validate_connector(repo_root)
@@ -34,6 +35,8 @@ def build_pipeline_request(
         },
         "max_candidates": max_candidates,
     }
+    if event_ids is not None:
+        req["event_ids"] = list(event_ids)
     if document_ref:
         req["document_ref"] = document_ref
     errors = validate_pipeline_request(req)
@@ -57,6 +60,7 @@ def build_pipeline_response(
         "request_id": request["request_id"],
         "run_id": report.run_id,
         "event_id": report.event_id,
+        "event_ids": list(report.event_ids or [report.event_id]),
         "llm_model": llm_model,
         "llm_status": llm_status,
         "openfoundry_meta": request["openfoundry_meta"],
@@ -78,6 +82,13 @@ def build_pipeline_response(
                 "net_pnl": r.net_pnl,
                 "num_trades": r.num_trades,
                 "passes": r.passes_all_gates(),
+                "sharpe": r.sharpe,
+                "sortino": r.sortino,
+                "max_drawdown": r.max_drawdown,
+                "risk_metrics_source": r.risk_metrics_source,
+                "risk_metrics_gateable": r.risk_metrics_gateable,
+                "risk_metric_warning": r.risk_metric_warning,
+                "event_results": r.event_results,
                 "error": r.error,
             }
             for r in report.results

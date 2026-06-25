@@ -468,6 +468,14 @@ def run_llm_on_hypothesis_request(
     system = (
         "Convert the thesis into JSON matching PipelineHypothesisResponse schema.\n"
         f"primary_model_id must be one of: {', '.join(allowed_model_ids)}\n\n"
+        "When the thesis states them, include entry_rule, exit_rule, "
+        "target_instruments, indicative_stop_loss, and expected_holding_period. "
+        "Keep instrument names as symbols or common CME text aliases, and do not "
+        "invent unavailable model ids or promotion claims.\n\n"
+        "Example optional fields: "
+        '{"entry_rule":"fade spread after blowout","exit_rule":"exit on recompression",'
+        '"target_instruments":["MES"],"indicative_stop_loss":0.12,'
+        '"expected_holding_period":5}\n\n'
         f"Output JSON Schema:\n{schema_text}"
     )
     user = json.dumps({"pipeline_request": request, "thesis": thesis}, indent=2)
