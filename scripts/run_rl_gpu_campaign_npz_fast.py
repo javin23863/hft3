@@ -113,7 +113,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     manifest = _load_campaign_manifest(Path(args.feature_store_root), args.feature_manifest)
-    _require_budget_ready(plan, features, manifest)
+    _require_budget_ready(plan, features, manifest, source_family=source_family)
     all_results: list[dict[str, Any]] = []
     for symbol in args.symbol:
         try:
@@ -282,11 +282,12 @@ def _campaign_status(*, failure_count: int, event_inventory_truncated: bool) -> 
 
 
 def _resolve_campaign_features(*, symbols: Sequence[str], requested: Sequence[str] | None) -> tuple[str, ...]:
-    if _campaign_source_family(symbols) == "mixed":
+    source_family = _campaign_source_family(symbols)
+    if source_family == "mixed":
         raise SystemExit("mixed fs_v1 target and VIX.OPT clue campaigns must run separately")
     if requested:
         return tuple(str(feature).strip() for feature in requested if str(feature).strip())
-    if _campaign_source_family(symbols) == VIX_OPTIONS_SOURCE_FAMILY:
+    if source_family == VIX_OPTIONS_SOURCE_FAMILY:
         return tuple(VIX_OPTIONS_DEFAULT_RL_FEATURES)
     return tuple(SUPPORTED_FEATURES)
 
@@ -668,14 +669,21 @@ def _arrays_from_vix_options_store(
     source_valid = source_idx >= 0
     source_causal[source_valid] = row_causal[source_idx[source_valid]]
     valid &= row_causal & source_causal
-    decision_clue = _vix_options_array(store, reward_column, decision_idx)
-    future_clue = _vix_options_array(store, reward_column, np.clip(future_idx, 0, n - 1))
+    decision_clue = np.full(n, np.nan, dtype=np.float64)
+    future_clue = np.full(n, np.nan, dtype=np.float64)
+    reward_idx = valid.copy()
+    if np.any(reward_idx):
+        decision_clue[reward_idx] = _vix_options_array(store, reward_column, decision_idx[reward_idx])
+        future_clue[reward_idx] = _vix_options_array(store, reward_column, future_idx[reward_idx])
     reward = future_clue - decision_clue
     valid &= np.isfinite(decision_clue) & np.isfinite(future_clue) & np.isfinite(reward)
 
     columns: list[np.ndarray] = []
     for feature in features:
-        column = _vix_options_array(store, feature, source_idx)
+        column = np.full(n, np.nan, dtype=np.float64)
+        feature_idx = valid.copy()
+        if np.any(feature_idx):
+            column[feature_idx] = _vix_options_array(store, feature, source_idx[feature_idx])
         columns.append(column)
         valid &= np.isfinite(column)
     x = np.column_stack(columns)
@@ -895,8 +903,10 @@ def _vix_options_array(store: Mapping[str, Any], feature: str, idx: np.ndarray) 
     raw = np.asarray(store[feature], dtype=np.float64)
     if raw.ndim != 1:
         raise ValueError(f"VIX options clue feature {feature!r} must be a 1D array")
-    safe_idx = np.clip(idx, 0, raw.shape[0] - 1)
-    return raw[safe_idx]
+    idx_array = np.asarray(idx, dtype=np.int64)
+    if np.any(idx_array < 0) or np.any(idx_array >= raw.shape[0]):
+        raise ValueError(f"VIX options clue feature {feature!r} index out of bounds")
+    return raw[idx_array]
 
 
 def _load_vix_options_store(path: Path) -> dict[str, Any]:
@@ -1079,10 +1089,18 @@ def _require_budget_ready(
     plan: Mapping[str, Any],
     features: Sequence[str],
     manifest: Mapping[Any, Mapping[str, Any]],
+    *,
+    source_family: str,
 ) -> None:
     if plan.get("status") != "full_training_plan_ready":
         raise ValueError("budget plan is not full_training_plan_ready")
-    if [str(name) for name in (plan.get("required_features") or [])] != [str(name) for name in features]:
+    planned_features = [str(name) for name in (plan.get("required_features") or [])]
+    campaign_features = [str(name) for name in features]
+    if source_family == VIX_OPTIONS_SOURCE_FAMILY:
+        feature_mismatch = planned_features != campaign_features
+    else:
+        feature_mismatch = sorted(planned_features) != sorted(campaign_features)
+    if feature_mismatch:
         raise ValueError("budget plan required_features do not match campaign features")
     if plan.get("measured_throughput_row_basis") != "manifest_source_rows":
         raise ValueError("budget plan throughput row basis is not manifest_source_rows")

@@ -61,18 +61,24 @@ def plan_rl_campaign_budget(
     """
 
     rows = _coerce_manifest_rows(feature_manifest_rows)
-    inventory = _inventory_by_symbol(rows)
-    pilot_selection = (
-        select_stratified_pilot_rows(rows, target_rows=pilot_target_rows)
-        if pilot_target_rows is not None
-        else None
-    )
     supported = _clean_unique_strings(supported_features, "supported_features")
     required = _clean_unique_strings(required_features, "required_features")
     supported_set = set(supported)
     unsupported_required = [feature for feature in required if feature not in supported_set]
     vix_feature_request = any(_is_vix_options_feature(feature) for feature in [*supported, *required])
-    vix_source_family_mismatch = vix_feature_request and any(not _is_vix_options_manifest_row(row) for row in rows)
+    if vix_feature_request:
+        vix_symbol_rows = [row for row in rows if _is_vix_options_symbol_row(row)]
+        budget_rows = [row for row in vix_symbol_rows if _is_vix_options_manifest_row(row)]
+        vix_source_family_mismatch = not budget_rows or len(budget_rows) != len(vix_symbol_rows)
+    else:
+        budget_rows = rows
+        vix_source_family_mismatch = False
+    inventory = _inventory_by_symbol(budget_rows)
+    pilot_selection = (
+        select_stratified_pilot_rows(budget_rows, target_rows=pilot_target_rows)
+        if pilot_target_rows is not None
+        else None
+    )
 
     credit = _non_negative_float(vast_credit_usd, "vast_credit_usd")
     rate = _positive_float(vast_gpu_hour_rate_usd, "vast_gpu_hour_rate_usd")
@@ -101,7 +107,7 @@ def plan_rl_campaign_budget(
     source_inventory_complete = (
         bool(inventory) and missing_row_count_entries == 0 and non_source_row_count_entries == 0
     )
-    manifest_fingerprint = _manifest_source_row_fingerprint(rows)
+    manifest_fingerprint = _manifest_source_row_fingerprint(budget_rows)
     estimated_trainable_rows = (
         int(math.floor(usable_gpu_hours * throughput))
         if throughput_comparable and source_inventory_complete
@@ -196,7 +202,7 @@ def plan_rl_campaign_budget(
             "data_inventory": {
                 "status": "ready" if inventory else "blocked",
                 "failure_reasons": inventory_reasons,
-                "manifest_rows": len(rows),
+                "manifest_rows": len(budget_rows),
             },
             "stratified_pilot": {
                 "status": pilot_status,
@@ -496,9 +502,13 @@ def _is_vix_options_feature(feature: str) -> bool:
 
 def _is_vix_options_manifest_row(row: Mapping[str, Any]) -> bool:
     return (
-        str(_first_non_empty(row, _SYMBOL_FIELDS) or "") == _VIX_OPTIONS_SYMBOL
+        _is_vix_options_symbol_row(row)
         and str(row.get("source_family") or row.get("feature_family") or "") == _VIX_OPTIONS_SOURCE_FAMILY
     )
+
+
+def _is_vix_options_symbol_row(row: Mapping[str, Any]) -> bool:
+    return str(_first_non_empty(row, _SYMBOL_FIELDS) or "") == _VIX_OPTIONS_SYMBOL
 
 
 def _row_count(row: Mapping[str, Any]) -> int | None:

@@ -96,6 +96,7 @@ def test_fast_runner_rejects_stale_budget_plan_manifest() -> None:
             plan,
             ["spread"],
             {("ES.v.0", "EVT_A"): {"source_rows": 200, "store_path": "A.npz"}},
+            source_family="fs_v1_target",
         )
 
 
@@ -125,6 +126,50 @@ def test_fast_runner_rejects_budget_feature_order_drift() -> None:
             plan,
             ["vix_opt_spread_stress", "vix_opt_quote_intensity"],
             manifest,
+            source_family="vix_options_clue",
+        )
+
+
+def test_fast_runner_allows_fs_budget_feature_order_compatibility() -> None:
+    cli = _load_fast_module()
+    manifest = {("ES.v.0", "EVT_A"): {"source_rows": 100, "store_path": "A.npz"}}
+    plan = plan_rl_campaign_budget(
+        feature_manifest_rows=manifest,
+        vast_credit_usd=20,
+        vast_gpu_hour_rate_usd=5,
+        budget_reserve_usd=0,
+        supported_features=["micro_price", "spread"],
+        required_features=["micro_price", "spread"],
+        measured_throughput_rows_per_gpu_hour=1000,
+    )
+
+    cli._require_budget_ready(
+        plan,
+        ["spread", "micro_price"],
+        manifest,
+        source_family="fs_v1_target",
+    )
+
+
+def test_fast_runner_rejects_duplicate_fs_budget_features() -> None:
+    cli = _load_fast_module()
+    manifest = {("ES.v.0", "EVT_A"): {"source_rows": 100, "store_path": "A.npz"}}
+    plan = plan_rl_campaign_budget(
+        feature_manifest_rows=manifest,
+        vast_credit_usd=20,
+        vast_gpu_hour_rate_usd=5,
+        budget_reserve_usd=0,
+        supported_features=["spread"],
+        required_features=["spread"],
+        measured_throughput_rows_per_gpu_hour=1000,
+    )
+
+    with pytest.raises(ValueError, match="required_features"):
+        cli._require_budget_ready(
+            plan,
+            ["spread", "spread"],
+            manifest,
+            source_family="fs_v1_target",
         )
 
 
@@ -442,3 +487,14 @@ def test_fast_runner_masks_noncausal_vix_source_row_under_latency() -> None:
     assert result["timestamp_ns"].tolist() == [300]
     assert result["x"][:, 0].tolist() == pytest.approx([2.0])
     assert result["reward"].tolist() == pytest.approx([1.5])
+
+
+def test_vix_options_array_rejects_out_of_bounds_index() -> None:
+    cli = _load_fast_module()
+    store = {"vix_opt_spread_stress": np.array([10.0, 11.0], dtype=np.float64)}
+
+    with pytest.raises(ValueError, match="index out of bounds"):
+        cli._vix_options_array(store, "vix_opt_spread_stress", np.array([-1], dtype=np.int64))
+
+    with pytest.raises(ValueError, match="index out of bounds"):
+        cli._vix_options_array(store, "vix_opt_spread_stress", np.array([2], dtype=np.int64))

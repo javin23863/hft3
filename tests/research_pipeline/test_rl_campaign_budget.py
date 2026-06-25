@@ -393,6 +393,7 @@ def test_rl_campaign_budget_fingerprint_binds_vix_feature_schema_hash() -> None:
             "source_rows": 10,
             "store_path": "VIX.OPT_A_features_v1.npz",
             "content_hash": "content-a",
+            "source_family": "vix_options_clue",
             "feature_schema_hash": "vix-schema-a",
         }
     }
@@ -401,6 +402,7 @@ def test_rl_campaign_budget_fingerprint_binds_vix_feature_schema_hash() -> None:
             "source_rows": 10,
             "store_path": "VIX.OPT_A_features_v1.npz",
             "content_hash": "content-a",
+            "source_family": "vix_options_clue",
             "feature_schema_hash": "vix-schema-b",
         }
     }
@@ -440,6 +442,75 @@ def test_rl_campaign_budget_blocks_vix_features_on_fs_manifest_rows() -> None:
                 "content_hash": "content-a",
                 "feature_index_hash": "feature-hash-a",
             }
+        },
+        vast_credit_usd=20,
+        vast_gpu_hour_rate_usd=5,
+        budget_reserve_usd=0,
+        supported_features=["vix_opt_spread_stress"],
+        required_features=["vix_opt_spread_stress"],
+        measured_throughput_rows_per_gpu_hour=1000,
+    )
+
+    assert plan["status"] == "blocked"
+    assert (
+        "vix_features_require_vix_options_clue_manifest_rows"
+        in plan["stage_statuses"]["full_training"]["failure_reasons"]
+    )
+
+
+def test_rl_campaign_budget_filters_combined_manifest_for_vix_features() -> None:
+    plan = plan_rl_campaign_budget(
+        feature_manifest_rows={
+            ("ES", "A"): {
+                "source_rows": 50,
+                "store_path": "ES_A.npz",
+                "content_hash": "content-es",
+                "feature_index_hash": "feature-hash-es",
+            },
+            ("VIX.OPT", "A"): {
+                "source_rows": 10,
+                "store_path": "VIX.OPT_A_features_v1.npz",
+                "content_hash": "content-vix",
+                "source_family": "vix_options_clue",
+                "feature_schema_hash": "feature-hash-vix",
+            },
+        },
+        vast_credit_usd=20,
+        vast_gpu_hour_rate_usd=5,
+        budget_reserve_usd=0,
+        supported_features=["vix_opt_spread_stress"],
+        required_features=["vix_opt_spread_stress"],
+        measured_throughput_rows_per_gpu_hour=1000,
+    )
+
+    assert plan["status"] == "full_training_plan_ready"
+    assert plan["known_inventory_rows"] == 10
+    assert plan["stage_statuses"]["data_inventory"]["manifest_rows"] == 1
+    assert plan["manifest_source_row_fingerprint"]["entry_count"] == 1
+
+
+def test_rl_campaign_budget_blocks_malformed_vix_row_in_combined_manifest() -> None:
+    plan = plan_rl_campaign_budget(
+        feature_manifest_rows={
+            ("ES", "A"): {
+                "source_rows": 50,
+                "store_path": "ES_A.npz",
+                "content_hash": "content-es",
+                "feature_index_hash": "feature-hash-es",
+            },
+            ("VIX.OPT", "A"): {
+                "source_rows": 10,
+                "store_path": "VIX.OPT_A_features_v1.npz",
+                "content_hash": "content-vix-a",
+                "source_family": "vix_options_clue",
+                "feature_schema_hash": "feature-hash-vix-a",
+            },
+            ("VIX.OPT", "B"): {
+                "source_rows": 10,
+                "store_path": "VIX.OPT_B_features_v1.npz",
+                "content_hash": "content-vix-b",
+                "feature_schema_hash": "feature-hash-vix-b",
+            },
         },
         vast_credit_usd=20,
         vast_gpu_hour_rate_usd=5,
