@@ -78,6 +78,8 @@ reports/latency_baselines/*_capability.md
 reports/latency_baselines/*_broker_blocker.json
 logs/rithmic_trial/**
 runtime/rithmic_latency_probe.log*
+runtime/rl_gpu_smoke/**
+runtime/vast_h100_rl_*/**
 runtime/latency_baselines/**
 runtime/rithmic_paper_latency/**
 runtime/rithmic_test_latency/**

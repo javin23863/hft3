@@ -144,9 +144,20 @@ section or the `--rl-training-data`, `--rl-feature`, `--rl-device`,
 `--rl-required`, and `--rl-seed` CLI flags. The current implementation is
 opt-in until real training data and a GPU host command are named. Once enabled,
 it is fail-closed: CPU runs write a small research-only tabular policy artifact,
-while CUDA requests write a blocked `rl_policy_artifact.json` that requires a
-GPU sub-agent handoff. RL artifacts are always non-promotable and cannot bypass
-VectorBT, robustness evidence, or HftBacktest gates.
+while CUDA requests through the normal pipeline still write a blocked
+`rl_policy_artifact.json` until a GPU handoff is named. GPU readiness is checked
+separately by `rl_gpu_training_readiness_artifact`, which records the training
+data receipt, validated feature list, host, command, bounded output directory,
+duration budget, stop rule, and CUDA runtime smoke. The bounded local GPU smoke
+entrypoint is `scripts/run_rl_gpu_smoke.py`; it writes a
+non-promotable `rl_gpu_smoke_artifact.json` and checkpoint receipt. RL artifacts
+are always non-promotable and cannot bypass VectorBT, robustness evidence, or
+HftBacktest gates.
+
+The full RL handoff is split into two explicit source-backed entrypoints:
+`scripts/build_rl_training_data.py` builds point-in-time `rl_training_rows.jsonl`
+from fs_v1 feature-store rows, and `scripts/train_deep_rl_policy.py` trains a
+bounded non-promotable replay Q-network artifact on the named host.
 
 RL CPU policy artifacts are cached under
 `runtime/research_pipeline/rl_policy_cache` by default. Cache receipts include
