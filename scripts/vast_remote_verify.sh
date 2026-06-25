@@ -26,6 +26,7 @@ fi
 [[ -f "$events" ]] || die "events.csv missing: $events"
 [[ -f "$manifest" ]] || die "manifest.parquet missing: $manifest"
 [[ -d "$npz_root" ]] || die "NPZ root missing: $npz_root"
+export HFT3_NPZ_ROOT="$npz_root"
 [[ -f runtime/reports/paid_screen_ready_gate.json ]] || die "ready gate missing"
 
 python - "$events" "$manifest" "$npz_root" "$probe_n" <<'PY'
