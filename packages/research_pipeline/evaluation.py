@@ -321,10 +321,10 @@ def _sortino(pnls: Sequence[float]) -> float:
         if mean > 0.0:
             return 1e9
         return 0.0
-    downside_std = _stddev(downside)
-    if downside_std == 0.0:
-        return mean / abs(downside[0])
-    return mean / downside_std
+    downside_deviation = (sum(value * value for value in downside) / len(downside)) ** 0.5
+    if downside_deviation == 0.0:
+        return 0.0
+    return mean / downside_deviation
 
 
 def _max_drawdown(pnls: Sequence[float]) -> float:

@@ -341,6 +341,8 @@ def _evolutionary_fitness(vector: Sequence[float], index: int, seed: int) -> flo
     center = tuple(0.5 for _ in vector)
     centeredness = 1.0 - _distance(vector, center)
     jitter = random.Random((seed + 1) * (index + 17)).random() * 1e-6
+    # Keep the advisory smoke search near interior grid points while preserving
+    # a smaller edge-exploration term so boundary hypotheses still surface.
     edge_exploration = sum(abs(coord - 0.5) for coord in vector) / max(1, len(vector))
     return 0.7 * centeredness + 0.3 * edge_exploration + jitter
 
