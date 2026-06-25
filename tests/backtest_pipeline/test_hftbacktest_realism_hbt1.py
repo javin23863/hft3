@@ -15,6 +15,7 @@ from backtest_pipeline.src.hftbacktest_realism import (
     validate_hftbacktest_event_array,
     write_hftbacktest_realism_artifacts,
 )
+from hft_screening_fixtures import NATIVE_CPP_HOT_PATH_EVIDENCE, NATIVE_CPP_LATENCY_EVIDENCE
 
 # Per Codex review finding 14: the timestamp-ordering tests that assert
 # HFTBACKTEST_VALIDATE_EVENT_ORDER_FAILED require the real hftbacktest.data
@@ -728,7 +729,7 @@ def test_write_hftbacktest_realism_artifacts_writes_data_validation_json(
         out_dir=out_dir,
         data_npz_path=data_path,
         upstream_ref="v2.4.2",
-        native_hot_path_evidence=["reports/latency_baselines/order_ack_campaign_20260611T072116Z_summary.json"],
+        native_hot_path_evidence=NATIVE_CPP_HOT_PATH_EVIDENCE,
         run_id="hbt1_test",
     )
 

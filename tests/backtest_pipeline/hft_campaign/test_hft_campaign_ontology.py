@@ -78,9 +78,25 @@ def test_certification_fail_closed_without_native_evidence():
 def test_certification_scheduled_event_only_not_full_fidelity():
     hash_backed_lock = {
         "native_hot_path_evidence": [
-            f"reports/latency_baselines/live.json#sha256:{'a' * 64}",
+            f"runtime/latency_reports/rithmic_latency_probe_latency_summary.json#sha256:{'a' * 64}",
+            f"reports/cpp_lane/hft3_features_cpp_verify_cpp_parity.json#sha256:{'b' * 64}",
+            f"reports/cpp_lane/risk_manager_atomic_stress_spsc_queue_stress_safety_poller_concurrent.json#sha256:{'c' * 64}",
+            f"reports/cpp_lane/test_decision_runtime_hardening_test_safety_failure_injection.json#sha256:{'d' * 64}",
+            f"reports/cpp_lane/test_engine_loop_hft3_engine.json#sha256:{'e' * 64}",
         ],
     }
+    hash_backed_lock["native_hot_path_evidence_receipt_checks"] = [
+        {
+            "evidence": evidence,
+            "path": evidence.split("#", 1)[0],
+            "classes": [class_name],
+            "status": "synthetic_non_git_fixture",
+        }
+        for evidence, class_name in zip(
+            hash_backed_lock["native_hot_path_evidence"],
+            ["latency", "features", "risk_concurrency", "decision_safety", "engine_loop"],
+        )
+    ]
     status = resolve_certification_status(
         scenario_feature_plane="scheduled_event_only",
         replay_tier="stage2_individual",

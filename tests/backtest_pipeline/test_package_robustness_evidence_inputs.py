@@ -115,7 +115,7 @@ def test_packages_raw_inputs_and_apply_makes_candidate_eligible(tmp_path: Path) 
     assert entry["binding"]["screening_artifact_hash"] == artifact["screening_artifact_hash"]
     assert entry["binding"]["parameter_values_hash"] == artifact["promoted"][0]["parameter_values_hash"]
     assert entry["binding"]["feature_recipe_hash"] == artifact["promoted"][0]["feature_recipe_hash"]
-    assert entry["source_evidence"]["wfc_rows"]["sha256"] == source_hash
+    assert entry["source_evidence"]["wfc_rows"] == f"{source_rel}#sha256:{source_hash}"
 
     applied = subprocess.run(
         [

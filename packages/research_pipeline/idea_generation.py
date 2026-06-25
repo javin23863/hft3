@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Tuple
 
 from features_engine.src.model_registry import all_slugs, load_model_registry
 
-from data_layer.llm.packet_runner import run_llm_on_idea_generation_request
-from data_layer.packet.validate import validate_pipeline_idea_set
-from research_pipeline.hypothesis_parser import parse_hypothesis
+from research_pipeline.hypothesis_parser import (
+    canonicalize_instrument,
+    model_metadata,
+    parse_hypothesis,
+    with_instrument_compatibility,
+)
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.review_memory import (
     build_review_memory,
@@ -118,6 +121,8 @@ def generate_idea_set(
     temperature: float | None = None,
     top_p: float | None = None,
 ) -> Dict[str, Any]:
+    from data_layer.packet.validate import validate_pipeline_idea_set
+
     memory_raw = build_review_memory(
         repo_root,
         event_id=str(request.get("event_id") or ""),
@@ -138,6 +143,8 @@ def generate_idea_set(
             llm_status="skipped_no_llm",
         )
     else:
+        from data_layer.llm.packet_runner import run_llm_on_idea_generation_request
+
         packet = run_llm_on_idea_generation_request(
             request,
             thesis,
@@ -195,15 +202,19 @@ def _static_errors(
     errors: List[str] = []
     allowed_models = set(constraints.get("allowed_model_ids") or [])
     allowed_lanes = set(constraints.get("allowed_lane_codes") or [])
+    registry_models = load_model_registry().get("models", {})
     model_slugs = set(all_slugs())
     valid_feature_refs = model_slugs | allowed_models
     memory_ids = {str(item.get("memory_id")) for item in review_memory}
     ref_ids = set(refs) | memory_ids
+    primary_model_id = str(idea.get("primary_model_id") or "")
 
     if constraints.get("no_promotion_authority") is not True:
         errors.append("constraint_no_promotion_authority_not_true")
-    if idea.get("primary_model_id") not in allowed_models:
+    if primary_model_id not in allowed_models:
         errors.append("primary_model_id_not_allowed")
+    elif registry_models.get(primary_model_id, {}).get("kind") != "hypothesis":
+        errors.append("primary_model_id_not_hypothesis")
     if idea.get("lane_code") not in allowed_lanes:
         errors.append("lane_code_not_allowed")
     for feature_id in idea.get("feature_ids") or []:
@@ -254,15 +265,30 @@ def static_filter_ideas(packet: Dict[str, Any]) -> List[Dict[str, Any]]:
     return sorted(queued, key=lambda row: str(row.get("idea_id") or ""))
 
 
+def _mark_static_reject(idea: Dict[str, Any], code: str) -> None:
+    errors = list(idea.get("static_error_codes") or [])
+    errors.append(code)
+    idea["status"] = "static_reject"
+    idea["static_error_codes"] = sorted(set(errors))
+
+
 def parsed_from_idea(idea: Dict[str, Any]) -> ParsedHypothesis:
     model_id = str(idea.get("primary_model_id") or "")
     feature_ids = list(idea.get("feature_ids") or [])
     param_ranges = dict(idea.get("param_ranges") or {})
     if "signal_threshold" not in param_ranges:
         param_ranges["signal_threshold"] = [0.05, 0.35]
+    instrument_universe = [
+        canonicalize_instrument(str(symbol))
+        for symbol in (idea.get("instrument_ids") or ["MES"])
+    ]
+    metadata = with_instrument_compatibility(
+        model_metadata(model_id),
+        [str(symbol) for symbol in instrument_universe],
+    )
     return ParsedHypothesis(
         thesis=str(idea.get("thesis_code") or ""),
-        instrument_universe=list(idea.get("instrument_ids") or ["MES"]),
+        instrument_universe=instrument_universe,
         entry_rules=list(idea.get("entry_rule_codes") or []),
         exit_rules=list(idea.get("exit_rule_codes") or []),
         indicators=feature_ids or [model_id],
@@ -271,6 +297,7 @@ def parsed_from_idea(idea: Dict[str, Any]) -> ParsedHypothesis:
         primary_model_id=model_id,
         source="idea_set",
         llm_status=str(idea.get("status") or ""),
+        metadata=metadata,
     )
 
 
@@ -279,27 +306,57 @@ def candidates_from_ideas(
     *,
     max_candidates: int,
     expand_for_vectorbt: bool = False,
+    target_event_id: str | None = None,
+    target_symbol_resolver: Callable[[ParsedHypothesis], str] | None = None,
+    search_method: str = "grid",
+    search_seed: int = 42,
 ) -> List[CandidateModel]:
     queued = static_filter_ideas(packet)
     candidates: List[CandidateModel] = []
     seen: set[str] = set()
+    parsed_rows: List[tuple[Dict[str, Any], ParsedHypothesis, str]] = []
+    resolution_errors: List[ValueError] = []
+    for idea in queued:
+        try:
+            parsed = parsed_from_idea(idea)
+            target_symbol = (
+                target_symbol_resolver(parsed)
+                if target_symbol_resolver is not None
+                else "MES"
+            )
+        except ValueError as exc:
+            resolution_errors.append(exc)
+            _mark_static_reject(idea, "target_symbol_resolution_failed")
+            continue
+        parsed_rows.append((idea, parsed, target_symbol))
+    if queued and not parsed_rows and resolution_errors:
+        raise ValueError(str(resolution_errors[0]))
     generators = [
         (
             idea,
             generate_candidates(
-                parsed_from_idea(idea),
+                parsed,
                 max_candidates=max_candidates,
                 expand_for_vectorbt=expand_for_vectorbt,
+                target_event_id=target_event_id,
+                target_symbol=target_symbol,
+                search_method=search_method,
+                search_seed=search_seed,
             ),
         )
-        for idea in queued
+        for idea, parsed, target_symbol in parsed_rows
     ]
+    generation_errors: List[ValueError] = []
     while generators and len(candidates) < max_candidates:
         next_round = []
         for idea, generator in generators:
             try:
                 candidate = next(generator)
             except StopIteration:
+                continue
+            except ValueError as exc:
+                generation_errors.append(exc)
+                _mark_static_reject(idea, "candidate_generation_failed")
                 continue
             if candidate.candidate_id in seen:
                 next_round.append((idea, generator))
@@ -318,6 +375,13 @@ def candidates_from_ideas(
                 break
             next_round.append((idea, generator))
         generators = next_round
+    if (
+        queued
+        and not candidates
+        and all(idea.get("status") == "static_reject" for idea in queued)
+        and generation_errors
+    ):
+        raise ValueError(str(generation_errors[0]))
     return candidates
 
 

@@ -48,11 +48,13 @@ function Pass([string]$msg) {
 # Row 3 precondition: pyd module must exist before parity run
 # ---------------------------------------------------------------------------
 Log-Section "Precondition: pybind module present"
-$PYD = Join-Path $BUILD "hft3_features_cpp.cp312-win_amd64.pyd"
-if (-not (Test-Path $PYD)) {
-    Fail "build/hft3_features_cpp.cp312-win_amd64.pyd not found — parity step cannot run (CORRECTNESS row 3)"
+$PYD = Get-ChildItem -Path $BUILD -Filter "hft3_features_cpp*.pyd" -File -ErrorAction SilentlyContinue |
+       Sort-Object FullName |
+       Select-Object -First 1
+if (-not $PYD) {
+    Fail "build/hft3_features_cpp*.pyd not found — parity step cannot run (CORRECTNESS row 3)"
 } else {
-    Pass "pybind module present: $PYD"
+    Pass "pybind module present: $($PYD.FullName)"
 }
 
 # ---------------------------------------------------------------------------
@@ -60,8 +62,8 @@ if (-not (Test-Path $PYD)) {
 # Rebuild command: cmake --build build (MinGW: cmake --build build --config Release)
 # ---------------------------------------------------------------------------
 Log-Section "Staleness: .pyd vs C++ sources"
-if (Test-Path $PYD) {
-    $pydMtime = (Get-Item $PYD).LastWriteTimeUtc
+if ($PYD) {
+    $pydMtime = $PYD.LastWriteTimeUtc
     $CPP_ROOT = Join-Path $REPO "packages\features_engine\cpp"
     $staleSrc = Get-ChildItem -Path $CPP_ROOT -Include "*.cpp","*.hpp" -Recurse -ErrorAction SilentlyContinue |
                 Where-Object { $_.LastWriteTimeUtc -gt $pydMtime } |
@@ -83,16 +85,17 @@ if (-not $npz -and $env:HFT3_NPZ_ROOT) {
     $npz = Get-ChildItem -Path $env:HFT3_NPZ_ROOT -Filter "*.npz" -Recurse -ErrorAction SilentlyContinue |
            Select-Object -First 1 -ExpandProperty FullName
 }
-if ($npz -and (Test-Path $PYD)) {
+if ($npz -and $PYD) {
     $env:PYTHONPATH = "C:\Users\MSI\AppData\Local\Programs\Python\Python312\Lib\site-packages;C:\Users\MSI\AppData\Roaming\Python\Python312\site-packages"
+    $env:HFT3_FEATURES_CPP_BUILD_DIR = $BUILD
     $parityScript = Join-Path $REPO "scripts\verify_cpp_parity.py"
-    & python -S $parityScript --npz $npz
+    & python $parityScript --npz $npz
     if ($LASTEXITCODE -ne 0) {
         Fail "verify_cpp_parity.py exited $LASTEXITCODE — slot mismatch or module absent"
     } else {
         Pass "64-slot parity confirmed"
     }
-} elseif (-not (Test-Path $PYD)) {
+} elseif (-not $PYD) {
     Fail "64-slot parity skipped — pyd absent (already listed above)"
 } else {
     Write-Host "WARNING: No NPZ path provided and HFT3_NPZ_ROOT not set — parity check skipped" -ForegroundColor Yellow

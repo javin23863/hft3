@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -114,6 +116,1692 @@ def test_run_pipeline_doc_without_vectorbt_is_dry_run_only(monkeypatch, capsys):
     assert "--doc without --vectorbt/--vectorbt-only is dry-run only" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    ("thesis", "expected_symbol"),
+    [
+        ("trade micro NQ futures after CPI", "MNQ"),
+        ("GOLD breakout after claims", "GC"),
+        ("WTI liquidity vacuum after EIA", "CL"),
+        ("10Y queue imbalance during macro shock", "ZN"),
+    ],
+)
+def test_parse_hypothesis_detects_symbol_aliases(thesis, expected_symbol):
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis(thesis, use_llm=False)
+
+    assert expected_symbol in parsed.instrument_universe
+
+
+def test_parse_hypothesis_ignores_duration_phrases_as_treasury_aliases():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis(
+        "Use the continuation model over the last 10-year backtest window",
+        use_llm=False,
+    )
+
+    assert parsed.primary_model_id == "SECOND_WAVE_CONTINUATION"
+    assert parsed.instrument_universe == ["MES"]
+    assert parsed.metadata["instrument_universe_compatibility"] == "compatible"
+
+
+def test_parse_hypothesis_uses_model_alias_and_registry_ranges():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("Run a blowout fade on GOLD after CPI", use_llm=False)
+
+    assert parsed.primary_model_id == "SPREAD_BLOWOUT_RECOMPRESSION"
+    assert parsed.param_ranges["signal_threshold"] == [0.02, 0.15]
+    assert parsed.param_ranges["stop_loss"] == [0.05, 0.30]
+    assert parsed.metadata["volatility_regime"] == "high_volatility"
+    assert parsed.metadata["instrument_universe_compatibility"] == "unsupported_instruments"
+    assert parsed.metadata["unsupported_instruments"] == ["GC"]
+
+
+def test_parse_hypothesis_keeps_mixed_unsupported_context_blocked():
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis(
+        "Run a blowout fade on ES while watching GOLD after CPI",
+        use_llm=False,
+    )
+
+    assert "ES" in parsed.instrument_universe
+    assert "GC" in parsed.instrument_universe
+    assert parsed.metadata["compatible_instrument_universe"] == ["ES"]
+    assert parsed.metadata["instrument_universe_compatibility"] == "unsupported_instruments"
+    assert parsed.metadata["unsupported_instruments"] == ["GC"]
+
+
+def test_parse_hypothesis_structural_alias_does_not_route_as_primary_model():
+    from features_engine.src.model_registry import load_model_registry
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("Use book pressure after CPI", use_llm=False)
+    model_entry = load_model_registry()["models"][parsed.primary_model_id]
+
+    assert parsed.primary_model_id != "BOOK_PRESSURE"
+    assert model_entry["kind"] == "hypothesis"
+
+
+def test_parse_hypothesis_parenthesized_structural_slug_does_not_route_primary():
+    from features_engine.src.model_registry import load_model_registry
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis(
+        "Use queue imbalance (BOOK_PRESSURE) after CPI",
+        use_llm=False,
+    )
+    model_entry = load_model_registry()["models"][parsed.primary_model_id]
+
+    assert parsed.primary_model_id != "BOOK_PRESSURE"
+    assert model_entry["kind"] == "hypothesis"
+
+
+def test_parse_hypothesis_packet_structural_primary_falls_back_to_hypothesis():
+    from features_engine.src.model_registry import load_model_registry
+    from research_pipeline.hypothesis_parser import _from_llm_dict
+
+    parsed = _from_llm_dict(
+        "Use book pressure after CPI",
+        {
+            "instrument_universe": ["MES"],
+            "entry_rules": ["enter_pressure"],
+            "exit_rules": ["exit_revert"],
+            "indicators": ["BOOK_PRESSURE"],
+            "feature_list": ["BOOK_PRESSURE"],
+            "param_ranges": {"signal_threshold": [0.05, 0.35]},
+            "primary_model_id": "BOOK_PRESSURE",
+        },
+    )
+    model_entry = load_model_registry()["models"][parsed.primary_model_id]
+
+    assert parsed.primary_model_id != "BOOK_PRESSURE"
+    assert model_entry["kind"] == "hypothesis"
+
+
+def test_model_registry_declares_valid_instrument_universe_for_all_models():
+    from features_engine.src.model_registry import load_model_registry
+
+    missing = [
+        slug
+        for slug, entry in load_model_registry()["models"].items()
+        if not entry.get("valid_instrument_universe")
+    ]
+
+    assert missing == []
+
+
+def test_run_pipeline_resolves_cross_asset_target_symbol():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("ES MES lead lag after CPI", use_llm=False)
+
+    assert parsed.primary_model_id == "ES_MES_LEAD_LAG"
+    assert run_pipeline._resolve_target_symbol(parsed, None) == "MES"
+    with pytest.raises(ValueError, match="--symbol ES is not compatible with target instruments"):
+        run_pipeline._resolve_target_symbol(parsed, "ES")
+
+
+def test_run_pipeline_accepts_canonical_symbol_variant():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis("Fade spread blowout after CPI release on MES", use_llm=False)
+
+    assert run_pipeline._resolve_target_symbol(parsed, "MES.v.0") == "MES.v.0"
+
+
+def test_run_pipeline_derives_target_symbol_from_parsed_instrument(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {
+                "connector_id": "hft3-cme-mbo",
+                "asset_class": "cme_mbo_microstructure",
+                "vendor_shas": {"openfoundry": "test"},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_symbol_derived")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            "Trade micro NQ futures after CPI",
+            "--event-id",
+            "CPI_1",
+            "--repo-root",
+            str(tmp_path),
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 0
+    payload = _last_json_object(capsys.readouterr().out)
+    assert payload["parsed"]["target_symbol"] == "MNQ"
+    assert payload["candidates"][0]["target_symbol"] == "MNQ"
+
+
+def test_run_pipeline_rejects_cli_symbol_mismatch(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {
+                "connector_id": "hft3-cme-mbo",
+                "asset_class": "cme_mbo_microstructure",
+                "vendor_shas": {"openfoundry": "test"},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_symbol_mismatch")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            "Trade micro NQ futures after CPI",
+            "--event-id",
+            "CPI_1",
+            "--symbol",
+            "MES",
+            "--repo-root",
+            str(tmp_path),
+            "--dry-run",
+            "--no-llm",
+        ]
+    )
+
+    assert code == 2
+    assert "--symbol MES is not compatible" in capsys.readouterr().err
+
+
+def test_run_pipeline_idea_set_parses_after_static_filter(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+
+    idea_packet = _idea_packet()
+    idea_packet["constraints"]["allowed_model_ids"] = ["ES_MES_LEAD_LAG"]
+    idea_packet["ideas"] = [
+        {
+            "idea_id": "idea_cross_asset",
+            "status": "proposed",
+            "lane_code": "cme",
+            "thesis_code": "es_mes_lead_lag",
+            "instrument_ids": ["ES", "MES"],
+            "primary_model_id": "ES_MES_LEAD_LAG",
+            "feature_ids": ["ES_MES_LEAD_LAG"],
+            "param_ranges": {"signal_threshold": [0.05, 0.35]},
+            "entry_rule_codes": ["enter_lead_lag"],
+            "exit_rule_codes": ["exit_revert"],
+            "risk_codes": ["latency_gate_required"],
+            "evidence_ref_ids": ["mem_001"],
+            "rank_inputs": {
+                "novelty": 0.8,
+                "evidence_coverage": 0.8,
+                "lane_fit": 1.0,
+                "prior_failure_overlap": 0.0,
+                "validation_readiness": 1.0,
+            },
+        }
+    ]
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {
+                "connector_id": "hft3-cme-mbo",
+                "asset_class": "cme_mbo_microstructure",
+                "vendor_shas": {"openfoundry": "test"},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_idea_after_filter")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: idea_packet)
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            "fallback spread thesis on MES",
+            "--event-id",
+            "CPI_1",
+            "--repo-root",
+            str(tmp_path),
+            "--idea-set",
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 0
+    payload = _last_json_object(capsys.readouterr().out)
+    assert payload["parsed"]["primary_model_id"] == "ES_MES_LEAD_LAG"
+    assert payload["parsed"]["target_symbol"] == "MES"
+    assert payload["candidates"][0]["model_id"] == "ES_MES_LEAD_LAG"
+    assert payload["candidates"][0]["target_symbol"] == "MES"
+
+
+def test_pipeline_runtime_config_defaults_from_json(tmp_path):
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    cfg_path = tmp_path / "runtime.json"
+    cfg_path.write_text(
+        json.dumps(
+            {
+                "max_candidates": 7,
+                "vectorbt": {
+                    "scope": "paid-compute",
+                    "budget": {
+                        "max_trials": 3,
+                        "max_total_trials": 21,
+                        "abort_on_budget_exhaustion": True,
+                    },
+                },
+                "llm_ideas": {"max_ideas": 4, "review_memory_limit": 2},
+                "candidate_search": {"method": "bayesian", "seed": 13},
+                "rl_training": {
+                    "features": ["order_book_imbalance"],
+                    "device": "cpu",
+                    "seed": 99,
+                    "cache": {
+                        "enabled": False,
+                        "root": "runtime/test_rl_cache",
+                    },
+                },
+                "evaluation": {"workers": 3},
+                "gate_profiles": {
+                    "default_profile": "high_volatility",
+                    "profiles": {
+                        "high_volatility": {
+                            "min_net_pnl": 0.0,
+                            "min_trades": 10,
+                            "max_tail_loss": 5000.0,
+                            "min_win_rate": 0.45,
+                        }
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    cfg = run_pipeline.load_pipeline_runtime_config(cfg_path)
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+        candidate_search_method=None,
+        candidate_search_seed=None,
+        evaluation_workers=None,
+        gate_profile=None,
+        gate_min_net_pnl=None,
+        gate_min_trades=None,
+        gate_max_tail_loss=None,
+        gate_min_win_rate=None,
+    )
+
+    run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+
+    assert args.max_candidates == 7
+    assert args.vectorbt_scope == "paid-compute"
+    assert args.vectorbt_max_trials == 3
+    assert args.vectorbt_max_total_trials == 21
+    assert args.max_ideas == 4
+    assert args.review_memory_limit == 2
+    assert args.candidate_search_method == "bayesian"
+    assert args.candidate_search_seed == 13
+    assert args.rl_feature == ["order_book_imbalance"]
+    assert args.rl_seed == 99
+    assert args.rl_cache_enabled is False
+    assert args.rl_cache_root == "runtime/test_rl_cache"
+    assert args.evaluation_workers == 3
+    assert args.gate_profile == "high_volatility"
+    assert args.gate_min_trades == 10
+    assert args.gate_min_win_rate == 0.45
+    assert run_pipeline._vectorbt_run_budget(args, cfg) == {
+        "max_trials": 3,
+        "max_total_trials": 21,
+        "abort_on_budget_exhaustion": True,
+    }
+
+
+def test_pipeline_runtime_config_rejects_false_abort_policy(tmp_path):
+    import argparse
+
+    import pytest
+    import scripts.run_pipeline as run_pipeline
+
+    cfg_path = tmp_path / "runtime.json"
+    cfg_path.write_text(
+        json.dumps({"vectorbt": {"budget": {"abort_on_budget_exhaustion": False}}}),
+        encoding="utf-8",
+    )
+    cfg = run_pipeline.load_pipeline_runtime_config(cfg_path)
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+    )
+
+    with pytest.raises(ValueError, match="abort_on_budget_exhaustion must be true"):
+        run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+
+
+def test_model_registry_volatility_regime_selects_gate_profile():
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    cfg = run_pipeline.load_pipeline_runtime_config()
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+        candidate_search_method=None,
+        candidate_search_seed=None,
+        rl_training_data=None,
+        rl_required=False,
+        rl_device=None,
+        rl_seed=None,
+        rl_feature=None,
+        evaluation_workers=None,
+        gate_profile=None,
+        gate_min_net_pnl=None,
+        gate_min_trades=None,
+        gate_max_tail_loss=None,
+        gate_min_win_rate=None,
+    )
+    run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+
+    resolution = run_pipeline._apply_registry_gate_profile(
+        args,
+        cfg,
+        "SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+
+    assert {
+        key: resolution[key]
+        for key in ("source", "model_id", "volatility_regime", "profile")
+    } == {
+        "source": "model_registry_volatility_regime",
+        "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+        "volatility_regime": "high_volatility",
+        "profile": "high_volatility",
+    }
+    assert resolution["thresholds"] == {
+        "min_net_pnl": 0.0,
+        "min_trades": 10,
+        "max_tail_loss": 5000.0,
+        "min_win_rate": 0.45,
+    }
+    assert resolution["threshold_cli_overrides"] == {
+        "min_net_pnl": False,
+        "min_trades": False,
+        "max_tail_loss": False,
+        "min_win_rate": False,
+    }
+    assert args.gate_profile == "high_volatility"
+    assert args.gate_min_trades == 10
+    assert args.gate_min_win_rate == 0.45
+
+
+def test_cli_gate_profile_overrides_model_registry_regime():
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    cfg = run_pipeline.load_pipeline_runtime_config()
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+        candidate_search_method=None,
+        candidate_search_seed=None,
+        rl_training_data=None,
+        rl_required=False,
+        rl_device=None,
+        rl_seed=None,
+        rl_feature=None,
+        evaluation_workers=None,
+        gate_profile="normal",
+        gate_min_net_pnl=None,
+        gate_min_trades=None,
+        gate_max_tail_loss=None,
+        gate_min_win_rate=None,
+    )
+    run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+
+    resolution = run_pipeline._apply_registry_gate_profile(
+        args,
+        cfg,
+        "SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+
+    assert resolution["source"] == "cli"
+    assert resolution["profile"] == "normal"
+    assert args.gate_profile == "normal"
+    assert args.gate_min_trades == 0
+
+
+def test_candidate_gate_plan_supports_mixed_registry_profiles():
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel
+
+    cfg = run_pipeline.load_pipeline_runtime_config()
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+        candidate_search_method=None,
+        candidate_search_seed=None,
+        rl_training_data=None,
+        rl_required=False,
+        rl_device=None,
+        rl_seed=None,
+        rl_feature=None,
+        evaluation_workers=None,
+        gate_profile=None,
+        gate_min_net_pnl=None,
+        gate_min_trades=None,
+        gate_max_tail_loss=None,
+        gate_min_win_rate=None,
+    )
+    run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+    candidates = [
+        CandidateModel(
+            candidate_id="spread",
+            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+            strategy_params={"signal_threshold": 0.1},
+            thesis="spread",
+        ),
+        CandidateModel(
+            candidate_id="book",
+            model_id="BOOK_PRESSURE",
+            strategy_params={"signal_threshold": 0.1},
+            thesis="book",
+        ),
+    ]
+
+    plan = run_pipeline._candidate_gate_profile_plan(args, cfg, candidates)
+
+    assert plan["by_candidate"]["spread"]["profile"] == "high_volatility"
+    assert plan["by_candidate"]["spread"]["thresholds"]["min_trades"] == 10
+    assert plan["by_candidate"]["book"]["profile"] == "normal"
+    assert plan["by_candidate"]["book"]["thresholds"]["min_trades"] == 0
+
+
+def test_pipeline_config_receipt_includes_candidate_gate_plan(tmp_path):
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    cfg = run_pipeline.load_pipeline_runtime_config()
+    args = argparse.Namespace(
+        max_candidates=None,
+        vectorbt_scope=None,
+        vectorbt_max_trials=None,
+        vectorbt_max_models=None,
+        vectorbt_max_symbols=None,
+        vectorbt_max_feature_sets=None,
+        vectorbt_max_total_trials=None,
+        vectorbt_max_wall_clock_seconds=None,
+        vectorbt_max_peak_memory_mb=None,
+        max_ideas=None,
+        review_memory_limit=None,
+        idea_temperature=None,
+        idea_top_p=None,
+        candidate_search_method=None,
+        candidate_search_seed=None,
+        rl_training_data=None,
+        rl_required=False,
+        rl_device=None,
+        rl_seed=None,
+        rl_feature=None,
+        evaluation_workers=None,
+        gate_profile=None,
+        gate_min_net_pnl=None,
+        gate_min_trades=None,
+        gate_max_tail_loss=None,
+        gate_min_win_rate=None,
+    )
+    run_pipeline._apply_pipeline_runtime_defaults(args, cfg)
+    run_pipeline._resolve_idea_sampling_values(args, cfg)
+    gate_plan = {
+        "schema_version": "hft3_gate_profile_plan_v1",
+        "by_candidate": {
+            "spread": {
+                "candidate_id": "spread",
+                "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+                "source": "model_registry_volatility_regime",
+                "volatility_regime": "high_volatility",
+                "profile": "high_volatility",
+                "thresholds": {"min_net_pnl": 0.0, "min_trades": 10, "max_tail_loss": 5000.0, "min_win_rate": 0.45},
+                "threshold_cli_overrides": {
+                    "min_net_pnl": False,
+                    "min_trades": False,
+                    "max_tail_loss": False,
+                    "min_win_rate": False,
+                },
+            }
+        },
+    }
+
+    receipt = run_pipeline._pipeline_config_receipt(
+        config=cfg,
+        config_path=tmp_path / "runtime.json",
+        args=args,
+        gate_profile_plan=gate_plan,
+    )
+
+    assert receipt["effective"]["gate_profiles"]["candidate_gate_plan"] == gate_plan
+
+
+def test_evaluation_workers_are_capped_on_msi(monkeypatch):
+    from research_pipeline import runtime_policy
+
+    monkeypatch.setattr(runtime_policy.platform, "node", lambda: "MSI")
+
+    effective, policy = runtime_policy.effective_evaluation_workers(
+        128,
+        {"evaluation": {"max_workers": 64, "msi_max_workers": 1}},
+    )
+
+    assert effective == 1
+    assert policy["requested_workers"] == 128
+    assert policy["cap_reason"] == "msi_local_cap"
+
+
+def test_evaluation_workers_are_capped_on_remote(monkeypatch):
+    from research_pipeline import runtime_policy
+
+    monkeypatch.setattr(runtime_policy.platform, "node", lambda: "chi404")
+
+    effective, policy = runtime_policy.effective_evaluation_workers(
+        128,
+        {"evaluation": {"max_workers": 64, "msi_max_workers": 1}},
+    )
+
+    assert effective == 64
+    assert policy["cap_reason"] == "max_workers_cap"
+
+
+def test_pipeline_runtime_config_hash_includes_idea_sampling_override(tmp_path):
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    cfg = run_pipeline.load_pipeline_runtime_config()
+
+    def make_args(temperature):
+        return argparse.Namespace(
+            max_candidates=None,
+            vectorbt_scope=None,
+            vectorbt_max_trials=None,
+            vectorbt_max_models=None,
+            vectorbt_max_symbols=None,
+            vectorbt_max_feature_sets=None,
+            vectorbt_max_total_trials=None,
+            vectorbt_max_wall_clock_seconds=None,
+            vectorbt_max_peak_memory_mb=None,
+            max_ideas=None,
+            review_memory_limit=None,
+            idea_temperature=temperature,
+            idea_top_p=None,
+        )
+
+    args_a = make_args(0.11)
+    run_pipeline._apply_pipeline_runtime_defaults(args_a, cfg)
+    run_pipeline._resolve_idea_sampling_values(args_a, cfg)
+    receipt_a = run_pipeline._pipeline_config_receipt(
+        config=cfg,
+        config_path=tmp_path / "runtime.json",
+        args=args_a,
+    )
+
+    args_b = make_args(0.22)
+    run_pipeline._apply_pipeline_runtime_defaults(args_b, cfg)
+    run_pipeline._resolve_idea_sampling_values(args_b, cfg)
+    receipt_b = run_pipeline._pipeline_config_receipt(
+        config=cfg,
+        config_path=tmp_path / "runtime.json",
+        args=args_b,
+    )
+
+    assert receipt_a["effective"]["llm_ideas"]["temperature"] == 0.11
+    assert receipt_b["effective"]["llm_ideas"]["temperature"] == 0.22
+    assert receipt_a["effective"]["rl_training"]["cache"] == {
+        "enabled": True,
+        "root": "runtime/research_pipeline/rl_policy_cache",
+    }
+    assert receipt_a["pipeline_runtime_config_hash"] != receipt_b["pipeline_runtime_config_hash"]
+
+
+def test_rl_training_stage_cache_miss_then_hit(tmp_path):
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    training_path = tmp_path / "rl_rows.jsonl"
+    rows = [
+        {"order_book_imbalance": 0.5, "spread": 1.0, "reward": 0.10},
+        {"order_book_imbalance": -0.5, "spread": 1.0, "reward": -0.20},
+        {"order_book_imbalance": 0.0, "spread": 2.0, "reward": 0.00},
+    ]
+    training_path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+    artifact_dir = tmp_path / "research_cards" / "pipeline_runs" / "rl_cache_test"
+    args = argparse.Namespace(
+        rl_training_enabled=True,
+        rl_feature=["order_book_imbalance", "spread"],
+        rl_training_data=training_path,
+        rl_device="cpu",
+        rl_seed=9,
+        rl_cache_enabled=True,
+        rl_cache_root="runtime/test_rl_policy_cache",
+    )
+
+    first, first_path = run_pipeline._run_rl_training_stage(
+        args,
+        artifact_dir=artifact_dir,
+        repo_root=tmp_path,
+    )
+    second, second_path = run_pipeline._run_rl_training_stage(
+        args,
+        artifact_dir=artifact_dir,
+        repo_root=tmp_path,
+    )
+
+    assert first_path == artifact_dir / "rl_policy_artifact.json"
+    assert second_path == first_path
+    assert first["cache_receipt"]["status"] == "miss"
+    assert second["cache_receipt"]["status"] == "hit"
+    assert first["cache_receipt"]["cache_key"] == second["cache_receipt"]["cache_key"]
+    assert first["promotable"] is False
+    assert second["promotable"] is False
+    cache_path = tmp_path / "runtime" / "test_rl_policy_cache" / f"{first['cache_receipt']['cache_key']}.json"
+    assert first["cache_receipt"]["cache_path"] == str(cache_path)
+    assert second["cache_receipt"]["cache_path"] == str(cache_path)
+    assert cache_path.is_file()
+
+
+def test_candidate_prefilter_rejects_malformed_and_bounds():
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel
+
+    good = CandidateModel(
+        candidate_id="good",
+        model_id="BOOK_PRESSURE",
+        strategy_params={"signal_threshold": 0.2, "holding_period_bars": 3},
+        thesis="x",
+    )
+    bad = CandidateModel(
+        candidate_id="bad",
+        model_id="bad model",
+        strategy_params={"signal_threshold": 1.2, "holding_period_bars": 0},
+        thesis="x",
+    )
+
+    accepted, receipt = run_pipeline.prefilter_candidates(
+        [good, bad],
+        config=run_pipeline._DEFAULT_PIPELINE_RUNTIME_CONFIG["candidate_prefilter"],
+    )
+
+    assert accepted == [good]
+    assert receipt["accepted_ids"] == ["good"]
+    assert receipt["rejected_count"] == 1
+    assert receipt["rejected"][0]["candidate_id"] == "bad"
+    assert receipt["rejected"][0]["reasons"] == [
+        "malformed_model_id",
+        "signal_threshold_out_of_bounds",
+        "holding_period_bars_nonpositive",
+    ]
+
+
+def test_evaluate_candidates_batch_uses_bounded_executor(monkeypatch, tmp_path):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    captured = {"max_workers": None, "jobs": []}
+
+    class InlineExecutor:
+        def __init__(self, max_workers):
+            captured["max_workers"] = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def map(self, func, jobs):
+            captured["jobs"] = list(jobs)
+            return [func(job) for job in captured["jobs"]]
+
+    def fake_evaluate(candidate, event_id, repo_root, **kwargs):
+        gates = kwargs["gates"]
+        return EvaluationResult(
+            candidate=candidate,
+            event_id=event_id,
+            net_pnl=1.0,
+            num_trades=gates.min_trades,
+            win_rate=1.0,
+            expectancy=1.0,
+            tail_loss=0.0,
+            gates=gates,
+        )
+
+    monkeypatch.setattr(run_pipeline, "ProcessPoolExecutor", InlineExecutor)
+    monkeypatch.setattr(run_pipeline, "evaluate_model", fake_evaluate)
+    candidates = [
+        CandidateModel("c1", "BOOK_PRESSURE", {}, "book"),
+        CandidateModel("c2", "SPREAD_BLOWOUT_RECOMPRESSION", {}, "spread"),
+    ]
+
+    results = run_pipeline._evaluate_candidates_batch(
+        candidates,
+        event_id="CPI_2024_09_11_TIGHT",
+        repo_root=tmp_path,
+        chi404_summary=None,
+        gates_by_candidate_id={
+            "c1": GateThresholds(min_trades=1),
+            "c2": GateThresholds(min_trades=2),
+        },
+        workers=2,
+    )
+
+    assert captured["max_workers"] == 2
+    assert [job[0].candidate_id for job in captured["jobs"]] == ["c1", "c2"]
+    assert [result.gates.min_trades for result in results] == [1, 2]
+
+
+def test_document_ingestion_cache_miss_then_hit(tmp_path, monkeypatch):
+    import scripts.run_pipeline as run_pipeline
+
+    doc = tmp_path / "paper.txt"
+    doc.write_text("CPI affects MES. Must not use lookahead.", encoding="utf-8")
+    records = {
+        "nodes": [{"id": "doc:paper", "type": "document"}],
+        "edges": [],
+    }
+    calls = {"extract": 0}
+    persisted = []
+
+    def fake_extract(path):
+        calls["extract"] += 1
+        return doc.read_text(encoding="utf-8")
+
+    monkeypatch.setattr(run_pipeline, "extract_text", fake_extract)
+    monkeypatch.setattr(run_pipeline, "summarise_text", lambda text: "summary")
+    monkeypatch.setattr(run_pipeline, "build_knowledge_graph", lambda text, doc_id: {"doc_id": doc_id})
+    monkeypatch.setattr(run_pipeline, "graph_to_kg_records", lambda graph: records)
+    monkeypatch.setattr(
+        run_pipeline,
+        "persist_graph_slice",
+        lambda repo_root, graph: persisted.append(graph) or (1, 0),
+    )
+
+    summary, meta = run_pipeline.ingest_document_with_cache(
+        doc,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )
+    summary2, meta2 = run_pipeline.ingest_document_with_cache(
+        doc,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )
+    cache_path = Path(meta["cache_path"])
+    doc.touch()
+    summary3, meta3 = run_pipeline.ingest_document_with_cache(
+        doc,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )
+
+    assert summary == "summary"
+    assert summary2 == "summary"
+    assert summary3 == "summary"
+    assert meta["status"] == "miss"
+    assert meta2["status"] == "hit"
+    assert meta3["status"] == "hit"
+    assert calls["extract"] == 1
+    assert cache_path.is_file()
+    assert meta3["cache_path"] == str(cache_path)
+    assert len(list((tmp_path / "cache").glob("*.json"))) == 1
+    assert len(persisted) == 3
+
+
+def test_document_ingestion_doc_ids_include_resolved_path_identity(tmp_path, monkeypatch):
+    import scripts.run_pipeline as run_pipeline
+
+    doc_a = tmp_path / "thesis" / "analysis.txt"
+    doc_b = tmp_path / "market_data" / "analysis.txt"
+    doc_a.parent.mkdir()
+    doc_b.parent.mkdir()
+    doc_a.write_text("CPI thesis", encoding="utf-8")
+    doc_b.write_text("Market data note", encoding="utf-8")
+    doc_ids = []
+
+    def fake_extract(path):
+        return Path(path).read_text(encoding="utf-8")
+
+    def fake_build_knowledge_graph(text, doc_id):
+        doc_ids.append(doc_id)
+        return {"doc_id": doc_id}
+
+    monkeypatch.setattr(run_pipeline, "extract_text", fake_extract)
+    monkeypatch.setattr(run_pipeline, "summarise_text", lambda text: "summary")
+    monkeypatch.setattr(run_pipeline, "build_knowledge_graph", fake_build_knowledge_graph)
+    monkeypatch.setattr(run_pipeline, "graph_to_kg_records", lambda graph: {"nodes": [], "edges": []})
+    monkeypatch.setattr(run_pipeline, "persist_graph_slice", lambda *args, **kwargs: (0, 0))
+
+    meta_a = run_pipeline.ingest_document_with_cache(
+        doc_a,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )[1]
+    meta_b = run_pipeline.ingest_document_with_cache(
+        doc_b,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )[1]
+
+    assert len(doc_ids) == 2
+    assert doc_ids[0].startswith("doc:analysis_")
+    assert doc_ids[1].startswith("doc:analysis_")
+    assert doc_ids[0] != doc_ids[1]
+    assert meta_a["doc_id"] == doc_ids[0]
+    assert meta_b["doc_id"] == doc_ids[1]
+
+
+def test_document_ingestion_rebuilds_stale_stem_only_doc_id_cache(tmp_path, monkeypatch):
+    import scripts.run_pipeline as run_pipeline
+
+    doc = tmp_path / "notes" / "analysis.txt"
+    doc.parent.mkdir()
+    doc.write_text("CPI note", encoding="utf-8")
+    calls = {"extract": 0}
+
+    def fake_extract(path):
+        calls["extract"] += 1
+        return Path(path).read_text(encoding="utf-8")
+
+    monkeypatch.setattr(run_pipeline, "extract_text", fake_extract)
+    monkeypatch.setattr(run_pipeline, "summarise_text", lambda text: "summary")
+    monkeypatch.setattr(run_pipeline, "build_knowledge_graph", lambda text, doc_id: {"doc_id": doc_id})
+    monkeypatch.setattr(run_pipeline, "graph_to_kg_records", lambda graph: {"nodes": [], "edges": []})
+    monkeypatch.setattr(run_pipeline, "persist_graph_slice", lambda *args, **kwargs: (0, 0))
+
+    _, meta = run_pipeline.ingest_document_with_cache(
+        doc,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )
+    cache_path = Path(meta["cache_path"])
+    cached = json.loads(cache_path.read_text(encoding="utf-8"))
+    cached["doc_id"] = "doc:analysis"
+    cache_path.write_text(json.dumps(cached, indent=2), encoding="utf-8")
+
+    _, meta2 = run_pipeline.ingest_document_with_cache(
+        doc,
+        repo_root=tmp_path,
+        cache_config={"enabled": True, "root": "cache"},
+    )
+
+    assert calls["extract"] == 2
+    assert meta2["status"] == "miss"
+    assert meta2["doc_id"].startswith("doc:analysis_")
+    assert meta2["doc_id"] != "doc:analysis"
+
+
+def test_run_pipeline_dry_run_writes_runtime_receipt(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="heuristic",
+        llm_status="skipped_no_llm",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_dry",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.15},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_dry_receipt",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_dry_receipt")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_response",
+        lambda report, request, **kwargs: {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "parsed": {"primary_model_id": report.parsed.primary_model_id},
+        },
+    )
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_dry_receipt"
+    assert payload["run_id"] == "pipeline_dry_receipt"
+    assert (run_dir / "pipeline_run.log").is_file()
+    assert (run_dir / "pipeline_runtime_config.json").is_file()
+    assert (run_dir / "candidate_prefilter.json").is_file()
+    runtime_receipt = json.loads((run_dir / "pipeline_runtime_config.json").read_text(encoding="utf-8"))
+    assert runtime_receipt["pipeline_runtime_config_hash"]
+    assert runtime_receipt["effective"]["max_candidates"] == 1
+    receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
+    assert receipt["run_id"] == "pipeline_dry_receipt"
+    assert receipt["status"] == "dry_run_complete"
+    assert receipt["candidate_prefilter"]["accepted_count"] == 1
+
+
+def test_run_pipeline_dry_run_honors_candidate_search_cli(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="heuristic",
+        llm_status="skipped_no_llm",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_search",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.15},
+        thesis=parsed.thesis,
+        metadata={"candidate_search": {"method": "evolutionary"}},
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_search_cli",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+    captured = {}
+
+    def fake_generate_candidates(parsed_arg, **kwargs):
+        captured.update(kwargs)
+        return [candidate]
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_search_cli")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", fake_generate_candidates)
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_response",
+        lambda report, request, **kwargs: {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "parsed": {"primary_model_id": report.parsed.primary_model_id},
+        },
+    )
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+            "--candidate-search-method",
+            "evolutionary",
+            "--candidate-search-seed",
+            "77",
+        ]
+    )
+
+    assert code == 0
+    assert captured["search_method"] == "evolutionary"
+    assert captured["search_seed"] == 77
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_search_cli"
+    runtime_receipt = json.loads((run_dir / "pipeline_runtime_config.json").read_text(encoding="utf-8"))
+    assert runtime_receipt["effective"]["candidate_search"] == {
+        "method": "evolutionary",
+        "seed": 77,
+    }
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["candidates"][0]["candidate_id"] == "cand_search"
+
+
+def test_run_pipeline_rl_required_blocks_before_candidate_generation(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_rl_blocked",
+        "thesis": "Fade spread blowout after CPI",
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_rl_blocked")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(
+        run_pipeline,
+        "parse_hypothesis",
+        lambda *args, **kwargs: pytest.fail("RL block should happen before parse"),
+    )
+    monkeypatch.setattr(
+        run_pipeline,
+        "generate_candidates",
+        lambda *args, **kwargs: pytest.fail("RL block should happen before candidate generation"),
+    )
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            request["thesis"],
+            "--event-id",
+            request["event_id"],
+            "--repo-root",
+            str(tmp_path),
+            "--no-llm",
+            "--max-candidates",
+            "1",
+            "--rl-required",
+        ]
+    )
+
+    assert code == 2
+    payload = _last_json_object(capsys.readouterr().out)
+    assert payload["status"] == "blocked_rl_training"
+    assert payload["rl_policy_artifact"]["failure_reasons"] == ["missing_rl_feature_names"]
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_rl_blocked"
+    assert (run_dir / "rl_policy_artifact.json").is_file()
+
+
+def test_run_pipeline_log_handlers_are_call_local(tmp_path):
+    import scripts.run_pipeline as run_pipeline
+
+    contexts = []
+    try:
+        run_a = tmp_path / "run_a"
+        run_b = tmp_path / "run_b"
+        run_a.mkdir()
+        run_b.mkdir()
+        log_a, handler_a, token_a = run_pipeline._configure_run_logging(run_a, "run_a")
+        contexts.append((handler_a, token_a))
+        run_pipeline.logger.info("a_only")
+
+        log_b, handler_b, token_b = run_pipeline._configure_run_logging(run_b, "run_b")
+        contexts.append((handler_b, token_b))
+        run_pipeline.logger.info("b_only")
+
+        assert handler_a in run_pipeline.logger.handlers
+        assert handler_b in run_pipeline.logger.handlers
+
+        run_pipeline._close_run_logging(handler_b, token_b)
+        contexts.pop()
+        run_pipeline.logger.info("a_after_b")
+    finally:
+        while contexts:
+            handler, token = contexts.pop()
+            run_pipeline._close_run_logging(handler, token)
+
+    events_a = [
+        json.loads(line)["event"]
+        for line in log_a.read_text(encoding="utf-8").splitlines()
+    ]
+    events_b = [
+        json.loads(line)["event"]
+        for line in log_b.read_text(encoding="utf-8").splitlines()
+    ]
+    assert "a_only" in events_a
+    assert "a_after_b" in events_a
+    assert "b_only" not in events_a
+    assert "b_only" in events_b
+    assert "a_only" not in events_b
+    assert "a_after_b" not in events_b
+
+
+def test_run_pipeline_full_evaluation_orchestrator_result_uses_marker(
+    tmp_path, monkeypatch, capsys
+):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import (
+        CandidateModel,
+        EvaluationResult,
+        GateThresholds,
+        ParsedHypothesis,
+    )
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="heuristic",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_full_eval",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.05},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_full_marker",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    def fake_evaluate(cand, event_id, repo_root, **kwargs):
+        return EvaluationResult(
+            candidate=cand,
+            event_id=event_id,
+            net_pnl=1.0,
+            num_trades=1,
+            win_rate=1.0,
+            expectancy=1.0,
+            tail_loss=0.0,
+            gates=kwargs.get("gates") or GateThresholds(min_trades=0),
+        )
+
+    def fake_deploy(repo_root, report):
+        report.selected = candidate
+        return tmp_path / "research_cards" / "pipeline_runs" / "pipeline_full_marker"
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_full_marker")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(run_pipeline, "evaluate_model", fake_evaluate)
+    monkeypatch.setattr(run_pipeline, "deploy_best", fake_deploy)
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_response",
+        lambda report, request, **kwargs: {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "selected_model_id": report.selected.model_id if report.selected else None,
+        },
+    )
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--no-llm",
+            "--max-candidates",
+            "1",
+            "--orchestrator-result",
+        ]
+    )
+
+    assert code == 0
+    stdout = capsys.readouterr().out
+    marker_lines = [
+        line
+        for line in stdout.splitlines()
+        if line.startswith(run_pipeline._PIPELINE_RESULT_MARKER)
+    ]
+    assert len(marker_lines) == 1
+    slim = json.loads(marker_lines[0].removeprefix(run_pipeline._PIPELINE_RESULT_MARKER))
+    assert slim == {
+        "run_id": "pipeline_full_marker",
+        "artifact_dir": str(tmp_path / "research_cards" / "pipeline_runs" / "pipeline_full_marker"),
+        "status": "candidate_deployed",
+        "paths": None,
+    }
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_full_marker"
+    receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
+    assert receipt["status"] == "candidate_deployed"
+
+
+def test_run_pipeline_failure_writes_receipt(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_failure_receipt",
+        "thesis": "Fade spread blowout after CPI",
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_failure_receipt")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("synthetic parse failure")
+
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", boom)
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            "Fade spread blowout after CPI",
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 1
+    assert "synthetic parse failure" in capsys.readouterr().err
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_failure_receipt"
+    receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
+    assert receipt["status"] == "pipeline_failed"
+    assert receipt["error"]["type"] == "RuntimeError"
+    assert receipt["request_packet"]["request_id"] == "pipeline_failure_receipt"
+
+
+def test_run_pipeline_concurrent_failures_keep_call_local_receipts(tmp_path, monkeypatch):
+    import scripts.run_pipeline as run_pipeline
+
+    thread_state = threading.local()
+    barrier = threading.Barrier(2)
+    run_ids = ("pipeline_concurrent_failure_a", "pipeline_concurrent_failure_b")
+
+    def fake_run_id():
+        return thread_state.run_id
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "openfoundry_meta": {},
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    def fail_after_both_runs_started(*args, **kwargs):
+        barrier.wait(timeout=5)
+        raise RuntimeError(f"synthetic parse failure for {thread_state.run_id}")
+
+    def run_pipeline_thread(run_id: str) -> int:
+        thread_state.run_id = run_id
+        return run_pipeline.main(
+            [
+                "--thesis",
+                f"Fade spread blowout after CPI {run_id}",
+                "--event-id",
+                "CPI_2024_09_11_TIGHT",
+                "--repo-root",
+                str(tmp_path),
+                "--dry-run",
+                "--no-llm",
+                "--max-candidates",
+                "1",
+            ]
+        )
+
+    monkeypatch.setattr(run_pipeline, "_run_id", fake_run_id)
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", fail_after_both_runs_started)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = dict(zip(run_ids, executor.map(run_pipeline_thread, run_ids)))
+
+    assert results == {run_id: 1 for run_id in run_ids}
+    for run_id in run_ids:
+        run_dir = tmp_path / "research_cards" / "pipeline_runs" / run_id
+        receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
+        assert receipt["run_id"] == run_id
+        assert receipt["request_packet"]["request_id"] == run_id
+        assert receipt["request_packet"]["thesis"] == f"Fade spread blowout after CPI {run_id}"
+        assert receipt["error"] == {
+            "type": "RuntimeError",
+            "message": f"synthetic parse failure for {run_id}",
+        }
+
+
+def test_run_pipeline_url_doc_source_is_not_path_normalized(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="heuristic",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_url_doc",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.05},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_url_doc",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+    captured = {}
+    url = "https://example.com/research-note.txt"
+
+    def fake_ingest(source, **kwargs):
+        captured["source"] = source
+        return "doc summary", {"status": "disabled_url_cache"}
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_url_doc")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "ingest_document_with_cache", fake_ingest)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_response",
+        lambda report, request, **kwargs: {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "parsed": {"primary_model_id": report.parsed.primary_model_id},
+        },
+    )
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--doc",
+            url,
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 0
+    _last_json_object(capsys.readouterr().out)
+    assert captured["source"] == url
+
+
+def test_run_pipeline_doc_ingestion_error_keeps_document_summary_null(
+    tmp_path, monkeypatch, capsys
+):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="heuristic",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_doc_fail",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.05},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_doc_fail",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+    captured = {}
+
+    def fail_ingest(*args, **kwargs):
+        raise RuntimeError("synthetic doc parse failure")
+
+    def fake_response(report, request, **kwargs):
+        captured["document_summary"] = report.document_summary
+        return {
+            "request_id": request["request_id"],
+            "llm_status": kwargs["llm_status"],
+            "parsed": {"primary_model_id": report.parsed.primary_model_id},
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_doc_fail")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "ingest_document_with_cache", fail_ingest)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(run_pipeline, "build_pipeline_response", fake_response)
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--doc",
+            str(tmp_path / "paper.txt"),
+            "--dry-run",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 0
+    payload = _last_json_object(capsys.readouterr().out)
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_doc_fail"
+    receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
+    assert captured["document_summary"] is None
+    assert payload["document_summary"] is None
+    assert receipt["document_summary"] is None
+    assert payload["document_cache"] == {
+        "status": "error",
+        "error": "synthetic doc parse failure",
+    }
+
+
+def test_run_pipeline_idea_set_requires_vectorbt_writes_receipt(tmp_path, monkeypatch, capsys):
+    import scripts.run_pipeline as run_pipeline
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="idea_set",
+    )
+    idea_packet = _idea_packet()
+    idea_packet["ideas"] = [idea_packet["ideas"][1]]
+    idea_packet["ideas"][0]["status"] = "queued_for_test"
+    candidate = CandidateModel(
+        candidate_id="cand_idea",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.15},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_idea_requires_vbt",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_idea_requires_vbt")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: idea_packet)
+    monkeypatch.setattr(run_pipeline, "candidates_from_ideas", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(run_pipeline, "parsed_from_idea", lambda idea: parsed)
+
+    code = run_pipeline.main(
+        [
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--idea-set",
+            "--no-llm",
+            "--max-candidates",
+            "1",
+        ]
+    )
+
+    assert code == 2
+    payload = _last_json_object(capsys.readouterr().out)
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_idea_requires_vbt"
+    receipt = json.loads((run_dir / "pipeline_run_receipt.json").read_text(encoding="utf-8"))
+    prefilter = json.loads((run_dir / "candidate_prefilter.json").read_text(encoding="utf-8"))
+    assert payload["status"] == "blocked_idea_set_requires_vectorbt_prefilter"
+    assert receipt["status"] == "blocked_idea_set_requires_vectorbt_prefilter"
+    assert receipt["candidate_prefilter"]["accepted_count"] == 1
+    assert prefilter["accepted_ids"] == ["cand_idea"]
+
+
 def test_extract_text_dev_instructions_pdf():
     if not PDF.is_file():
         pytest.skip("dev_instructions.pdf not in repo")
@@ -140,7 +1828,7 @@ def test_generate_candidates_respects_max():
     parsed = parse_hypothesis("spread recompression", use_llm=False)
     cands = list(generate_candidates(parsed, max_candidates=2))
     assert len(cands) == 2
-    assert cands[0].strategy_params["signal_threshold"] != cands[1].strategy_params["signal_threshold"]
+    assert cands[0].strategy_params != cands[1].strategy_params
 
 
 def _idea_packet():
@@ -156,7 +1844,7 @@ def _idea_packet():
         "constraints": {
             "allowed_model_ids": [
                 "SPREAD_BLOWOUT_RECOMPRESSION",
-                "BOOK_PRESSURE",
+                "SECOND_WAVE_CONTINUATION",
             ],
             "allowed_lane_codes": ["cme"],
             "max_candidates": 4,
@@ -176,10 +1864,10 @@ def _idea_packet():
                 "idea_id": "idea_low",
                 "status": "proposed",
                 "lane_code": "cme",
-                "thesis_code": "book_pressure",
+                "thesis_code": "second_wave_continuation",
                 "instrument_ids": ["MES"],
-                "primary_model_id": "BOOK_PRESSURE",
-                "feature_ids": ["BOOK_PRESSURE"],
+                "primary_model_id": "SECOND_WAVE_CONTINUATION",
+                "feature_ids": ["SECOND_WAVE_CONTINUATION"],
                 "param_ranges": {"signal_threshold": [0.05, 0.35]},
                 "entry_rule_codes": ["enter_pressure"],
                 "exit_rule_codes": ["exit_revert"],
@@ -260,6 +1948,22 @@ def test_idea_static_filter_rejects_invalid_and_orders_queue():
         "ideas_tested_pass": 0,
         "candidates_from_ideas": 2,
     }
+
+
+def test_idea_static_filter_rejects_structural_primary_even_if_allowed():
+    from research_pipeline.idea_generation import candidates_from_ideas
+
+    packet = _idea_packet()
+    packet["constraints"]["allowed_model_ids"] = ["BOOK_PRESSURE"]
+    packet["ideas"] = [packet["ideas"][0]]
+    packet["ideas"][0]["primary_model_id"] = "BOOK_PRESSURE"
+    packet["ideas"][0]["feature_ids"] = ["BOOK_PRESSURE"]
+
+    candidates = candidates_from_ideas(packet, max_candidates=1)
+
+    assert candidates == []
+    assert packet["ideas"][0]["status"] == "static_reject"
+    assert "primary_model_id_not_hypothesis" in packet["ideas"][0]["static_error_codes"]
 
 
 def test_idea_feature_ids_do_not_expand_candidate_model_families():
@@ -1090,6 +2794,11 @@ def test_run_pipeline_vectorbt_hftbacktest_opt_in_calls_writer(tmp_path, monkeyp
     monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
     monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
     monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
+    monkeypatch.setattr(
+        run_pipeline,
+        "_strict_replay_eligible_ids",
+        lambda artifact: (["hashed_trial_cand_vbt"], {}),
+    )
     monkeypatch.setattr(run_pipeline, "write_hftbacktest_realism_artifacts", fake_writer)
     monkeypatch.setattr(sys, "argv", [
         "run_pipeline.py",
@@ -1140,6 +2849,322 @@ def test_run_pipeline_vectorbt_hftbacktest_opt_in_calls_writer(tmp_path, monkeyp
     assert payload["hftbacktest_realism"]["replay_summary"] == payload["replay_summary"]
     assert payload["paths"]["screening_artifact_path"] == str(run_dir / "screening_artifact.json")
     assert payload["paths"]["hftbacktest_realism_dir"] == str(run_dir / "hftbacktest_realism")
+
+
+def test_run_pipeline_vectorbt_hftbacktest_opt_in_blocks_without_strict_replay_eligibility(
+    tmp_path, monkeypatch, capsys
+):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+    from backtest_pipeline.src.promotion_gate import PromotedCandidate
+    from backtest_pipeline.src.vectorbt_adapter import FilterResult
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_vbt",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis=parsed.thesis,
+    )
+
+    def fake_filter_candidates(*args, **kwargs):
+        return FilterResult(
+            promoted=[
+                PromotedCandidate(
+                    candidate_id="hashed_trial_cand_vbt",
+                    hypothesis_id="SPREAD_BLOWOUT_RECOMPRESSION",
+                    strategy_family="SPREAD_BLOWOUT_RECOMPRESSION",
+                    asset_class="CME",
+                    symbol="MES",
+                    timeframe="1m",
+                    param_values={"signal_threshold": 0.1},
+                    vectorbt_run_id="vbt_test",
+                    vectorbt_results={
+                        "base_candidate_id": "cand_vbt",
+                        "oos_expectancy": 1.0,
+                        "num_trades": 12,
+                    },
+                    pass_reason="vectorbt_screen_passed_replay_not_eligible",
+                )
+            ],
+            rejected=[],
+            vectorbt_available=True,
+            backend="vectorbt",
+            run_id="vbt_test",
+            total_candidates=1,
+            code_commit="abc123",
+            vectorbt_version="1.0.0",
+            vectorbt_engine="rust",
+            engine_parity_status="rust_engine_verified",
+            rust_engine_required_for_scope=False,
+            rust_engine_available=True,
+            vectorbt_engine_runtime_proof=True,
+            parameter_space_id="vbt_ps_test",
+            parameter_space_hash="ps_hash_test",
+            max_trials=1,
+            trials_run=1,
+            max_total_trials=1,
+            candidate_ids=["cand_vbt"],
+            candidate_reasons={"cand_vbt": "queued_for_vectorbt_screen"},
+            stop_reasons=[],
+        )
+
+    data_path = tmp_path / "data.npz"
+    latency_path = tmp_path / "latency.json"
+    fill_queue_path = tmp_path / "fill_queue.json"
+    for path in (data_path, latency_path, fill_queue_path):
+        path.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_vbt_hbt_ineligible")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: {
+        "schema_version": "1",
+        "request_id": "pipeline_vbt_hbt_ineligible",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    })
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
+    monkeypatch.setattr(
+        run_pipeline,
+        "write_hftbacktest_realism_artifacts",
+        lambda *args, **kwargs: pytest.fail("ineligible row called HftBacktest writer"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        parsed.thesis,
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--max-candidates",
+        "1",
+        "--no-llm",
+        "--vectorbt",
+        "--hftbacktest-realism",
+        "--hftbacktest-data-npz",
+        str(data_path),
+        "--hftbacktest-latency-model",
+        str(latency_path),
+        "--hftbacktest-fill-queue-model",
+        str(fill_queue_path),
+    ])
+
+    assert run_pipeline.main() == 2
+    payload = _last_json_object(capsys.readouterr().out)
+
+    assert payload["status"] == "blocked_hftbacktest_realism_replay_ineligible"
+    assert payload["hftbacktest_realism"] is None
+    assert payload["replay_summary"]["fail_closed_reasons"] == [
+        "screening_artifact_has_no_strict_replay_eligible_candidate"
+    ]
+
+
+def test_native_hot_path_evidence_accepts_legacy_space_sha256_format():
+    from backtest_pipeline.src import hftbacktest_realism as hbt0
+
+    digest = "a" * 64
+    legacy = f"reports/cpp_lane/hft3_features_cpp_verify_cpp_parity.json sha256:{digest}"
+    modern = f"reports/cpp_lane/hft3_features_cpp_verify_cpp_parity.json#sha256:{digest}"
+
+    assert hbt0._contains_sha256_digest(modern)
+    assert hbt0._contains_sha256_digest(legacy)
+    assert hbt0._looks_like_native_cpp_hot_path_evidence(legacy)
+    assert hbt0._native_cpp_hot_path_evidence_classes(legacy) == {"features"}
+    assert not hbt0._contains_sha256_digest(f"sha256:{digest}")
+    assert not hbt0._contains_sha256_digest(
+        f"reports/cpp_lane/hft3_features_cpp_verify_cpp_parity.jsonsha256:{digest}"
+    )
+
+
+def test_strict_replay_eligible_ids_requires_applied_robustness_receipt(monkeypatch):
+    import scripts.run_pipeline as run_pipeline
+    from backtest_pipeline.src.hftbacktest_realism import (
+        validate_applied_robustness_evidence_receipt,
+    )
+
+    def fake_replay_eligibility(row, *, screening_artifact=None):
+        reasons = validate_applied_robustness_evidence_receipt(
+            row,
+            screening_artifact=screening_artifact,
+        )
+        return [f"screening_artifact_replay_ineligible:{reason}" for reason in reasons]
+
+    monkeypatch.setattr(run_pipeline, "validate_candidate_replay_eligibility", fake_replay_eligibility)
+    artifact = {
+        "screening_artifact_hash": "9" * 64,
+        "data_manifest_hash": "d" * 64,
+        "lake_manifest_hash": "e" * 64,
+        "promoted_ids": ["cand_vbt"],
+        "robustness_evidence_receipt": {
+            "schema": "hft3_robustness_evidence_application_receipt_v1",
+            "input_screening_artifact_hash": "a" * 64,
+            "robustness_evidence_schema": "hft3_robustness_evidence_inputs_v1",
+            "matched_candidate_ids": ["cand_vbt"],
+            "eligible_candidate_ids": ["cand_vbt"],
+        },
+    }
+    valid_receipt = {
+        "schema": "hft3_robustness_evidence_inputs_v1",
+        "binding": {
+            "screening_artifact_hash": "a" * 64,
+            "candidate_id": "cand_vbt",
+            "parameter_values_hash": "b" * 64,
+            "feature_recipe_hash": "c" * 64,
+            "data_manifest_hash": artifact["data_manifest_hash"],
+            "lake_manifest_hash": artifact["lake_manifest_hash"],
+        },
+        "source_evidence": {
+            "wfc_rows": "research_cards/robustness/wfc_rows.json#sha256:" + "f" * 64,
+        },
+        "evidence_entry_hash": "b" * 64,
+    }
+    artifact["robustness_evidence_receipt"]["row_receipt_hashes"] = {
+        "cand_vbt": run_pipeline._canonical_hash(valid_receipt)
+    }
+    base_row = {
+        "candidate_id": "cand_vbt",
+        "parameter_values_hash": "b" * 64,
+        "feature_recipe_hash": "c" * 64,
+        "replay_eligibility_status": "eligible",
+    }
+
+    eligible, ineligible = run_pipeline._strict_replay_eligible_ids(
+        {**artifact, "promoted": [{**base_row, "robustness_evidence_receipt": valid_receipt}]}
+    )
+    assert eligible == ["cand_vbt"]
+    assert ineligible == {}
+
+    invalid_receipts = [
+        None,
+        {},
+        {"status": "pending"},
+        {**valid_receipt, "binding": {"candidate_id": "other"}},
+        {**valid_receipt, "binding": {**valid_receipt["binding"], "screening_artifact_hash": artifact["screening_artifact_hash"]}},
+        {**valid_receipt, "binding": {**valid_receipt["binding"], "parameter_values_hash": "9" * 64}},
+        {**valid_receipt, "binding": {**valid_receipt["binding"], "lake_manifest_hash": ""}},
+        {**valid_receipt, "source_evidence": {"wfc_rows": {"sha256": "f" * 64}}},
+        {
+            **valid_receipt,
+            "source_evidence": {
+                "wfc_rows": {
+                    "path": "research_cards/robustness/wfc_rows.json",
+                    "sha256": "sha256:" + "f" * 64,
+                }
+            },
+        },
+        {**valid_receipt, "source_evidence": {"wfc_rows": "research_cards/wfc.json#sha256:not-a-digest"}},
+        {**valid_receipt, "evidence_entry_hash": "not-a-digest"},
+    ]
+    for receipt in invalid_receipts:
+        eligible, ineligible = run_pipeline._strict_replay_eligible_ids(
+            {**artifact, "promoted": [{**base_row, "robustness_evidence_receipt": receipt}]}
+        )
+        assert eligible == []
+        assert "cand_vbt" in ineligible
+        assert ineligible["cand_vbt"] != ["robustness_evidence_receipt_missing"]
+        assert all(
+            reason.startswith("screening_artifact_replay_ineligible:")
+            for reason in ineligible["cand_vbt"]
+        )
+
+    invalid_artifacts = [
+        {key: value for key, value in artifact.items() if key != "robustness_evidence_receipt"},
+        {
+            **artifact,
+            "robustness_evidence_receipt": {
+                **artifact["robustness_evidence_receipt"],
+                "input_screening_artifact_hash": "8" * 64,
+            },
+        },
+        {
+            **artifact,
+            "robustness_evidence_receipt": {
+                **artifact["robustness_evidence_receipt"],
+                "input_screening_artifact_hash": "sha256:" + artifact["screening_artifact_hash"],
+            },
+        },
+        {
+            **artifact,
+            "robustness_evidence_receipt": {
+                **artifact["robustness_evidence_receipt"],
+                "robustness_evidence_schema": "wrong_schema",
+            },
+        },
+        {
+            **artifact,
+            "robustness_evidence_receipt": {
+                **artifact["robustness_evidence_receipt"],
+                "matched_candidate_ids": [],
+            },
+        },
+        {
+            **artifact,
+            "robustness_evidence_receipt": {
+                **artifact["robustness_evidence_receipt"],
+                "eligible_candidate_ids": [],
+            },
+        },
+        {
+            **artifact,
+            "robustness_evidence_receipt": {
+                **artifact["robustness_evidence_receipt"],
+                "row_receipt_hashes": {"cand_vbt": "0" * 64},
+            },
+        },
+    ]
+    for invalid_artifact in invalid_artifacts:
+        eligible, ineligible = run_pipeline._strict_replay_eligible_ids(
+            {
+                **invalid_artifact,
+                "promoted": [{**base_row, "robustness_evidence_receipt": valid_receipt}],
+            }
+        )
+        assert eligible == []
+        assert "cand_vbt" in ineligible
+        assert ineligible["cand_vbt"] != ["robustness_evidence_receipt_missing"]
+        assert all(
+            reason.startswith("screening_artifact_replay_ineligible:")
+            for reason in ineligible["cand_vbt"]
+        )
+
+
+def test_strict_replay_eligible_ids_passes_screening_artifact_to_validator(monkeypatch):
+    import scripts.run_pipeline as run_pipeline
+
+    artifact = {
+        "promoted_ids": ["cand_vbt"],
+        "promoted": [{"candidate_id": "cand_vbt"}],
+    }
+
+    def fake_replay_eligibility(row, *, screening_artifact=None):
+        assert screening_artifact is artifact
+        return ["screening_artifact_replay_ineligible:robustness_evidence_receipt_candidate_mismatch"]
+
+    monkeypatch.setattr(run_pipeline, "validate_candidate_replay_eligibility", fake_replay_eligibility)
+
+    eligible, ineligible = run_pipeline._strict_replay_eligible_ids(artifact)
+
+    assert eligible == []
+    assert ineligible == {
+        "cand_vbt": [
+            "screening_artifact_replay_ineligible:robustness_evidence_receipt_candidate_mismatch"
+        ]
+    }
 
 
 def test_run_pipeline_vectorbt_hftbacktest_opt_in_no_promoted_does_not_call_writer(

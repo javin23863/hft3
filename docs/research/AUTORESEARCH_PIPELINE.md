@@ -50,6 +50,94 @@ python scripts/run_pipeline.py \
   --event-id CPI_2024_09_11_TIGHT
 ```
 
+## Runtime Reproducibility
+
+Legacy `scripts/run_pipeline.py` now loads a separate JSON runtime config
+(`config/research_pipeline/default_runtime.json` by default). This is distinct
+from the autoresearch loop YAML passed through `--config`.
+
+Each artifact-producing run writes:
+
+- `pipeline_runtime_config.json` — loaded/effective runtime defaults plus hash
+- `pipeline_run.log` — JSON-lines run log for operational debugging
+- `candidate_prefilter.json` — lightweight prefilter receipt
+- `pipeline_run_receipt.json` — final structured payload for the run,
+  including fail-closed failures after artifact setup
+
+Optional documents are cached by source fingerprint under
+`runtime/research_pipeline/doc_cache` unless disabled in the runtime config.
+Local file cache keys include the source file SHA256. URL caching is disabled
+by default because remote content can change behind a stable URL. The cache
+covers extracted text summary and KG slice records; it does not change the
+VectorBT or HftBacktest gates.
+
+Candidate generation is controlled by the runtime config's
+`candidate_search` section or the `--candidate-search-method` and
+`--candidate-search-seed` CLI flags. Supported methods are `grid`,
+`bayesian`, and `evolutionary`. These methods only select parameter sets before
+VectorBT screening; the emitted `candidate_search` metadata records
+`backend=stdlib`, the seed, grid size, iterations, and
+`objective_evaluations=0`. They do not promote candidates and do not replace
+the VectorBT -> robustness evidence -> HftBacktest gate order.
+
+The parser consumes the model registry metadata documented in
+[model_registry.md](../model_registry.md). Natural-language model aliases,
+registry default parameter ranges, `volatility_regime`, and canonical CME
+symbol aliases are copied into parsed-hypothesis receipts. If `--symbol` is
+omitted, the pipeline derives the target symbol from the parsed compatible
+instrument universe. If `--symbol` is supplied and conflicts with the model's
+`valid_instrument_universe` or `target_instrument_universe`, candidate
+generation fails closed before VectorBT/HftBacktest. Concrete loader variants
+such as `MES.v.0` compare by canonical root (`MES`) for compatibility while
+preserving the requested suffix for downstream feature-store loading.
+
+Structural registry entries are metadata/feature receipts, not primary
+autoresearch hypothesis routes. The parser only selects `kind=hypothesis`
+models as primary models for this entrypoint.
+
+RL policy artifacts are controlled by the runtime config's `rl_training`
+section or the `--rl-training-data`, `--rl-feature`, `--rl-device`,
+`--rl-required`, and `--rl-seed` CLI flags. The current implementation is
+opt-in until real training data and a GPU host command are named. Once enabled,
+it is fail-closed: CPU runs write a small research-only tabular policy artifact,
+while CUDA requests write a blocked `rl_policy_artifact.json` that requires a
+GPU sub-agent handoff. RL artifacts are always non-promotable and cannot bypass
+VectorBT, robustness evidence, or HftBacktest gates.
+
+RL CPU policy artifacts are cached under
+`runtime/research_pipeline/rl_policy_cache` by default. Cache receipts include
+the training-data SHA256, normalized feature list, device, seed, row cap,
+artifact schema, and trainer source hash. A per-run `rl_policy_artifact.json`
+is still written every time and records `cache_receipt.status` as `miss`,
+`hit`, `disabled`, or `blocked`; cached artifacts are validated before reuse.
+CUDA handoff artifacts are not written through to the cache.
+
+The legacy post-filter evaluation loop accepts `--evaluation-workers` and the
+runtime config's `evaluation.workers`. The default is `1`. Values greater than
+one use a bounded `ProcessPoolExecutor` for candidate-level independence. MSI
+is capped by `evaluation.msi_max_workers` (default `1`), while CHI404/Vast-style
+hosts are capped by `evaluation.max_workers`. VectorBT paid-screen and
+HftBacktest campaign runners keep their own worker controls.
+
+Legacy evaluation gates can be selected with `gate_profiles.default_profile` or
+`--gate-profile`, with explicit CLI overrides for min net PnL, min trades, max
+tail loss, and min win rate. These profiles apply only to the legacy
+`WorkbenchEngine` evaluation result fields already emitted by this entrypoint;
+they do not replace VectorBT promotion gates, robustness evidence, or
+HftBacktest replay gates.
+
+When no `--gate-profile` override is supplied, a model-registry
+`volatility_regime` may select a matching legacy gate profile through
+`gate_profiles.volatility_regime_profiles`. The run receipt and runtime config
+receipt record a per-candidate `gate_profile_plan` so reviewers can distinguish
+CLI overrides, runtime-config defaults, and model-registry selection.
+
+`--hftbacktest-realism` remains fail-closed: the writer is called only after a
+promoted screening row is strict replay-eligible and carries a robustness
+evidence receipt from the robustness applicator.
+
+Implementation plan and review gates: [AUTORESEARCH_PIPELINE_UPGRADE_PLAN.md](../project/AUTORESEARCH_PIPELINE_UPGRADE_PLAN.md).
+
 ## LLM
 
 Default model: `gpt-5.5` with `xhigh` reasoning through an OpenAI-compatible `/v1/chat/completions` endpoint. Override with `HFT3_RESEARCH_LLM_MODEL`, `HFT3_MODEL_DEVELOPMENT_LLM_MODEL`, `HFT3_LLM_BASE_URL`, and `HFT3_LLM_REASONING_EFFORT`. This runtime is **not** OpenFoundry or AlphaGeometry. Heuristic fallback remains active when the endpoint is unavailable.

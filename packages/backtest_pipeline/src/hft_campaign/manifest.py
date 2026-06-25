@@ -83,7 +83,10 @@ def select_replay_eligible_candidates(
         if transitional:
             eligible_ids.append(cid)
             continue
-        row_reasons = validate_candidate_replay_eligibility(row)
+        row_reasons = validate_candidate_replay_eligibility(
+            row,
+            screening_artifact=screening,
+        )
         if row_reasons:
             reasons.extend([f"{cid}:{r}" for r in row_reasons])
             continue

@@ -373,9 +373,66 @@ RUST_REQUIRED_SCREENING_SCOPES = {
     "paid-compute",
     "paid_compute",
 }
+NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_ROOTS = (
+    "reports/latency_baselines/",
+    "runtime/latency_reports/",
+    "reports/cpp_lane/",
+    "runtime/cpp_lane/",
+    "runtime/reports/",
+    "research_cards/cpp_lane/",
+    "research_cards/hftbacktest_realism/",
+)
+NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_SUFFIXES = (
+    ".json",
+    ".jsonl",
+    ".log",
+    ".md",
+    ".parquet",
+    ".txt",
+)
 NATIVE_CPP_HOT_PATH_EVIDENCE_TOKENS = (
     "rithmic_latency_probe",
-    "reports/latency_baselines/",
+    "latency_summary",
+    "run_c_lane",
+    "hft3_features_cpp",
+    "verify_cpp_parity",
+    "hft_feature_golden",
+    "hft_event_context_golden",
+    "test_decision_runtime_hardening",
+    "test_safety_failure_injection",
+    "test_engine_loop",
+    "spsc_queue_stress",
+    "risk_manager_atomic_stress",
+    "safety_poller_concurrent",
+    "hft3_engine",
+)
+NATIVE_CPP_HOT_PATH_REQUIRED_EVIDENCE_CLASSES = (
+    "latency",
+    "features",
+    "risk_concurrency",
+    "decision_safety",
+    "engine_loop",
+)
+NATIVE_CPP_HOT_PATH_RECEIPT_SCHEMA = "hft3_cpp_lane_receipt_v1"
+NATIVE_CPP_HOT_PATH_REQUIRED_RECEIPT_CHECKS = {
+    "features": ("hft3_features_cpp", "verify_cpp_parity.py"),
+    "risk_concurrency": (
+        "risk_manager_atomic_stress",
+        "spsc_queue_stress",
+        "safety_poller_concurrent",
+    ),
+    "decision_safety": ("test_decision_runtime_hardening", "test_safety_failure_injection"),
+    "engine_loop": ("test_engine_loop", "hft3_engine"),
+}
+ROBUSTNESS_EVIDENCE_RECEIPT_SCHEMA = "hft3_robustness_evidence_inputs_v1"
+ROBUSTNESS_EVIDENCE_APPLICATION_RECEIPT_SCHEMA = "hft3_robustness_evidence_application_receipt_v1"
+ROBUSTNESS_EVIDENCE_BINDING_FIELDS = (
+    "screening_artifact_hash",
+    "candidate_id",
+    "parameter_values_hash",
+    "feature_recipe_hash",
+    "data_manifest_hash",
+    "lake_manifest_hash",
 )
 SOURCE_LOCK_REQUIRED_FIELDS = (
     "upstream_repo_url",
@@ -489,6 +546,14 @@ def _sha256_payload(value: Any) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def _optional_list_arg(value: list[str] | None, *, field: str) -> list[str] | None:
     if value is None:
         return None
@@ -560,15 +625,68 @@ def _is_raw_sha256_digest(value: Any) -> bool:
     )
 
 
-def _contains_sha256_digest(value: Any) -> bool:
+def _sha256_digest_text(value: Any) -> str | None:
     if not isinstance(value, str):
-        return False
-    marker = "sha256:"
-    start = value.lower().find(marker)
-    if start < 0:
-        return False
-    digest = value[start + len(marker) : start + len(marker) + 64]
-    return len(digest) == 64 and all(char in "0123456789abcdefABCDEF" for char in digest)
+        return None
+    digest = value.removeprefix("sha256:")
+    if len(digest) == 64 and all(char in "0123456789abcdefABCDEF" for char in digest):
+        return digest.lower()
+    return None
+
+
+def _contains_sha256_digest(value: Any) -> bool:
+    return _split_hash_backed_native_evidence(value) is not None
+
+
+def _split_hash_backed_native_evidence(value: Any) -> tuple[str, str] | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    fragment_idx = text.lower().rfind("#sha256:")
+    if fragment_idx > 0:
+        path = text[:fragment_idx]
+        digest = text[fragment_idx + len("#sha256:") :]
+    else:
+        marker = "sha256:"
+        idx = text.lower().rfind(marker)
+        if idx <= 0:
+            return None
+        if not text[idx - 1].isspace():
+            return None
+        path = text[:idx].rstrip(" #\t")
+        digest = text[idx + len(marker) :].strip()
+    if not path:
+        return None
+    if len(digest) != 64 or not all(char in "0123456789abcdefABCDEF" for char in digest):
+        return None
+    return path.replace("\\", "/").strip(), digest.lower()
+
+
+def _native_hot_path_evidence_path(value: Any) -> str:
+    parsed = _split_hash_backed_native_evidence(value)
+    if parsed is not None:
+        return parsed[0].replace("\\", "/").lower().strip()
+    if not isinstance(value, str):
+        return ""
+    return value.split("#", 1)[0].replace("\\", "/").lower().strip()
+
+
+def _looks_like_latency_baseline_evidence_path(normalized: str) -> bool:
+    name = normalized.rsplit("/", 1)[-1]
+    if name in {
+        "current_baseline.json",
+        "live_r01_chicago_baseline.json",
+        "live_r01_chicago_baseline_summary.json",
+    }:
+        return True
+    return (
+        name.endswith("_summary.json")
+        and (
+            name.startswith("order_ack_campaign_")
+            or name.startswith("live_order_ack_campaign_")
+            or name.startswith(("cc2_", "cc3_", "cc4_", "cc5_", "cc6_"))
+        )
+    )
 
 
 def _validate_latency_component_mapping(latency_model: Mapping[str, Any]) -> list[str]:
@@ -603,11 +721,53 @@ def _validate_native_latency_probe_evidence(latency_model: Mapping[str, Any]) ->
 def _looks_like_native_cpp_hot_path_evidence(value: Any) -> bool:
     if not isinstance(value, str) or not value.strip():
         return False
-    normalized = value.replace("\\", "/").lower()
+    normalized = _native_hot_path_evidence_path(value)
+    if not normalized:
+        return False
+    if not normalized.startswith(NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_ROOTS):
+        return False
+    if not normalized.endswith(NATIVE_CPP_HOT_PATH_EVIDENCE_ARTIFACT_SUFFIXES):
+        return False
+    if normalized.startswith("reports/latency_baselines/"):
+        return _looks_like_latency_baseline_evidence_path(normalized)
     return any(token in normalized for token in NATIVE_CPP_HOT_PATH_EVIDENCE_TOKENS)
 
 
-def _source_lock_has_hash_backed_native_hot_path_evidence(lock: Mapping[str, Any]) -> bool:
+def _native_cpp_hot_path_evidence_classes(value: Any) -> set[str]:
+    if not isinstance(value, str):
+        return set()
+    normalized = _native_hot_path_evidence_path(value)
+    classes: set[str] = set()
+    if (
+        "rithmic_latency_probe" in normalized
+        or "latency_summary" in normalized
+        or (
+            normalized.startswith("reports/latency_baselines/")
+            and _looks_like_latency_baseline_evidence_path(normalized)
+        )
+    ):
+        classes.add("latency")
+    if (
+        "hft3_features_cpp" in normalized
+        or "verify_cpp_parity" in normalized
+        or "hft_feature_golden" in normalized
+        or "hft_event_context_golden" in normalized
+    ):
+        classes.add("features")
+    if (
+        "risk_manager_atomic_stress" in normalized
+        or "spsc_queue_stress" in normalized
+        or "safety_poller_concurrent" in normalized
+    ):
+        classes.add("risk_concurrency")
+    if "test_decision_runtime_hardening" in normalized or "test_safety_failure_injection" in normalized:
+        classes.add("decision_safety")
+    if "test_engine_loop" in normalized or "hft3_engine" in normalized:
+        classes.add("engine_loop")
+    return classes
+
+
+def _source_lock_has_only_hash_backed_native_hot_path_evidence(lock: Mapping[str, Any]) -> bool:
     evidence = lock.get("native_hot_path_evidence")
     if not isinstance(evidence, list) or not evidence:
         return False
@@ -615,6 +775,297 @@ def _source_lock_has_hash_backed_native_hot_path_evidence(lock: Mapping[str, Any
         _looks_like_native_cpp_hot_path_evidence(item) and _contains_sha256_digest(item)
         for item in evidence
     )
+
+
+def _source_lock_missing_native_hot_path_evidence_classes(lock: Mapping[str, Any]) -> tuple[str, ...]:
+    evidence = lock.get("native_hot_path_evidence")
+    observed: set[str] = set()
+    if isinstance(evidence, list):
+        for item in evidence:
+            if _looks_like_native_cpp_hot_path_evidence(item) and _contains_sha256_digest(item):
+                observed.update(_native_cpp_hot_path_evidence_classes(item))
+    return tuple(
+        class_name
+        for class_name in NATIVE_CPP_HOT_PATH_REQUIRED_EVIDENCE_CLASSES
+        if class_name not in observed
+    )
+
+
+def _source_lock_has_hash_backed_native_hot_path_evidence(lock: Mapping[str, Any]) -> bool:
+    return (
+        _source_lock_has_only_hash_backed_native_hot_path_evidence(lock)
+        and not _source_lock_missing_native_hot_path_evidence_classes(lock)
+        and not _source_lock_native_receipt_reasons(lock)
+    )
+
+
+def compute_robustness_evidence_receipt_hash(receipt: Any) -> str:
+    return _sha256_payload(receipt)
+
+
+def _split_exact_hash_bound_source(value: Any) -> tuple[str, str] | None:
+    if not isinstance(value, str):
+        return None
+    path, sep, digest = value.rpartition("#sha256:")
+    parsed_digest = _sha256_digest_text(digest)
+    if not path or sep != "#sha256:" or "#" in path or parsed_digest is None:
+        return None
+    return path.replace("\\", "/").strip(), parsed_digest
+
+
+def _is_exact_hash_bound_source(value: Any) -> bool:
+    return _split_exact_hash_bound_source(value) is not None
+
+
+def _json_contains_pair(value: Any, key: str, expected: str) -> bool:
+    if isinstance(value, Mapping):
+        for item_key, item_value in value.items():
+            if str(item_key) == key and isinstance(item_value, str) and item_value.lower() == expected:
+                return True
+            if _json_contains_pair(item_value, key, expected):
+                return True
+    elif isinstance(value, list):
+        return any(_json_contains_pair(item, key, expected) for item in value)
+    return False
+
+
+def _json_contains_text(value: Any, needle: str) -> bool:
+    needle_l = needle.lower()
+    if isinstance(value, Mapping):
+        return any(
+            needle_l in str(key).lower() or _json_contains_text(item, needle_l)
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_json_contains_text(item, needle_l) for item in value)
+    return isinstance(value, str) and needle_l in value.lower()
+
+
+def _latency_payload_has_native_rithmic_authority(payload: Any) -> bool:
+    return (
+        _json_contains_pair(payload, "hot_path_language", "c++")
+        and _json_contains_pair(payload, "wrapper", "none")
+        and (
+            _json_contains_text(payload, "rithmic_latency_probe")
+            or _json_contains_text(payload, "rithmic_probe")
+        )
+        and (
+            _json_contains_text(payload, "CHI404")
+            or _json_contains_text(payload, "chi404_bare_metal_only")
+            or _json_contains_text(payload, "/root/hft3/repo/data/latency_baselines")
+        )
+    )
+
+
+def _native_hot_path_receipt_check(
+    *,
+    repo_root: Path,
+    evidence_ref: str,
+    hft3_commit: str,
+    require_file_content: bool,
+) -> dict[str, Any]:
+    split = _split_exact_hash_bound_source(evidence_ref)
+    errors: list[str] = []
+    rel_path = ""
+    digest = ""
+    classes: set[str] = set()
+    if split is None:
+        return {"evidence": evidence_ref, "status": "invalid", "errors": ["evidence_ref_not_exact_path_sha256"]}
+    rel_path, digest = split
+    classes = _native_cpp_hot_path_evidence_classes(evidence_ref)
+    check: dict[str, Any] = {
+        "evidence": evidence_ref,
+        "path": rel_path,
+        "sha256": digest,
+        "classes": sorted(classes),
+    }
+    if not require_file_content:
+        check["status"] = "synthetic_non_git_fixture"
+        return check
+
+    path = repo_root / rel_path
+    if not path.is_file():
+        errors.append("receipt_file_missing")
+    elif _sha256_file(path) != digest:
+        errors.append("receipt_sha256_mismatch")
+
+    payload: Any = None
+    if not errors:
+        if path.suffix.lower() != ".json":
+            errors.append("receipt_json_required")
+        else:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                errors.append(f"receipt_json_unreadable:{type(exc).__name__}")
+
+    if payload is not None and "latency" in classes:
+        if not _latency_payload_has_native_rithmic_authority(payload):
+            errors.append("latency_receipt_not_chi404_native_rithmic_cpp")
+
+    cpp_classes = classes.intersection(NATIVE_CPP_HOT_PATH_REQUIRED_RECEIPT_CHECKS)
+    if payload is not None and cpp_classes:
+        if payload.get("schema") != NATIVE_CPP_HOT_PATH_RECEIPT_SCHEMA:
+            errors.append("cpp_receipt_schema_invalid")
+        if payload.get("status") != "pass":
+            errors.append("cpp_receipt_status_not_pass")
+        if payload.get("hft3_commit") != hft3_commit:
+            errors.append("cpp_receipt_hft3_commit_mismatch")
+        checks = payload.get("checks")
+        if not isinstance(checks, list):
+            errors.append("cpp_receipt_checks_missing")
+            checks_set: set[str] = set()
+        else:
+            checks_set = {str(item) for item in checks}
+        receipt_class = payload.get("evidence_class")
+        for class_name in sorted(cpp_classes):
+            if receipt_class != class_name:
+                errors.append(f"cpp_receipt_class_mismatch:{class_name}")
+            missing_checks = [
+                item
+                for item in NATIVE_CPP_HOT_PATH_REQUIRED_RECEIPT_CHECKS[class_name]
+                if item not in checks_set
+            ]
+            if missing_checks:
+                errors.append(f"cpp_receipt_checks_incomplete:{class_name}")
+    check["status"] = "valid" if not errors else "invalid"
+    if errors:
+        check["errors"] = errors
+    return check
+
+
+def _build_native_hot_path_receipt_checks(
+    repo_root: Path,
+    evidence: list[str],
+    hft3_commit: str,
+) -> list[dict[str, Any]]:
+    require_file_content = (Path(repo_root) / ".git").exists()
+    return [
+        _native_hot_path_receipt_check(
+            repo_root=Path(repo_root),
+            evidence_ref=item,
+            hft3_commit=hft3_commit,
+            require_file_content=require_file_content,
+        )
+        for item in evidence
+    ]
+
+
+def _source_lock_native_receipt_reasons(lock: Mapping[str, Any]) -> list[str]:
+    evidence = lock.get("native_hot_path_evidence")
+    if not isinstance(evidence, list) or not evidence:
+        return []
+    checks = lock.get("native_hot_path_evidence_receipt_checks")
+    if not isinstance(checks, list) or not checks:
+        return ["native_cpp_hot_path_evidence_receipts_missing"]
+    reasons: list[str] = []
+    evidence_set = {str(item) for item in evidence}
+    checked_evidence: set[str] = set()
+    checked_classes: set[str] = set()
+    for check in checks:
+        if not isinstance(check, Mapping):
+            reasons.append("native_cpp_hot_path_evidence_receipt_invalid")
+            continue
+        check_ref = str(check.get("evidence") or "")
+        checked_evidence.add(check_ref)
+        if check_ref not in evidence_set:
+            reasons.append("native_cpp_hot_path_evidence_receipt_unbound")
+        if check.get("status") not in {"valid", "synthetic_non_git_fixture"}:
+            reasons.append(f"native_cpp_hot_path_evidence_receipt_invalid:{check.get('path') or check_ref}")
+        classes = check.get("classes")
+        if not isinstance(classes, list) or not classes:
+            reasons.append(f"native_cpp_hot_path_evidence_receipt_class_missing:{check.get('path') or check_ref}")
+        else:
+            checked_classes.update(str(item) for item in classes)
+    for item in evidence_set - checked_evidence:
+        reasons.append(f"native_cpp_hot_path_evidence_receipt_missing:{item.split('#', 1)[0]}")
+    missing_checked_classes = [
+        class_name
+        for class_name in NATIVE_CPP_HOT_PATH_REQUIRED_EVIDENCE_CLASSES
+        if class_name not in checked_classes
+    ]
+    if missing_checked_classes:
+        reasons.append(
+            "native_cpp_hot_path_evidence_receipts_incomplete:"
+            + ",".join(missing_checked_classes)
+        )
+    return list(dict.fromkeys(reasons))
+
+
+def validate_applied_robustness_evidence_receipt(
+    candidate: Mapping[str, Any],
+    screening_artifact: Mapping[str, Any] | None = None,
+) -> list[str]:
+    reasons: list[str] = []
+    receipt = candidate.get("robustness_evidence_receipt")
+    if not isinstance(receipt, Mapping):
+        return ["robustness_evidence_receipt_missing"]
+    if receipt.get("schema") != ROBUSTNESS_EVIDENCE_RECEIPT_SCHEMA:
+        reasons.append("robustness_evidence_receipt_schema_invalid")
+    binding = receipt.get("binding")
+    if not isinstance(binding, Mapping):
+        reasons.append("robustness_evidence_receipt_binding_missing")
+        binding = {}
+    candidate_id = str(candidate.get("candidate_id") or "")
+    if not candidate_id or str(binding.get("candidate_id") or "") != candidate_id:
+        reasons.append("robustness_evidence_receipt_candidate_mismatch")
+    source_evidence = receipt.get("source_evidence")
+    if not isinstance(source_evidence, Mapping) or not source_evidence:
+        reasons.append("robustness_evidence_source_missing")
+    elif not all(_is_exact_hash_bound_source(payload) for payload in source_evidence.values()):
+        reasons.append("robustness_evidence_source_not_exact_path_sha256")
+    if _sha256_digest_text(receipt.get("evidence_entry_hash")) is None:
+        reasons.append("robustness_evidence_entry_hash_invalid")
+    if screening_artifact is None:
+        return list(dict.fromkeys(reasons))
+
+    expected_binding = {
+        "candidate_id": candidate_id,
+        "parameter_values_hash": candidate.get("parameter_values_hash"),
+        "feature_recipe_hash": candidate.get("feature_recipe_hash"),
+        "data_manifest_hash": screening_artifact.get("data_manifest_hash"),
+        "lake_manifest_hash": screening_artifact.get("lake_manifest_hash"),
+    }
+    for field_name in ROBUSTNESS_EVIDENCE_BINDING_FIELDS:
+        if field_name == "screening_artifact_hash":
+            continue
+        observed = binding.get(field_name)
+        expected = expected_binding.get(field_name)
+        if observed in (None, "") or expected in (None, "") or str(observed) != str(expected):
+            reasons.append(f"robustness_evidence_binding_invalid:{field_name}")
+
+    bound_screening_digest = _sha256_digest_text(binding.get("screening_artifact_hash"))
+    updated_screening_digest = _sha256_digest_text(screening_artifact.get("screening_artifact_hash"))
+    application_receipt = screening_artifact.get("robustness_evidence_receipt")
+    row_receipt_hashes = (
+        application_receipt.get("row_receipt_hashes")
+        if isinstance(application_receipt, Mapping)
+        else None
+    )
+    if not isinstance(application_receipt, Mapping):
+        reasons.append("robustness_evidence_application_receipt_missing")
+    else:
+        if application_receipt.get("schema") != ROBUSTNESS_EVIDENCE_APPLICATION_RECEIPT_SCHEMA:
+            reasons.append("robustness_evidence_application_receipt_schema_invalid")
+        if application_receipt.get("robustness_evidence_schema") != ROBUSTNESS_EVIDENCE_RECEIPT_SCHEMA:
+            reasons.append("robustness_evidence_application_schema_mismatch")
+        if _sha256_digest_text(application_receipt.get("input_screening_artifact_hash")) != bound_screening_digest:
+            reasons.append("robustness_evidence_application_input_hash_mismatch")
+        if candidate_id not in {str(item) for item in application_receipt.get("matched_candidate_ids") or []}:
+            reasons.append("robustness_evidence_application_candidate_not_matched")
+        if candidate_id not in {str(item) for item in application_receipt.get("eligible_candidate_ids") or []}:
+            reasons.append("robustness_evidence_application_candidate_not_eligible")
+    if not isinstance(row_receipt_hashes, Mapping):
+        reasons.append("robustness_evidence_application_row_hashes_missing")
+    elif row_receipt_hashes.get(candidate_id) != compute_robustness_evidence_receipt_hash(receipt):
+        reasons.append("robustness_evidence_application_row_hash_mismatch")
+    if bound_screening_digest is None:
+        reasons.append("robustness_evidence_binding_screening_hash_invalid")
+    if updated_screening_digest is None:
+        reasons.append("screening_artifact_hash_invalid")
+    elif bound_screening_digest == updated_screening_digest:
+        reasons.append("robustness_evidence_application_hash_not_recomputed")
+    return list(dict.fromkeys(reasons))
 
 
 def _upstream_ref_verification_status(upstream_ref: str | None, package_version: str) -> str:
@@ -1767,6 +2218,9 @@ def build_hftbacktest_source_lock(
     hot_path_status = native_hot_path_status or (
         "provided" if evidence else "missing_required_native_cpp_hot_path_evidence"
     )
+    hft3_commit = _repo_commit(repo_root)
+    hft3_dirty = _repo_dirty(repo_root)
+    receipt_checks = _build_native_hot_path_receipt_checks(repo_root, evidence, hft3_commit)
     lock: dict[str, Any] = {
         "upstream_repo_url": UPSTREAM_REPO_URL,
         "upstream_commit_sha_or_tag": upstream_ref or "",
@@ -1782,14 +2236,15 @@ def build_hftbacktest_source_lock(
         "rust_crate_version_or_not_used": rust_crate_version_or_not_used,
         "installed_module_path": install["installed_module_path"],
         "source_lock_created_at_utc": created_at_utc or _utc_now(),
-        "hft3_commit": _repo_commit(repo_root),
-        "hft3_worktree_dirty": _repo_dirty(repo_root),
+        "hft3_commit": hft3_commit,
+        "hft3_worktree_dirty": hft3_dirty,
         "hft3_adapter_files": list(adapter_files),
         "api_surface_used": list(DEFAULT_API_SURFACE_USED),
         "known_doc_repo_discrepancies": list(discrepancies),
         "license_review": license_review,
         "native_hot_path_required": True,
         "native_hot_path_evidence": evidence,
+        "native_hot_path_evidence_receipt_checks": receipt_checks,
         "native_hot_path_status": hot_path_status,
         "hftbacktest_available": bool(install["available"]),
     }
@@ -1828,8 +2283,15 @@ def validate_hftbacktest_source_lock(lock: Mapping[str, Any]) -> list[str]:
         reasons.append("native_cpp_hot_path_evidence_missing")
     elif lock.get("native_hot_path_status") != "provided":
         reasons.append("native_cpp_hot_path_evidence_missing")
-    elif not all(_looks_like_native_cpp_hot_path_evidence(item) for item in lock.get("native_hot_path_evidence", [])):
+    elif not _source_lock_has_only_hash_backed_native_hot_path_evidence(lock):
         reasons.append("native_cpp_hot_path_evidence_unrecognized")
+    else:
+        missing_classes = _source_lock_missing_native_hot_path_evidence_classes(lock)
+        if missing_classes:
+            reasons.append(
+                "native_cpp_hot_path_evidence_incomplete:" + ",".join(missing_classes)
+            )
+        reasons.extend(_source_lock_native_receipt_reasons(lock))
     if "source_lock_hash" in lock:
         expected = compute_hftbacktest_source_lock_hash(lock)
         if lock["source_lock_hash"] != expected:
@@ -2435,7 +2897,11 @@ def _numeric_mapping_value(payload: Mapping[str, Any], fields: tuple[str, ...]) 
     return None
 
 
-def validate_candidate_replay_eligibility(candidate: Mapping[str, Any]) -> list[str]:
+def validate_candidate_replay_eligibility(
+    candidate: Mapping[str, Any],
+    *,
+    screening_artifact: Mapping[str, Any] | None = None,
+) -> list[str]:
     """Validate VectorBT-to-HftBacktest handoff evidence for one promoted candidate."""
 
     reasons: list[str] = []
@@ -2458,6 +2924,12 @@ def validate_candidate_replay_eligibility(candidate: Mapping[str, Any]) -> list[
         value = candidate.get(field)
         if field in candidate and (not isinstance(value, Mapping) or not value):
             reasons.append(_replay_ineligible_reason(f"malformed_or_empty_mapping:{field}"))
+
+    for receipt_reason in validate_applied_robustness_evidence_receipt(
+        candidate,
+        screening_artifact=screening_artifact,
+    ):
+        reasons.append(_replay_ineligible_reason(receipt_reason))
 
     walk_forward_metrics = candidate.get("walk_forward_metrics")
     if isinstance(walk_forward_metrics, Mapping):
@@ -2581,7 +3053,12 @@ def _candidate_from_screening(
     for row in promoted_rows:
         if isinstance(row, Mapping) and str(row.get("candidate_id")) == selected_id:
             selected_candidate = dict(row)
-            reasons.extend(validate_candidate_replay_eligibility(selected_candidate))
+            reasons.extend(
+                validate_candidate_replay_eligibility(
+                    selected_candidate,
+                    screening_artifact=screening_artifact,
+                )
+            )
             return selected_id, selected_candidate, reasons
     if selected_id:
         reasons.append("candidate_metadata_missing_from_screening_artifact")

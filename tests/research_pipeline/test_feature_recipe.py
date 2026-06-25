@@ -128,3 +128,19 @@ def test_default_families_fail_closed_not_consumed() -> None:
     )
     for family, row in families.items():
         assert row["model_consumption_state"] != "consumed"
+
+
+def test_microstructure_feature_names_carry_pit_receipt() -> None:
+    recipe = build_feature_recipe(
+        model_id="BOOK_PRESSURE",
+        strategy_params={"signal_threshold": 0.15},
+        feature_list=["order_book_imbalance", "queue_imbalance"],
+        target_event_id="CPI_2024_09_11_TIGHT",
+    )
+
+    primary = recipe.feature_families["primary_fs_v1"]
+    assert primary["selected_features"] == ["order_book_imbalance", "queue_imbalance"]
+    assert primary["source_ids"] == ["features_engine.feature_sets.MICROSTRUCTURE_FEATURE_RECEIPTS"]
+    assert primary["pit_proof"] == "declared"
+    assert primary["model_consumption_state"] == "not_measured"
+    assert "snapshot_at_decision_time_t_or_trailing_window_ending_at_t" in primary["lookback_rules"]
