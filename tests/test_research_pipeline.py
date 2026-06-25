@@ -1068,6 +1068,39 @@ def test_evaluate_candidates_batch_aggregates_multiple_events(monkeypatch, tmp_p
     assert results[0].event_id == "CPI_2024_09_11_TIGHT,FOMC_2024_09_18_TIGHT"
 
 
+def test_aggregate_evaluation_sortino_uses_downside_semideviation():
+    from research_pipeline.evaluation import aggregate_evaluation_results
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
+
+    candidate = CandidateModel("c_sortino", "BOOK_PRESSURE", {}, "book")
+    gates = GateThresholds(min_trades=1)
+
+    def event_result(event_id: str, net_pnl: float) -> EvaluationResult:
+        return EvaluationResult(
+            candidate=candidate,
+            event_id=event_id,
+            net_pnl=net_pnl,
+            num_trades=1,
+            win_rate=1.0 if net_pnl > 0 else 0.0,
+            expectancy=net_pnl,
+            tail_loss=min(net_pnl, 0.0),
+            gates=gates,
+        )
+
+    aggregate = aggregate_evaluation_results(
+        candidate,
+        [
+            event_result("CPI_2024_09_11_TIGHT", 8.0),
+            event_result("FOMC_2024_09_18_TIGHT", -1.0),
+            event_result("NFP_2024_10_04_TIGHT", -3.0),
+        ],
+        gates=gates,
+    )
+
+    assert aggregate.risk_metrics_source == "cross_event_net_pnl_chronological"
+    assert aggregate.sortino == pytest.approx((4.0 / 3.0) / (5.0 ** 0.5))
+
+
 def test_document_ingestion_cache_miss_then_hit(tmp_path, monkeypatch):
     import scripts.run_pipeline as run_pipeline
 
