@@ -2388,6 +2388,67 @@ def test_idea_set_cli_rejects_unsupported_instrument(tmp_path, monkeypatch, caps
     assert "not compatible with model SPREAD_BLOWOUT_RECOMPRESSION" in capsys.readouterr().err
 
 
+def test_idea_set_cli_skips_first_bad_symbol_and_keeps_later_valid_idea(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    def fake_request(**kwargs):
+        return {
+            "schema_version": "1",
+            "request_id": kwargs["request_id"],
+            "thesis": kwargs["thesis"],
+            "event_id": kwargs["event_id"],
+            "event_ids": kwargs.get("event_ids"),
+            "openfoundry_meta": {
+                "connector_id": "test",
+                "asset_class": "test",
+                "vendor_shas": {},
+                "schema_version": "1",
+            },
+            "max_candidates": kwargs["max_candidates"],
+        }
+
+    packet = _idea_packet()
+    bad = json.loads(json.dumps(packet["ideas"][1]))
+    good = json.loads(json.dumps(packet["ideas"][0]))
+    bad["idea_id"] = "idea_bad_symbol"
+    bad["instrument_ids"] = ["GC"]
+    good["idea_id"] = "idea_good_symbol"
+    good["instrument_ids"] = ["MES"]
+    packet["ideas"] = [bad, good]
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_idea_skip_bad_symbol")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", fake_request)
+    monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: packet)
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Trade book pressure after CPI",
+        "--event-id",
+        "CPI_1",
+        "--repo-root",
+        str(tmp_path),
+        "--no-llm",
+        "--dry-run",
+        "--idea-set",
+        "--max-candidates",
+        "2",
+        "--no-hybrid",
+    ])
+
+    assert run_pipeline.main() == 0
+    payload = _last_json_object(capsys.readouterr().out)
+    by_id = {idea["idea_id"]: idea for idea in payload["idea_set_packet"]["ideas"]}
+
+    assert by_id["idea_bad_symbol"]["status"] == "static_reject"
+    assert "target_symbol_resolution_failed" in by_id["idea_bad_symbol"]["static_error_codes"]
+    assert by_id["idea_good_symbol"]["status"] == "queued_for_test"
+    assert {candidate["metadata"]["idea_id"] for candidate in payload["candidates"]} == {
+        "idea_good_symbol"
+    }
+    assert {candidate["target_symbol"] for candidate in payload["candidates"]} == {"MES"}
+
+
 def test_idea_set_full_run_missing_prefilter_returns_configuration_error(
     tmp_path, monkeypatch, capsys
 ):

@@ -592,11 +592,7 @@ def main() -> int:
         )
         queued = [idea for idea in idea_packet.get("ideas", []) if idea.get("status") == "queued_for_test"]
         parsed = parsed_from_idea(queued[0]) if queued else parse_hypothesis(args.thesis, use_llm=False)
-        try:
-            target_symbol = _resolve_target_symbol(parsed, args.symbol)
-        except ValueError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
+        target_symbol = args.symbol or "MES"
         try:
             candidates = candidates_from_ideas(
                 idea_packet,
@@ -614,6 +610,18 @@ def main() -> int:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
         idea_candidates_count = len(candidates)
+        if candidates:
+            first_idea_id = str(candidates[0].metadata.get("idea_id") or "")
+            representative_idea = next(
+                (
+                    idea
+                    for idea in idea_packet.get("ideas", [])
+                    if str(idea.get("idea_id") or "") == first_idea_id
+                ),
+                None,
+            )
+            if representative_idea is not None:
+                parsed = parsed_from_idea(representative_idea)
         candidate_symbols = {candidate.target_symbol for candidate in candidates}
         if len(candidate_symbols) > 1:
             print(
