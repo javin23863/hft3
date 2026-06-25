@@ -29,6 +29,7 @@ PHASE_ORDER: List[str] = [
     "vast-launch",
     "post-screen",
     "edge-evaluation",
+    "vix-rl-clue-schema",
 ]
 
 # ponytail: cumulative allow-list per phase id (repo-relative paths or prefixes ending /)
@@ -90,6 +91,20 @@ PHASE_ALLOWED: Dict[str, List[str]] = {
         "scripts/run_plan_drift_review.py",
         "tests/test_research_pipeline.py",
         "tests/test_research_pipeline_edge_modules.py",
+        "tests/test_plan_drift_review.py",
+    ],
+    "vix-rl-clue-schema": [
+        "packages/features_engine/feature_sets.py",
+        "packages/research_pipeline/rl_agents.py",
+        "packages/research_pipeline/rl_campaign_budget.py",
+        "packages/research_pipeline/rl_training_data.py",
+        "scripts/build_vix_options_rl_manifest.py",
+        "scripts/plan_rl_gpu_campaign_budget.py",
+        "scripts/run_rl_gpu_campaign_npz_fast.py",
+        "scripts/run_plan_drift_review.py",
+        "tests/research_pipeline/test_rl_agents.py",
+        "tests/research_pipeline/test_rl_campaign_budget.py",
+        "tests/research_pipeline/test_rl_gpu_campaign_npz_fast.py",
         "tests/test_plan_drift_review.py",
     ],
 }
@@ -207,7 +222,7 @@ def run_review(
     if completed_phase not in plan_todos and completed_phase not in PHASE_ORDER:
         errors.append(f"completed_phase not in plan todos: {completed_phase}")
 
-    if completed_phase in PHASE_ORDER:
+    if completed_phase in PHASE_ORDER and completed_phase in plan_todos:
         for prior in PHASE_ORDER[: PHASE_ORDER.index(completed_phase)]:
             if prior in plan_todos and plan_todos.index(prior) > plan_todos.index(completed_phase):
                 errors.append(f"wrong phase order in plan: {completed_phase} before {prior}")

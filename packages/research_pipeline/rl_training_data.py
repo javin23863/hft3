@@ -14,6 +14,7 @@ from backtest_pipeline.src.fs_v1_screen_path import resolve_fs_v1_screen_context
 from backtest_pipeline.src.hft_campaign._hashing import sha256_file, sha256_hex
 from backtest_pipeline.src.hft_campaign.artifacts import write_json_atomic, write_jsonl_atomic
 from data_system.src.feature_store import feature_index_hash, load_manifest
+from features_engine.feature_sets import VIX_OPTIONS_RL_FEATURE_RECEIPTS
 from features_engine.src.features.feature_index import FEATURE_NAME_TO_INDEX, FeatureIndex
 
 from research_pipeline.rl_agents import (
@@ -26,6 +27,20 @@ RL_TRAINING_ROWS_FILENAME = "rl_training_rows.jsonl"
 RL_TRAINING_MANIFEST_FILENAME = "rl_training_manifest.json"
 RL_REWARD_UNITS = "price_points"
 RL_REWARD_COST_MODEL = "future_mid_delta_minus_spread_multiplier"
+VIX_OPTIONS_RL_FEATURE_STORE_SCHEMA_VERSION = "hft3_vix_options_rl_clue_store_v1"
+VIX_OPTIONS_RL_REWARD_UNITS = "vix_options_clue_delta"
+VIX_OPTIONS_RL_REWARD_COST_MODEL = "future_vix_options_clue_delta_no_execution_cost"
+VIX_OPTIONS_DEFAULT_RL_REWARD_COLUMN = "vix_opt_spread_stress"
+VIX_OPTIONS_DEFAULT_RL_FEATURES = (
+    "vix_opt_quote_intensity",
+    "vix_quote_arrival_accel",
+    "vix_opt_spread_stress",
+    "vix_opt_depth_imbalance",
+    "vix_opt_bipower_var",
+    "vix_opt_tsrv",
+)
+_VIX_FEATURES = VIX_OPTIONS_RL_FEATURE_RECEIPTS.get("features", {})
+VIX_OPTIONS_SUPPORTED_RL_FEATURES = frozenset(_VIX_FEATURES if isinstance(_VIX_FEATURES, Mapping) else {})
 FEATURE_STORE_SUPPORTED_RL_FEATURES = frozenset(
     {
         "order_book_imbalance",
@@ -35,6 +50,7 @@ FEATURE_STORE_SUPPORTED_RL_FEATURES = frozenset(
         "spread",
     }
 )
+GPU_SUPPORTED_RL_FEATURES = FEATURE_STORE_SUPPORTED_RL_FEATURES | VIX_OPTIONS_SUPPORTED_RL_FEATURES
 
 
 @dataclass(frozen=True)
@@ -405,6 +421,30 @@ def _validate_feature_store_supported_features(feature_names: Sequence[str]) -> 
         )
 
 
+def vix_options_feature_schema_hash(
+    *,
+    feature_names: Sequence[str] | None = None,
+    reward_column: str = VIX_OPTIONS_DEFAULT_RL_REWARD_COLUMN,
+) -> str:
+    features = tuple(feature_names or VIX_OPTIONS_DEFAULT_RL_FEATURES)
+    unknown = sorted(set(features) - set(VIX_OPTIONS_SUPPORTED_RL_FEATURES))
+    if unknown:
+        raise ValueError("unknown VIX options RL features: " + ", ".join(unknown))
+    reward = str(reward_column).strip()
+    if reward not in VIX_OPTIONS_SUPPORTED_RL_FEATURES:
+        raise ValueError(f"unknown VIX options RL reward column: {reward!r}")
+    return sha256_hex(
+        {
+            "schema_version": VIX_OPTIONS_RL_FEATURE_STORE_SCHEMA_VERSION,
+            "feature_family": "vix_options_clue",
+            "feature_names": list(features),
+            "reward_column": reward,
+            "reward_units": VIX_OPTIONS_RL_REWARD_UNITS,
+            "reward_cost_model": VIX_OPTIONS_RL_REWARD_COST_MODEL,
+        }
+    )
+
+
 def _require_non_decreasing_rows(rows: Sequence[Mapping[str, Any]]) -> None:
     previous: int | None = None
     for idx, row in enumerate(rows):
@@ -438,6 +478,14 @@ __all__ = [
     "RL_REWARD_COST_MODEL",
     "RL_REWARD_UNITS",
     "FEATURE_STORE_SUPPORTED_RL_FEATURES",
+    "GPU_SUPPORTED_RL_FEATURES",
+    "VIX_OPTIONS_DEFAULT_RL_FEATURES",
+    "VIX_OPTIONS_DEFAULT_RL_REWARD_COLUMN",
+    "VIX_OPTIONS_RL_FEATURE_STORE_SCHEMA_VERSION",
+    "VIX_OPTIONS_RL_REWARD_COST_MODEL",
+    "VIX_OPTIONS_RL_REWARD_UNITS",
+    "VIX_OPTIONS_SUPPORTED_RL_FEATURES",
     "RlTrainingDataBuildResult",
     "build_rl_training_data",
+    "vix_options_feature_schema_hash",
 ]

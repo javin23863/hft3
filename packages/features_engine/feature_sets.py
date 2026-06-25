@@ -35,6 +35,26 @@ MICROSTRUCTURE_FEATURE_RECEIPTS = {
     },
 }
 
+VIX_OPTIONS_RL_FEATURE_RECEIPTS = {
+    "decision_time_boundary": "VIX.OPT feature rows use ts_recv-derived availability time; RL labels use future clue deltas only",
+    "feature_family": "vix_options_clue",
+    "hot_path_status": "research_only_not_feature_index",
+    "receipts": {
+        "vix_options_proxy": "docs/cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md",
+        "vix_feature_builder": "features_engine.src.features.vix_features.build_vix_feature_file",
+    },
+    "features": {
+        "vix_opt_quote_intensity": "count-like VIX options quote-arrival intensity on the causal grid",
+        "vix_quote_arrival_accel": "causal acceleration of VIX options quote-arrival intensity",
+        "vix_opt_spread_stress": "aggregate VIX options spread stress proxy",
+        "vix_opt_depth_imbalance": "aggregate VIX options signed depth pressure proxy",
+        "vix_opt_bipower_var": "realized variation proxy from VIX options quote mid changes",
+        "vix_opt_tsrv": "two-scale realized variance proxy from VIX options quote mid changes",
+        "vix_atm_strike": "optional VIX ATM strike sensor level when present",
+        "vix_atm_ramp": "optional VIX ATM strike local slope when present",
+    },
+}
+
 
 def order_book_imbalance(snapshot: Mapping[str, Any], depth: int | None = None) -> float:
     """Return order-book imbalance in [-1, 1] for snapshot t."""
