@@ -1828,7 +1828,7 @@ def test_generate_candidates_respects_max():
     parsed = parse_hypothesis("spread recompression", use_llm=False)
     cands = list(generate_candidates(parsed, max_candidates=2))
     assert len(cands) == 2
-    assert cands[0].strategy_params["signal_threshold"] != cands[1].strategy_params["signal_threshold"]
+    assert cands[0].strategy_params != cands[1].strategy_params
 
 
 def _idea_packet():

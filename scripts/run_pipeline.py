@@ -87,6 +87,36 @@ def write_pipeline_packets(*args, **kwargs):
     return _write_pipeline_packets(*args, **kwargs)
 
 
+def extract_text(*args, **kwargs):
+    from research_pipeline.document_ingestion import extract_text as _extract_text
+
+    return _extract_text(*args, **kwargs)
+
+
+def summarise_text(*args, **kwargs):
+    from research_pipeline.document_ingestion import summarise_text as _summarise_text
+
+    return _summarise_text(*args, **kwargs)
+
+
+def build_knowledge_graph(*args, **kwargs):
+    from research_pipeline.document_ingestion import build_knowledge_graph as _build_knowledge_graph
+
+    return _build_knowledge_graph(*args, **kwargs)
+
+
+def graph_to_kg_records(*args, **kwargs):
+    from research_pipeline.document_ingestion import graph_to_kg_records as _graph_to_kg_records
+
+    return _graph_to_kg_records(*args, **kwargs)
+
+
+def persist_graph_slice(*args, **kwargs):
+    from research_pipeline.knowledge_graph import persist_graph_slice as _persist_graph_slice
+
+    return _persist_graph_slice(*args, **kwargs)
+
+
 def _run_id() -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"pipeline_{ts}_{uuid.uuid4().hex[:8]}"
@@ -987,7 +1017,12 @@ def _doc_id(
 
 
 def _graph_from_kg_records(records: Mapping[str, Any]):
-    import networkx as nx
+    try:
+        import networkx as nx
+    except ModuleNotFoundError as exc:
+        if exc.name == "networkx":
+            return records
+        raise
 
     graph = nx.DiGraph()
     for node in records.get("nodes", []) or []:
@@ -1009,14 +1044,6 @@ def ingest_document_with_cache(
     repo_root: Path,
     cache_config: Mapping[str, Any],
 ) -> tuple[str, dict[str, Any]]:
-    from research_pipeline.document_ingestion import (
-        build_knowledge_graph,
-        extract_text,
-        graph_to_kg_records,
-        summarise_text,
-    )
-    from research_pipeline.knowledge_graph import persist_graph_slice
-
     enabled = _bool_default(cache_config.get("enabled", True), name="doc_cache.enabled")
     cache_urls = _bool_default(cache_config.get("cache_urls", False), name="doc_cache.cache_urls")
     if _is_url_source(source) and not cache_urls:
