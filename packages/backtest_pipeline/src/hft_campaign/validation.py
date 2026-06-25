@@ -60,7 +60,12 @@ def validate_stage0_scenario(scenario: HftReplayScenario, *, repo_root: Path) ->
         reasons.append("candidate_metadata_missing_from_screening_artifact")
     else:
         if not transitional:
-            reasons.extend(validate_candidate_replay_eligibility(candidate_row))
+            reasons.extend(
+                validate_candidate_replay_eligibility(
+                    candidate_row,
+                    screening_artifact=screening,
+                )
+            )
             if str(candidate_row.get("replay_eligibility_status", "")).lower() != "eligible":
                 reasons.append("candidate_not_replay_eligible")
         elif scenario.replay_tier not in ("stage1_minimal",):

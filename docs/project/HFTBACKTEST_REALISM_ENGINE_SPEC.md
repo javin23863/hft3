@@ -123,10 +123,20 @@ Rules:
 - If `upstream_commit_sha_or_tag` is missing, replay evidence is non-GREEN.
 - If HftBacktest is unavailable and hft3 falls back to a local simulator, the
   result must be `hftbacktest_unavailable`, not `execution_realism_pass`.
-- A `pass` replay summary requires native C++ hot-path evidence with a
-  SHA-256-backed evidence marker in the source lock. A bare recognizable path is
-  enough to record research context, but not enough to turn official
-HftBacktest replay into pass evidence.
+- A valid source lock, and therefore any `pass` replay summary, requires native
+  C++ hot-path evidence with a SHA-256-backed evidence marker. Bare
+  recognizable paths are operator context only, not source-lock evidence.
+- Native hot-path evidence values are receipt artifact references, not source
+  file or binary references. Strict pass evidence must point under approved
+  artifact roots such as `reports/cpp_lane/`, `runtime/reports/`,
+  `runtime/latency_reports/`, or `research_cards/`, use an artifact suffix such
+  as `.json`, `.jsonl`, `.log`, `.md`, `.parquet`, or `.txt`, include a
+  recognized hft3 C++ hot-path token, and include `#sha256:<64-hex-digest>`.
+  Legacy token-only or source/build paths such as
+  `rithmic_gateway/tools/rithmic_latency_probe`, `scripts/run_c_lane.sh`, or
+  `build/hft3_engine` are intentionally rejected with
+  `native_cpp_hot_path_evidence_unrecognized`; regenerate or package them into a
+  C-lane receipt artifact before strict replay eligibility.
 
 ## VectorBT Handoff Gate
 
@@ -229,9 +239,27 @@ are insufficient: measured/custom latency must carry a SHA-256 artifact hash,
 `CHI404` host evidence, `latency_proxy_status=measured`, a SHA-256
 `latency_value_or_sample_hash`, and `hft3_native_cpp_rithmic_latency_probe`
 provenance. Source-lock native hot-path evidence must point at recognizable hft3
-native C++ latency evidence, currently `rithmic_latency_probe` or
-`reports/latency_baselines/` artifacts; generic strings such as `evidence.json`
-or `risk_engine_fake_claim.json` are not sufficient.
+native C++ receipt/report artifacts under `reports/`, `runtime/`, or
+`research_cards/`: latency artifacts (`rithmic_latency_probe` or
+`reports/latency_baselines/`), feature parity artifacts (`hft3_features_cpp`,
+`verify_cpp_parity`, `hft_feature_golden`, `hft_event_context_golden`), and
+risk/safety/engine-loop gates (`test_decision_runtime_hardening`,
+`test_safety_failure_injection`, `test_engine_loop`, `hft3_engine`, or the
+named TSan stress targets). Source files, build products, and generic strings
+such as `scripts/run_c_lane.sh`, `build/hft3_engine`, `evidence.json`, or
+`risk_engine_fake_claim.json` are not sufficient.
+
+Strict source-lock pass requires complete native evidence classes, not one
+representative native artifact. The required classes are `latency`, `features`,
+`risk_concurrency`, `decision_safety`, and `engine_loop`. `scripts/run_c_lane.sh`
+writes hashable `reports/cpp_lane/` receipts for the feature, risk/concurrency,
+decision/safety, and engine-loop classes only after all C-lane checks pass.
+Those receipts must carry schema `hft3_cpp_lane_receipt_v1`, `status=pass`, the
+expected check names, and the current `hft3_commit`; source-lock validation reads
+the receipt content and rejects stale, mismatched, or filename-only evidence.
+Latency still comes from a CHI404 native Rithmic latency probe/latency report
+artifact whose content proves `hot_path_language=c++`, `wrapper=none`, and
+`rithmic_latency_probe` provenance.
 
 HBT-2 status precedence:
 

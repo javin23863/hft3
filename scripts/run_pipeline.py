@@ -4,26 +4,37 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import contextvars
+import hashlib
 import json
+import logging
+import math
 import os
+import re
 import sys
+import threading
 import uuid
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages"), str(REPO / "apps")]
 
-from research_pipeline.deployment import deploy_best
-from research_pipeline.document_ingestion import (
-    build_knowledge_graph,
-    extract_text,
-    summarise_text,
-)
-from research_pipeline.evaluation import evaluate_model
+from research_pipeline.evaluation import evaluate_candidate_events, evaluate_model, parse_event_ids
 from research_pipeline.hypothesis_parser import parse_hypothesis
-from research_pipeline.knowledge_graph import persist_graph_slice
 from research_pipeline.model_generation import generate_candidates
+from research_pipeline.parameter_search import SUPPORTED_SEARCH_METHODS
+from research_pipeline.rl_agents import (
+    SUPPORTED_RL_DEVICES,
+    blocked_rl_artifact,
+    train_or_load_rl_policy_artifact,
+    write_rl_policy_artifact,
+)
+from research_pipeline.runtime_policy import effective_evaluation_workers
+from features_engine.src.model_registry import load_model_registry, resolve_model_id
 from research_pipeline.idea_generation import (
     candidates_from_ideas,
     generate_idea_set,
@@ -35,15 +46,75 @@ from research_pipeline.idea_generation import (
 from backtest_pipeline.src.fs_v1_screen_path import FS_V1_BAR_CONSTRUCTION_ID
 from backtest_pipeline.src.vectorbt_adapter import filter_candidates, persist_screening_artifact
 from data_system.src.feature_store import feature_store_root
-from backtest_pipeline.src.hftbacktest_realism import write_hftbacktest_realism_artifacts
-from backtest_pipeline.src.promotion_gate import PromotionGate
-from research_pipeline.packets import (
-    build_pipeline_request,
-    build_pipeline_response,
-    write_pipeline_packets,
+from backtest_pipeline.src.hftbacktest_realism import (
+    compute_robustness_evidence_receipt_hash,
+    validate_candidate_replay_eligibility,
+    write_hftbacktest_realism_artifacts,
 )
+from backtest_pipeline.src.promotion_gate import PromotionGate
 from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds, PipelineReport, ParsedHypothesis
-from data_layer.llm.openai_compatible_client import DEFAULT_MODEL_DEVELOPMENT_MODEL
+
+DEFAULT_MODEL_DEVELOPMENT_MODEL = os.environ.get(
+    "HFT3_MODEL_DEVELOPMENT_LLM_MODEL",
+    os.environ.get(
+        "HFT3_MODEL_DEV_LLM_MODEL",
+        os.environ.get("HFT3_LLM_MODEL", "gpt-5.5"),
+    ),
+)
+
+
+def deploy_best(repo_root: Path, report: PipelineReport) -> Path | None:
+    from research_pipeline.deployment import deploy_best as _deploy_best
+
+    return _deploy_best(repo_root, report)
+
+
+def build_pipeline_request(**kwargs):
+    from research_pipeline.packets import build_pipeline_request as _build_pipeline_request
+
+    return _build_pipeline_request(**kwargs)
+
+
+def build_pipeline_response(*args, **kwargs):
+    from research_pipeline.packets import build_pipeline_response as _build_pipeline_response
+
+    return _build_pipeline_response(*args, **kwargs)
+
+
+def write_pipeline_packets(*args, **kwargs):
+    from research_pipeline.packets import write_pipeline_packets as _write_pipeline_packets
+
+    return _write_pipeline_packets(*args, **kwargs)
+
+
+def extract_text(*args, **kwargs):
+    from research_pipeline.document_ingestion import extract_text as _extract_text
+
+    return _extract_text(*args, **kwargs)
+
+
+def summarise_text(*args, **kwargs):
+    from research_pipeline.document_ingestion import summarise_text as _summarise_text
+
+    return _summarise_text(*args, **kwargs)
+
+
+def build_knowledge_graph(*args, **kwargs):
+    from research_pipeline.document_ingestion import build_knowledge_graph as _build_knowledge_graph
+
+    return _build_knowledge_graph(*args, **kwargs)
+
+
+def graph_to_kg_records(*args, **kwargs):
+    from research_pipeline.document_ingestion import graph_to_kg_records as _graph_to_kg_records
+
+    return _graph_to_kg_records(*args, **kwargs)
+
+
+def persist_graph_slice(*args, **kwargs):
+    from research_pipeline.knowledge_graph import persist_graph_slice as _persist_graph_slice
+
+    return _persist_graph_slice(*args, **kwargs)
 
 
 def _run_id() -> str:
@@ -51,10 +122,705 @@ def _run_id() -> str:
     return f"pipeline_{ts}_{uuid.uuid4().hex[:8]}"
 
 
+_DEFAULT_PIPELINE_CONFIG_PATH = REPO / "config" / "research_pipeline" / "default_runtime.json"
+_DEFAULT_PIPELINE_RUNTIME_CONFIG: dict[str, Any] = {
+    "schema_version": "hft3_research_pipeline_runtime_v1",
+    "max_candidates": 5,
+    "vectorbt": {
+        "scope": "pilot",
+        "budget": {
+            "max_trials": None,
+            "max_models": None,
+            "max_symbols": None,
+            "max_feature_sets": None,
+            "max_total_trials": None,
+            "max_wall_clock_seconds": None,
+            "max_peak_memory_mb_or_null": None,
+            "abort_on_budget_exhaustion": None,
+        },
+    },
+    "llm_ideas": {
+        "max_ideas": None,
+        "review_memory_limit": 5,
+        "temperature": 0.7,
+        "top_p": 0.95,
+    },
+    "doc_cache": {
+        "enabled": True,
+        "root": "runtime/research_pipeline/doc_cache",
+        "cache_urls": False,
+    },
+    "candidate_prefilter": {
+        "enabled": True,
+        "model_id_pattern": r"^[A-Z][A-Z0-9_]*$",
+        "signal_threshold_min": 0.0,
+        "signal_threshold_max": 1.0,
+        "require_positive_holding_period_bars": True,
+    },
+    "candidate_search": {
+        "method": "grid",
+        "seed": 42,
+    },
+    "rl_training": {
+        "enabled": False,
+        "required": False,
+        "features": [],
+        "device": "cpu",
+        "seed": 42,
+        "cache": {
+            "enabled": True,
+            "root": "runtime/research_pipeline/rl_policy_cache",
+        },
+    },
+    "evaluation": {
+        "workers": 1,
+        "max_workers": 8,
+        "msi_max_workers": 1,
+    },
+    "gate_profiles": {
+        "default_profile": "normal",
+        "volatility_regime_profiles": {
+            "normal": "normal",
+            "high_volatility": "high_volatility",
+            "low_volatility": "low_volatility",
+        },
+        "profiles": {
+            "normal": {
+                "min_net_pnl": -1000000000.0,
+                "min_trades": 0,
+                "max_tail_loss": 1000000000.0,
+                "min_win_rate": 0.0,
+                "min_sharpe": -1000000000.0,
+                "min_sortino": -1000000000.0,
+                "max_drawdown": 1000000000.0,
+            },
+            "high_volatility": {
+                "min_net_pnl": 0.0,
+                "min_trades": 10,
+                "max_tail_loss": 5000.0,
+                "min_win_rate": 0.45,
+                "min_sharpe": -1000000000.0,
+                "min_sortino": -1000000000.0,
+                "max_drawdown": 1000000000.0,
+            },
+            "low_volatility": {
+                "min_net_pnl": 0.0,
+                "min_trades": 5,
+                "max_tail_loss": 2500.0,
+                "min_win_rate": 0.40,
+                "min_sharpe": -1000000000.0,
+                "min_sortino": -1000000000.0,
+                "max_drawdown": 1000000000.0,
+            },
+        },
+    },
+}
+_VECTORBT_SCOPE_CHOICES = {
+    "pilot",
+    "screen",
+    "refine",
+    "paid",
+    "paid-compute",
+    "paid_compute",
+    "broad",
+    "broad-screen",
+    "broad_screen",
+    "all-model",
+    "all_model",
+    "all-models",
+    "all_models",
+}
+_VECTORBT_BUDGET_ARGS = {
+    "max_trials": "vectorbt_max_trials",
+    "max_models": "vectorbt_max_models",
+    "max_symbols": "vectorbt_max_symbols",
+    "max_feature_sets": "vectorbt_max_feature_sets",
+    "max_total_trials": "vectorbt_max_total_trials",
+    "max_wall_clock_seconds": "vectorbt_max_wall_clock_seconds",
+    "max_peak_memory_mb_or_null": "vectorbt_max_peak_memory_mb",
+}
 _PIPELINE_RESULT_MARKER = "HFT3_PIPELINE_RESULT="
+_LOG_HANDLER_ATTR = "_hft3_pipeline_run_handler"
+logger = logging.getLogger("hft3.research_pipeline.run_pipeline")
+_LOG_HANDLER_LOCK = threading.Lock()
+_ACTIVE_LOG_RUN_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "hft3_pipeline_run_id",
+    default=None,
+)
+
+
+def _json_default(value: Any) -> str:
+    if isinstance(value, Path):
+        return str(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
+def _write_json(path: Path, payload: Mapping[str, Any]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, default=_json_default) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _deep_merge(base: dict[str, Any], updates: Mapping[str, Any]) -> dict[str, Any]:
+    for key, value in updates.items():
+        if isinstance(value, Mapping) and isinstance(base.get(key), dict):
+            base[key] = _deep_merge(dict(base[key]), value)
+        else:
+            base[key] = value
+    return base
+
+
+def load_pipeline_runtime_config(path: Path | None = None) -> dict[str, Any]:
+    config = copy.deepcopy(_DEFAULT_PIPELINE_RUNTIME_CONFIG)
+    config_path = path or _DEFAULT_PIPELINE_CONFIG_PATH
+    if config_path.is_file():
+        raw = json.loads(config_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError(f"pipeline runtime config must be a JSON object: {config_path}")
+        _deep_merge(config, raw)
+    elif path is not None:
+        raise FileNotFoundError(f"pipeline runtime config not found: {config_path}")
+    return config
+
+
+def _section(config: Mapping[str, Any], key: str) -> dict[str, Any]:
+    value = config.get(key)
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _positive_int(value: Any, *, name: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a positive integer") from exc
+    if parsed <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    return parsed
+
+
+def _nonnegative_int(value: Any, *, name: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a nonnegative integer") from exc
+    if parsed < 0:
+        raise ValueError(f"{name} must be a nonnegative integer")
+    return parsed
+
+
+def _optional_positive_int(value: Any, *, name: str) -> int | None:
+    if value is None:
+        return None
+    return _positive_int(value, name=name)
+
+
+def _float_default(value: Any, *, name: str) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be numeric") from exc
+    if not math.isfinite(parsed):
+        raise ValueError(f"{name} must be finite")
+    return parsed
+
+
+def _bool_default(value: Any, *, name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"{name} must be boolean")
+
+
+def _gate_profiles(config: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    gate_config = _section(config, "gate_profiles")
+    profiles = gate_config.get("profiles")
+    if not isinstance(profiles, Mapping):
+        return {}
+    return {
+        str(name): dict(profile)
+        for name, profile in profiles.items()
+        if isinstance(profile, Mapping)
+    }
+
+
+def _gate_thresholds_from_args(args: argparse.Namespace) -> GateThresholds:
+    return GateThresholds(
+        min_net_pnl=_float_default(args.gate_min_net_pnl, name="gate_profiles.min_net_pnl"),
+        min_trades=_nonnegative_int(args.gate_min_trades, name="gate_profiles.min_trades"),
+        max_tail_loss=_float_default(args.gate_max_tail_loss, name="gate_profiles.max_tail_loss"),
+        min_win_rate=_float_default(args.gate_min_win_rate, name="gate_profiles.min_win_rate"),
+        min_sharpe=_float_default(args.gate_min_sharpe, name="gate_profiles.min_sharpe"),
+        min_sortino=_float_default(args.gate_min_sortino, name="gate_profiles.min_sortino"),
+        max_drawdown=_float_default(args.gate_max_drawdown, name="gate_profiles.max_drawdown"),
+    )
+
+
+def _model_volatility_regime(model_id: str) -> str | None:
+    try:
+        slug = resolve_model_id(model_id)
+    except KeyError:
+        return None
+    entry = load_model_registry().get("models", {}).get(slug, {})
+    raw = entry.get("volatility_regime")
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    return value or None
+
+
+def _apply_gate_profile_thresholds(
+    args: argparse.Namespace,
+    profile: Mapping[str, Any],
+) -> None:
+    thresholds = _gate_threshold_values(args, profile)
+    args.gate_min_net_pnl = thresholds["min_net_pnl"]
+    args.gate_min_trades = thresholds["min_trades"]
+    args.gate_max_tail_loss = thresholds["max_tail_loss"]
+    args.gate_min_win_rate = thresholds["min_win_rate"]
+    args.gate_min_sharpe = thresholds["min_sharpe"]
+    args.gate_min_sortino = thresholds["min_sortino"]
+    args.gate_max_drawdown = thresholds["max_drawdown"]
+
+
+def _gate_threshold_values(args: argparse.Namespace, profile: Mapping[str, Any]) -> dict[str, Any]:
+    cli_overrides = getattr(args, "_gate_threshold_cli_overrides", {}) or {}
+    return {
+        "min_net_pnl": (
+            getattr(args, "gate_min_net_pnl", None)
+            if cli_overrides.get("min_net_pnl")
+            else profile.get("min_net_pnl", -1e9)
+        ),
+        "min_trades": (
+            getattr(args, "gate_min_trades", None)
+            if cli_overrides.get("min_trades")
+            else profile.get("min_trades", 0)
+        ),
+        "max_tail_loss": (
+            getattr(args, "gate_max_tail_loss", None)
+            if cli_overrides.get("max_tail_loss")
+            else profile.get("max_tail_loss", 1e9)
+        ),
+        "min_win_rate": (
+            getattr(args, "gate_min_win_rate", None)
+            if cli_overrides.get("min_win_rate")
+            else profile.get("min_win_rate", 0.0)
+        ),
+        "min_sharpe": (
+            getattr(args, "gate_min_sharpe", None)
+            if cli_overrides.get("min_sharpe")
+            else profile.get("min_sharpe", -1e9)
+        ),
+        "min_sortino": (
+            getattr(args, "gate_min_sortino", None)
+            if cli_overrides.get("min_sortino")
+            else profile.get("min_sortino", -1e9)
+        ),
+        "max_drawdown": (
+            getattr(args, "gate_max_drawdown", None)
+            if cli_overrides.get("max_drawdown")
+            else profile.get("max_drawdown", 1e9)
+        ),
+    }
+
+
+def _gate_thresholds_from_values(values: Mapping[str, Any]) -> GateThresholds:
+    return GateThresholds(
+        min_net_pnl=_float_default(values.get("min_net_pnl", -1e9), name="gate_profiles.min_net_pnl"),
+        min_trades=_nonnegative_int(values.get("min_trades", 0), name="gate_profiles.min_trades"),
+        max_tail_loss=_float_default(values.get("max_tail_loss", 1e9), name="gate_profiles.max_tail_loss"),
+        min_win_rate=_float_default(values.get("min_win_rate", 0.0), name="gate_profiles.min_win_rate"),
+        min_sharpe=_float_default(values.get("min_sharpe", -1e9), name="gate_profiles.min_sharpe"),
+        min_sortino=_float_default(values.get("min_sortino", -1e9), name="gate_profiles.min_sortino"),
+        max_drawdown=_float_default(values.get("max_drawdown", 1e9), name="gate_profiles.max_drawdown"),
+    )
+
+
+def _resolve_gate_profile_for_model(
+    args: argparse.Namespace,
+    config: Mapping[str, Any],
+    primary_model_id: str,
+) -> dict[str, Any]:
+    profiles = _gate_profiles(config)
+    gate_config = _section(config, "gate_profiles")
+    cli_profile = bool(getattr(args, "_gate_profile_cli_override", False))
+    regime = _model_volatility_regime(primary_model_id)
+    resolution = {
+        "source": "cli" if cli_profile else "config_default",
+        "model_id": str(primary_model_id),
+        "volatility_regime": regime,
+        "profile": getattr(args, "gate_profile", "normal"),
+    }
+    if cli_profile:
+        resolution["thresholds"] = _gate_threshold_values(args, profiles[resolution["profile"]])
+        resolution["threshold_cli_overrides"] = dict(getattr(args, "_gate_threshold_cli_overrides", {}) or {})
+        return resolution
+
+    if regime in {None, "any", "unknown"}:
+        resolution["thresholds"] = _gate_threshold_values(args, profiles[resolution["profile"]])
+        resolution["threshold_cli_overrides"] = dict(getattr(args, "_gate_threshold_cli_overrides", {}) or {})
+        return resolution
+
+    profile_map = _section(gate_config, "volatility_regime_profiles")
+    profile_name = str(profile_map.get(regime) or regime)
+    if profile_name not in profiles:
+        raise ValueError(
+            f"gate_profiles.volatility_regime_profiles maps {regime!r} to unknown profile {profile_name!r}"
+        )
+    resolution["source"] = "model_registry_volatility_regime"
+    resolution["profile"] = profile_name
+    resolution["thresholds"] = _gate_threshold_values(args, profiles[profile_name])
+    resolution["threshold_cli_overrides"] = dict(getattr(args, "_gate_threshold_cli_overrides", {}) or {})
+    _gate_thresholds_from_values(resolution["thresholds"])
+    return resolution
+
+
+def _apply_registry_gate_profile(
+    args: argparse.Namespace,
+    config: Mapping[str, Any],
+    primary_model_id: str,
+) -> dict[str, Any]:
+    resolution = _resolve_gate_profile_for_model(args, config, primary_model_id)
+    args.gate_profile = resolution["profile"]
+    thresholds = resolution["thresholds"]
+    args.gate_min_net_pnl = thresholds["min_net_pnl"]
+    args.gate_min_trades = thresholds["min_trades"]
+    args.gate_max_tail_loss = thresholds["max_tail_loss"]
+    args.gate_min_win_rate = thresholds["min_win_rate"]
+    args.gate_min_sharpe = thresholds["min_sharpe"]
+    args.gate_min_sortino = thresholds["min_sortino"]
+    args.gate_max_drawdown = thresholds["max_drawdown"]
+    _gate_thresholds_from_args(args)
+    return resolution
+
+
+def _candidate_gate_profile_plan(
+    args: argparse.Namespace,
+    config: Mapping[str, Any],
+    candidates: Sequence[CandidateModel],
+) -> dict[str, Any]:
+    by_candidate: dict[str, dict[str, Any]] = {}
+    for candidate in candidates:
+        resolution = _resolve_gate_profile_for_model(args, config, candidate.model_id)
+        by_candidate[str(candidate.candidate_id)] = {
+            "candidate_id": str(candidate.candidate_id),
+            "model_id": str(candidate.model_id),
+            **resolution,
+        }
+    return {
+        "schema_version": "hft3_gate_profile_plan_v1",
+        "by_candidate": by_candidate,
+    }
+
+
+def _required_true(value: Any, *, name: str) -> bool:
+    parsed = _bool_default(value, name=name)
+    if not parsed:
+        raise ValueError(f"{name} must be true")
+    return parsed
+
+
+def _apply_pipeline_runtime_defaults(args: argparse.Namespace, config: Mapping[str, Any]) -> None:
+    vectorbt_config = _section(config, "vectorbt")
+    idea_config = _section(config, "llm_ideas")
+    search_config = _section(config, "candidate_search")
+    rl_config = _section(config, "rl_training")
+    evaluation_config = _section(config, "evaluation")
+    gate_config = _section(config, "gate_profiles")
+
+    if args.max_candidates is None:
+        args.max_candidates = config.get("max_candidates", 5)
+    args.max_candidates = _positive_int(args.max_candidates, name="max_candidates")
+
+    if args.vectorbt_scope is None:
+        args.vectorbt_scope = str(vectorbt_config.get("scope") or "pilot")
+    if args.vectorbt_scope not in _VECTORBT_SCOPE_CHOICES:
+        raise ValueError(f"vectorbt.scope must be one of: {', '.join(sorted(_VECTORBT_SCOPE_CHOICES))}")
+
+    budget_config = _section(vectorbt_config, "budget")
+    if budget_config.get("abort_on_budget_exhaustion") is not None:
+        _required_true(
+            budget_config["abort_on_budget_exhaustion"],
+            name="vectorbt.budget.abort_on_budget_exhaustion",
+        )
+    for config_key, arg_name in _VECTORBT_BUDGET_ARGS.items():
+        if getattr(args, arg_name) is None and budget_config.get(config_key) is not None:
+            setattr(args, arg_name, int(budget_config[config_key]))
+
+    if args.max_ideas is None:
+        args.max_ideas = _optional_positive_int(idea_config.get("max_ideas"), name="llm_ideas.max_ideas")
+    if args.review_memory_limit is None:
+        args.review_memory_limit = idea_config.get("review_memory_limit", 5)
+    args.review_memory_limit = _nonnegative_int(args.review_memory_limit, name="review_memory_limit")
+
+    if getattr(args, "candidate_search_method", None) is None:
+        args.candidate_search_method = str(search_config.get("method") or "grid")
+    args.candidate_search_method = str(args.candidate_search_method).strip().lower().replace("-", "_")
+    if args.candidate_search_method not in SUPPORTED_SEARCH_METHODS:
+        raise ValueError(
+            "candidate_search.method must be one of: "
+            + ", ".join(sorted(SUPPORTED_SEARCH_METHODS))
+        )
+    if getattr(args, "candidate_search_seed", None) is None:
+        args.candidate_search_seed = search_config.get("seed", 42)
+    args.candidate_search_seed = _nonnegative_int(args.candidate_search_seed, name="candidate_search.seed")
+
+    config_rl_enabled = _bool_default(rl_config.get("enabled", False), name="rl_training.enabled")
+    config_rl_required = _bool_default(rl_config.get("required", False), name="rl_training.required")
+    rl_cache_config = _section(rl_config, "cache")
+    args.rl_training_enabled = bool(config_rl_enabled or getattr(args, "rl_training_data", None))
+    args.rl_required = bool(getattr(args, "rl_required", False) or config_rl_required)
+    if args.rl_required:
+        args.rl_training_enabled = True
+    if getattr(args, "rl_device", None) is None:
+        args.rl_device = str(rl_config.get("device") or "cpu")
+    args.rl_device = str(args.rl_device).strip().lower()
+    if args.rl_device not in SUPPORTED_RL_DEVICES:
+        raise ValueError("rl_training.device must be one of: " + ", ".join(sorted(SUPPORTED_RL_DEVICES)))
+    if getattr(args, "rl_seed", None) is None:
+        args.rl_seed = rl_config.get("seed", 42)
+    args.rl_seed = _nonnegative_int(args.rl_seed, name="rl_training.seed")
+    if getattr(args, "rl_feature", None) is None:
+        features = rl_config.get("features") or []
+        if isinstance(features, str):
+            features = [features]
+        if not isinstance(features, list):
+            raise ValueError("rl_training.features must be a list of feature names")
+        args.rl_feature = [str(feature) for feature in features]
+    args.rl_cache_enabled = _bool_default(rl_cache_config.get("enabled", True), name="rl_training.cache.enabled")
+    args.rl_cache_root = rl_cache_config.get("root") or "runtime/research_pipeline/rl_policy_cache"
+
+    if getattr(args, "evaluation_workers", None) is None:
+        args.evaluation_workers = evaluation_config.get("workers", 1)
+    args.evaluation_workers = _positive_int(args.evaluation_workers, name="evaluation.workers")
+    args.evaluation_workers_requested = args.evaluation_workers
+    args.evaluation_workers, args.evaluation_worker_policy = effective_evaluation_workers(
+        args.evaluation_workers,
+        config,
+    )
+
+    profiles = _gate_profiles(config)
+    args._gate_profile_cli_override = getattr(args, "gate_profile", None) is not None
+    args._gate_threshold_cli_overrides = {
+        "min_net_pnl": getattr(args, "gate_min_net_pnl", None) is not None,
+        "min_trades": getattr(args, "gate_min_trades", None) is not None,
+        "max_tail_loss": getattr(args, "gate_max_tail_loss", None) is not None,
+        "min_win_rate": getattr(args, "gate_min_win_rate", None) is not None,
+        "min_sharpe": getattr(args, "gate_min_sharpe", None) is not None,
+        "min_sortino": getattr(args, "gate_min_sortino", None) is not None,
+        "max_drawdown": getattr(args, "gate_max_drawdown", None) is not None,
+    }
+    if getattr(args, "gate_profile", None) is None:
+        args.gate_profile = str(gate_config.get("default_profile") or "normal")
+    args.gate_profile = str(args.gate_profile)
+    if args.gate_profile not in profiles:
+        raise ValueError("gate_profiles.default_profile must name one of: " + ", ".join(sorted(profiles)))
+    profile = profiles[args.gate_profile]
+    _apply_gate_profile_thresholds(args, profile)
+    _gate_thresholds_from_args(args)
+
+
+class _PipelineJsonFormatter(logging.Formatter):
+    def __init__(self, run_id: str) -> None:
+        super().__init__()
+        self.run_id = run_id
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "run_id": self.run_id,
+            "event": record.getMessage(),
+        }
+        extra_payload = getattr(record, "payload", None)
+        if isinstance(extra_payload, Mapping):
+            payload["payload"] = dict(extra_payload)
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=_json_default)
+
+
+class _RunLogFilter(logging.Filter):
+    def __init__(self, run_id: str) -> None:
+        super().__init__()
+        self.run_id = run_id
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return _ACTIVE_LOG_RUN_ID.get() == self.run_id
+
+
+def _configure_run_logging(
+    artifact_dir: Path,
+    run_id: str,
+) -> tuple[Path, logging.FileHandler, contextvars.Token[str | None]]:
+    log_path = artifact_dir / "pipeline_run.log"
+    token = _ACTIVE_LOG_RUN_ID.set(run_id)
+    handler = logging.FileHandler(log_path, encoding="utf-8")
+    setattr(handler, _LOG_HANDLER_ATTR, True)
+    handler.addFilter(_RunLogFilter(run_id))
+    handler.setFormatter(_PipelineJsonFormatter(run_id))
+    with _LOG_HANDLER_LOCK:
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+    logger.info("pipeline_run_logging_configured", extra={"payload": {"log_path": str(log_path)}})
+    return log_path, handler, token
+
+
+def _close_run_logging(
+    handler: logging.Handler,
+    token: contextvars.Token[str | None],
+) -> None:
+    with _LOG_HANDLER_LOCK:
+        if handler in logger.handlers:
+            logger.removeHandler(handler)
+    handler.close()
+    _ACTIVE_LOG_RUN_ID.reset(token)
+
+
+def _pipeline_config_receipt(
+    *,
+    config: Mapping[str, Any],
+    config_path: Path,
+    args: argparse.Namespace,
+    gate_profile_plan: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    idea_config = _section(config, "llm_ideas")
+    vectorbt_budget = {
+        key: getattr(args, arg_name)
+        for key, arg_name in _VECTORBT_BUDGET_ARGS.items()
+    }
+    abort_default = _section(_section(config, "vectorbt"), "budget").get("abort_on_budget_exhaustion")
+    if abort_default is not None:
+        vectorbt_budget["abort_on_budget_exhaustion"] = _required_true(
+            abort_default,
+            name="vectorbt.budget.abort_on_budget_exhaustion",
+        )
+    effective = {
+        "max_candidates": args.max_candidates,
+        "vectorbt": {
+            "scope": args.vectorbt_scope,
+            "budget": vectorbt_budget,
+        },
+        "llm_ideas": {
+            "max_ideas": args.max_ideas,
+            "review_memory_limit": args.review_memory_limit,
+            "temperature": getattr(args, "resolved_idea_temperature", idea_config.get("temperature", 0.7)),
+            "top_p": getattr(args, "resolved_idea_top_p", idea_config.get("top_p", 0.95)),
+        },
+        "doc_cache": _section(config, "doc_cache"),
+        "candidate_prefilter": _section(config, "candidate_prefilter"),
+        "candidate_search": {
+            "method": getattr(args, "candidate_search_method", "grid"),
+            "seed": getattr(args, "candidate_search_seed", 42),
+        },
+        "rl_training": {
+            "enabled": bool(getattr(args, "rl_training_enabled", False)),
+            "required": bool(getattr(args, "rl_required", False)),
+            "features": list(getattr(args, "rl_feature", []) or []),
+            "device": getattr(args, "rl_device", "cpu"),
+            "seed": getattr(args, "rl_seed", 42),
+            "training_data": str(getattr(args, "rl_training_data", "") or ""),
+            "cache": {
+                "enabled": bool(getattr(args, "rl_cache_enabled", True)),
+                "root": str(getattr(args, "rl_cache_root", "runtime/research_pipeline/rl_policy_cache")),
+            },
+        },
+        "evaluation": {
+            "workers": getattr(args, "evaluation_workers", 1),
+            "worker_policy": dict(getattr(args, "evaluation_worker_policy", {}) or {}),
+        },
+        "gate_profiles": {
+            "profile": getattr(args, "gate_profile", "normal"),
+            "thresholds": {
+                "min_net_pnl": getattr(args, "gate_min_net_pnl", -1e9),
+                "min_trades": getattr(args, "gate_min_trades", 0),
+                "max_tail_loss": getattr(args, "gate_max_tail_loss", 1e9),
+                "min_win_rate": getattr(args, "gate_min_win_rate", 0.0),
+                "min_sharpe": getattr(args, "gate_min_sharpe", -1e9),
+                "min_sortino": getattr(args, "gate_min_sortino", -1e9),
+                "max_drawdown": getattr(args, "gate_max_drawdown", 1e9),
+            },
+            "threshold_cli_overrides": dict(getattr(args, "_gate_threshold_cli_overrides", {}) or {}),
+            "profile_cli_override": bool(getattr(args, "_gate_profile_cli_override", False)),
+            "candidate_gate_plan": copy.deepcopy(dict(gate_profile_plan or {})) or None,
+        },
+    }
+    hash_payload = {
+        "loaded_config": copy.deepcopy(dict(config)),
+        "effective": effective,
+    }
+    config_hash = hashlib.sha256(
+        json.dumps(hash_payload, sort_keys=True, default=_json_default).encode("utf-8")
+    ).hexdigest()
+    return {
+        "schema_version": "hft3_pipeline_runtime_config_receipt_v1",
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "pipeline_config_path": str(config_path),
+        "pipeline_runtime_config_hash": config_hash,
+        "loaded_config": copy.deepcopy(dict(config)),
+        "effective": effective,
+    }
+
+
+def _write_pipeline_run_receipt(payload: Mapping[str, Any]) -> Path | None:
+    artifact_dir = payload.get("artifact_dir")
+    if not artifact_dir:
+        return None
+    receipt_path = _write_json(Path(str(artifact_dir)) / "pipeline_run_receipt.json", payload)
+    logger.info(
+        "pipeline_run_receipt_written",
+        extra={"payload": {"receipt_path": str(receipt_path), "status": payload.get("status")}},
+    )
+    return receipt_path
+
+
+def _set_active_run_failure_context(context: dict[str, Any], **values: Any) -> None:
+    context.clear()
+    context.update(values)
+
+
+def _update_active_run_failure_context(context: dict[str, Any], **values: Any) -> None:
+    context.update(values)
+
+
+def _emit_pipeline_failure_receipt(exc: Exception, context: Mapping[str, Any]) -> None:
+    context = dict(context)
+    artifact_dir = context.get("artifact_dir")
+    if not artifact_dir:
+        logger.exception("pipeline_run_failed_without_artifact_dir")
+        return
+    payload: dict[str, Any] = {
+        "run_id": context.get("run_id"),
+        "artifact_dir": str(artifact_dir),
+        "status": "pipeline_failed",
+        "error": {
+            "type": type(exc).__name__,
+            "message": str(exc),
+        },
+    }
+    for key in (
+        "request_packet",
+        "document_summary",
+        "document_cache",
+        "candidate_prefilter",
+        "paths",
+    ):
+        if key in context:
+            payload[key] = context[key]
+    logger.exception("pipeline_run_failed", extra={"payload": payload["error"]})
+    _emit_pipeline_payload(payload, orchestrator_result=bool(context.get("orchestrator_result")))
 
 
 def _emit_pipeline_payload(payload: dict, *, orchestrator_result: bool) -> None:
+    _write_pipeline_run_receipt(payload)
     if orchestrator_result:
         slim = {
             "run_id": payload.get("run_id"),
@@ -62,9 +828,9 @@ def _emit_pipeline_payload(payload: dict, *, orchestrator_result: bool) -> None:
             "status": payload.get("status"),
             "paths": payload.get("paths"),
         }
-        print(_PIPELINE_RESULT_MARKER + json.dumps(slim))
+        print(_PIPELINE_RESULT_MARKER + json.dumps(slim, default=_json_default))
     else:
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(payload, indent=2, default=_json_default))
 
 
 def _pipeline_llm_status(parsed: ParsedHypothesis, *, no_llm: bool) -> str:
@@ -73,6 +839,92 @@ def _pipeline_llm_status(parsed: ParsedHypothesis, *, no_llm: bool) -> str:
     if parsed.llm_status:
         return parsed.llm_status
     return "ok" if parsed.source == "openai_compatible" else "unavailable"
+
+
+def _symbol_root(symbol: str) -> str:
+    return str(symbol).upper().split(".", 1)[0]
+
+
+def _normalize_requested_symbol(symbol: str) -> str:
+    raw = str(symbol)
+    if "." not in raw:
+        return raw.upper()
+    root, suffix = raw.split(".", 1)
+    return f"{root.upper()}.{suffix}"
+
+
+def _resolve_target_symbol(parsed: ParsedHypothesis, cli_symbol: str | None) -> str:
+    parsed_symbols = [_symbol_root(str(symbol)) for symbol in (parsed.instrument_universe or [])]
+    compatibility = str(
+        parsed.metadata.get("instrument_universe_compatibility") or "not_declared"
+    )
+    registry_entry = load_model_registry().get("models", {}).get(parsed.primary_model_id, {})
+    registry_valid = [
+        _symbol_root(str(symbol))
+        for symbol in (registry_entry.get("valid_instrument_universe") or [])
+    ]
+    registry_targets = [
+        _symbol_root(str(symbol))
+        for symbol in (registry_entry.get("target_instrument_universe") or [])
+    ]
+    compatible = [
+        _symbol_root(str(symbol))
+        for symbol in (parsed.metadata.get("compatible_instrument_universe") or [])
+    ]
+    target_valid = [
+        _symbol_root(str(symbol))
+        for symbol in (
+            parsed.metadata.get("target_instrument_universe")
+            or registry_targets
+            or []
+        )
+    ]
+    if compatibility == "not_declared" and registry_valid:
+        unsupported = [symbol for symbol in parsed_symbols if symbol not in registry_valid]
+        if unsupported:
+            raise ValueError(
+                f"parsed instruments {unsupported} are not compatible with model {parsed.primary_model_id}"
+            )
+        compatible = [symbol for symbol in parsed_symbols if symbol in registry_valid]
+        allowed = compatible
+    elif compatibility == "not_declared":
+        allowed = parsed_symbols
+    else:
+        allowed = compatible or (parsed_symbols if compatibility == "compatible" else [])
+    if compatibility == "missing_valid_instrument_universe":
+        raise ValueError(
+            f"model {parsed.primary_model_id} does not declare valid_instrument_universe"
+        )
+    unsupported = [
+        _symbol_root(str(symbol))
+        for symbol in (parsed.metadata.get("unsupported_instruments") or [])
+    ]
+    if unsupported:
+        raise ValueError(
+            f"parsed instruments {unsupported} are not compatible with model {parsed.primary_model_id}"
+        )
+    target_allowed = [
+        symbol for symbol in allowed if not target_valid or symbol in target_valid
+    ]
+    if target_valid and not target_allowed:
+        target_allowed = target_valid
+    if parsed_symbols and not allowed:
+        raise ValueError(
+            f"parsed instruments {parsed_symbols} are not compatible with model {parsed.primary_model_id}"
+        )
+    if cli_symbol:
+        requested = _normalize_requested_symbol(str(cli_symbol))
+        requested_root = _symbol_root(requested)
+        if target_valid and requested_root not in target_valid:
+            raise ValueError(
+                f"--symbol {requested} is not compatible with target instruments {target_valid}"
+            )
+        if not target_valid and allowed and requested_root not in allowed:
+            raise ValueError(
+                f"--symbol {requested} is not compatible with parsed instruments {allowed}"
+            )
+        return requested
+    return (target_allowed or compatible or parsed_symbols or ["MES"])[0]
 
 
 def _optional_float(value: str | None) -> float | None:
@@ -112,23 +964,487 @@ def _optional_resolved_path(path: Path | None) -> Path | None:
     return path.resolve() if path is not None else None
 
 
-def main() -> int:
+def _resolve_config_path(repo_root: Path, raw_path: Any) -> Path:
+    path = Path(str(raw_path))
+    if path.is_absolute():
+        return path
+    return repo_root / path
+
+
+def _is_url_source(source: str | Path) -> bool:
+    return str(source).startswith(("http://", "https://"))
+
+
+def _resolve_doc_file(source: str | Path, *, repo_root: Path) -> Path:
+    source_path = Path(str(source))
+    return (repo_root / source_path).resolve() if not source_path.is_absolute() else source_path.resolve()
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _doc_cache_path(source: str | Path, *, repo_root: Path, cache_root: Path) -> Path:
+    if _is_url_source(source):
+        source_meta: dict[str, Any] = {"kind": "url", "source": str(source)}
+    else:
+        resolved = _resolve_doc_file(source, repo_root=repo_root)
+        source_meta = {"kind": "file", "source": str(resolved)}
+    digest = hashlib.sha256(
+        json.dumps(source_meta, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return cache_root / f"{digest}.json"
+
+
+def _doc_file_metadata(path: Path, *, sha256: str | None = None) -> dict[str, Any]:
+    stat = path.stat()
+    metadata: dict[str, Any] = {
+        "kind": "file",
+        "source": str(path),
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+    }
+    if sha256 is not None:
+        metadata["sha256"] = sha256
+    return metadata
+
+
+def _cached_doc_match_metadata(
+    cached: Mapping[str, Any],
+    source: str | Path,
+    *,
+    repo_root: Path,
+) -> tuple[bool, dict[str, Any] | None]:
+    if _is_url_source(source):
+        return True, None
+    resolved = _resolve_doc_file(source, repo_root=repo_root)
+    source_file = cached.get("source_file")
+    if not isinstance(source_file, Mapping):
+        return False, None
+    if str(source_file.get("source") or "") != str(resolved):
+        return False, None
+    stat = resolved.stat()
+    if source_file.get("size") == stat.st_size and source_file.get("mtime_ns") == stat.st_mtime_ns:
+        return True, None
+    cached_sha = source_file.get("sha256")
+    if not cached_sha:
+        return False, None
+    current_sha = _file_sha256(resolved)
+    if str(cached_sha) != current_sha:
+        return False, None
+    return True, _doc_file_metadata(resolved, sha256=current_sha)
+
+
+def _doc_id(
+    source: str | Path,
+    *,
+    repo_root: Path,
+    resolved_source: Path | None = None,
+) -> str:
+    if _is_url_source(source):
+        identity = str(source)
+        stem = Path(str(source).rstrip("/")).stem
+    else:
+        resolved = resolved_source or _resolve_doc_file(source, repo_root=repo_root)
+        identity = str(resolved)
+        stem = resolved.stem
+    stem = stem or hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
+    safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", stem).strip("._") or "unknown"
+    path_hash = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:8]
+    return f"doc:{safe_stem}_{path_hash}"
+
+
+def _graph_from_kg_records(records: Mapping[str, Any]):
+    try:
+        import networkx as nx
+    except ModuleNotFoundError as exc:
+        if exc.name == "networkx":
+            return records
+        raise
+
+    graph = nx.DiGraph()
+    for node in records.get("nodes", []) or []:
+        if not isinstance(node, Mapping) or not node.get("id"):
+            continue
+        attrs = {k: v for k, v in node.items() if k != "id"}
+        graph.add_node(str(node["id"]), **attrs)
+    for edge in records.get("edges", []) or []:
+        if not isinstance(edge, Mapping) or not edge.get("from") or not edge.get("to"):
+            continue
+        attrs = {k: v for k, v in edge.items() if k not in {"from", "to"}}
+        graph.add_edge(str(edge["from"]), str(edge["to"]), **attrs)
+    return graph
+
+
+def ingest_document_with_cache(
+    source: str | Path,
+    *,
+    repo_root: Path,
+    cache_config: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    enabled = _bool_default(cache_config.get("enabled", True), name="doc_cache.enabled")
+    cache_urls = _bool_default(cache_config.get("cache_urls", False), name="doc_cache.cache_urls")
+    if _is_url_source(source) and not cache_urls:
+        enabled = False
+    cache_root = _resolve_config_path(
+        repo_root,
+        cache_config.get("root") or _DEFAULT_PIPELINE_RUNTIME_CONFIG["doc_cache"]["root"],
+    )
+    resolved_source = None if _is_url_source(source) else _resolve_doc_file(source, repo_root=repo_root)
+    cache_path = _doc_cache_path(source, repo_root=repo_root, cache_root=cache_root)
+    doc_id = _doc_id(source, repo_root=repo_root, resolved_source=resolved_source)
+    if enabled and cache_path.is_file():
+        cached = json.loads(cache_path.read_text(encoding="utf-8"))
+        cache_matches, refreshed_source_file = _cached_doc_match_metadata(cached, source, repo_root=repo_root)
+        if cache_matches and str(cached.get("doc_id") or "") == doc_id:
+            if refreshed_source_file is not None:
+                cached["source_file"] = refreshed_source_file
+                _write_json(cache_path, cached)
+            summary = str(cached.get("summary") or "")
+            records = cached.get("kg_records") or {}
+            persist_graph_slice(repo_root, _graph_from_kg_records(records))
+            return summary, {
+                "enabled": enabled,
+                "status": "hit",
+                "cache_path": str(cache_path),
+                "doc_id": str(cached.get("doc_id") or doc_id),
+            }
+
+    text = extract_text(source)
+    summary = summarise_text(text)
+    kg = build_knowledge_graph(text, doc_id=doc_id)
+    records = graph_to_kg_records(kg)
+    persist_graph_slice(repo_root, kg)
+    if enabled:
+        _write_json(
+            cache_path,
+            {
+                "schema_version": "hft3_doc_ingestion_cache_v1",
+                "created_at_utc": datetime.now(timezone.utc).isoformat(),
+                "doc_id": doc_id,
+                "text_sha256": hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest(),
+                "text_char_count": len(text),
+                "source_file": (
+                    _doc_file_metadata(
+                        resolved_source,
+                        sha256=_file_sha256(resolved_source),
+                    )
+                    if resolved_source is not None
+                    else None
+                ),
+                "summary": summary,
+                "kg_records": records,
+            },
+        )
+    return summary, {
+        "enabled": enabled,
+        "status": "miss",
+        "cache_path": str(cache_path) if enabled else None,
+        "doc_id": doc_id,
+    }
+
+
+def prefilter_candidates(
+    candidates: list[CandidateModel],
+    *,
+    config: Mapping[str, Any],
+) -> tuple[list[CandidateModel], dict[str, Any]]:
+    enabled = _bool_default(config.get("enabled", True), name="candidate_prefilter.enabled")
+    if not enabled:
+        return candidates, {
+            "schema_version": "hft3_candidate_prefilter_v1",
+            "enabled": False,
+            "total_candidates": len(candidates),
+            "accepted_count": len(candidates),
+            "rejected_count": 0,
+            "accepted_ids": [c.candidate_id for c in candidates],
+            "rejected": [],
+        }
+
+    pattern = re.compile(str(config.get("model_id_pattern") or r"^[A-Z][A-Z0-9_]*$"))
+    threshold_min = _float_default(config.get("signal_threshold_min", 0.0), name="signal_threshold_min")
+    threshold_max = _float_default(config.get("signal_threshold_max", 1.0), name="signal_threshold_max")
+    require_positive_holding = _bool_default(
+        config.get("require_positive_holding_period_bars", True),
+        name="candidate_prefilter.require_positive_holding_period_bars",
+    )
+    accepted: list[CandidateModel] = []
+    rejected: list[dict[str, Any]] = []
+    for candidate in candidates:
+        reasons: list[str] = []
+        model_id = str(candidate.model_id or "")
+        if not pattern.fullmatch(model_id):
+            reasons.append("malformed_model_id")
+        params = dict(candidate.strategy_params or {})
+        if "signal_threshold" in params:
+            try:
+                threshold = float(params["signal_threshold"])
+            except (TypeError, ValueError):
+                threshold = math.nan
+            if (
+                not math.isfinite(threshold)
+                or threshold < threshold_min
+                or threshold > threshold_max
+            ):
+                reasons.append("signal_threshold_out_of_bounds")
+        if require_positive_holding and "holding_period_bars" in params:
+            try:
+                holding = float(params["holding_period_bars"])
+            except (TypeError, ValueError):
+                holding = math.nan
+            if not math.isfinite(holding) or holding <= 0:
+                reasons.append("holding_period_bars_nonpositive")
+        if reasons:
+            rejected.append(
+                {
+                    "candidate_id": candidate.candidate_id,
+                    "model_id": candidate.model_id,
+                    "reasons": reasons,
+                    "params": params,
+                }
+            )
+        else:
+            accepted.append(candidate)
+    return accepted, {
+        "schema_version": "hft3_candidate_prefilter_v1",
+        "enabled": True,
+        "total_candidates": len(candidates),
+        "accepted_count": len(accepted),
+        "rejected_count": len(rejected),
+        "accepted_ids": [c.candidate_id for c in accepted],
+        "rejected": rejected,
+    }
+
+
+def _idea_sampling_value(
+    cli_value: float | None,
+    *,
+    env_name: str,
+    config: Mapping[str, Any],
+    key: str,
+    fallback: float,
+) -> float:
+    if cli_value is not None:
+        return cli_value
+    env_value = _optional_float(os.environ.get(env_name))
+    if env_value is not None:
+        return env_value
+    if config.get(key) is not None:
+        return _float_default(config[key], name=f"llm_ideas.{key}")
+    return fallback
+
+
+def _resolve_idea_sampling_values(args: argparse.Namespace, config: Mapping[str, Any]) -> None:
+    idea_config = _section(config, "llm_ideas")
+    args.resolved_idea_temperature = _idea_sampling_value(
+        args.idea_temperature,
+        env_name="HFT3_IDEA_TEMPERATURE",
+        config=idea_config,
+        key="temperature",
+        fallback=0.7,
+    )
+    args.resolved_idea_top_p = _idea_sampling_value(
+        args.idea_top_p,
+        env_name="HFT3_IDEA_TOP_P",
+        config=idea_config,
+        key="top_p",
+        fallback=0.95,
+    )
+
+
+def _vectorbt_run_budget(args: argparse.Namespace, config: Mapping[str, Any]) -> dict[str, Any]:
+    vectorbt_config = _section(config, "vectorbt")
+    budget_config = _section(vectorbt_config, "budget")
+    run_budget = {
+        key: value
+        for key, value in {
+            "max_trials": args.vectorbt_max_trials,
+            "max_models": args.vectorbt_max_models,
+            "max_symbols": args.vectorbt_max_symbols,
+            "max_feature_sets": args.vectorbt_max_feature_sets,
+            "max_total_trials": args.vectorbt_max_total_trials,
+            "max_wall_clock_seconds": args.vectorbt_max_wall_clock_seconds,
+            "max_peak_memory_mb_or_null": args.vectorbt_max_peak_memory_mb,
+        }.items()
+        if value is not None
+    }
+    if budget_config.get("abort_on_budget_exhaustion") is not None:
+        run_budget["abort_on_budget_exhaustion"] = _required_true(
+            budget_config["abort_on_budget_exhaustion"],
+            name="vectorbt.budget.abort_on_budget_exhaustion",
+        )
+    return run_budget
+
+
+def _strict_replay_eligible_ids(
+    screening_artifact: Mapping[str, Any],
+) -> tuple[list[str], dict[str, list[str]]]:
+    promoted_ids = {str(value) for value in screening_artifact.get("promoted_ids") or []}
+    eligible: list[str] = []
+    ineligible: dict[str, list[str]] = {}
+    for row in screening_artifact.get("promoted") or []:
+        if not isinstance(row, Mapping):
+            continue
+        candidate_id = str(row.get("candidate_id") or "")
+        if not candidate_id or candidate_id not in promoted_ids:
+            continue
+        reasons = validate_candidate_replay_eligibility(
+            row,
+            screening_artifact=screening_artifact,
+        )
+        if reasons:
+            ineligible[candidate_id] = list(dict.fromkeys(str(reason) for reason in reasons))
+        else:
+            eligible.append(candidate_id)
+    missing_rows = sorted(promoted_ids - set(eligible) - set(ineligible))
+    for candidate_id in missing_rows:
+        ineligible[candidate_id] = ["candidate_metadata_missing_from_screening_artifact"]
+    return eligible, ineligible
+
+
+def _canonical_hash(value: Any) -> str:
+    return compute_robustness_evidence_receipt_hash(value)
+
+
+def _run_rl_training_stage(
+    args: argparse.Namespace,
+    *,
+    artifact_dir: Path,
+    repo_root: Path,
+) -> tuple[dict[str, Any] | None, Path | None]:
+    if not bool(getattr(args, "rl_training_enabled", False)):
+        return None, None
+    feature_names = list(getattr(args, "rl_feature", []) or [])
+    training_data = getattr(args, "rl_training_data", None)
+    if not feature_names:
+        artifact = blocked_rl_artifact(
+            reason="missing_rl_feature_names",
+            feature_names=feature_names,
+            device=args.rl_device,
+            seed=args.rl_seed,
+            gpu_training_required=args.rl_device == "cuda",
+        )
+    elif training_data is None:
+        artifact = blocked_rl_artifact(
+            reason="missing_rl_training_data",
+            feature_names=feature_names,
+            device=args.rl_device,
+            seed=args.rl_seed,
+            gpu_training_required=args.rl_device == "cuda",
+        )
+    else:
+        try:
+            cache_enabled = bool(getattr(args, "rl_cache_enabled", True))
+            cache_root = None
+            if cache_enabled:
+                cache_root = _resolve_config_path(
+                    repo_root,
+                    getattr(args, "rl_cache_root", "runtime/research_pipeline/rl_policy_cache"),
+                )
+            artifact = train_or_load_rl_policy_artifact(
+                training_data_path=training_data,
+                feature_names=feature_names,
+                device=args.rl_device,
+                seed=args.rl_seed,
+                cache_enabled=cache_enabled,
+                cache_root=cache_root,
+            )
+        except Exception as exc:
+            artifact = blocked_rl_artifact(
+                reason=f"rl_training_error:{exc}",
+                feature_names=feature_names,
+                device=args.rl_device,
+                seed=args.rl_seed,
+                gpu_training_required=args.rl_device == "cuda",
+            )
+    path = write_rl_policy_artifact(artifact_dir / "rl_policy_artifact.json", artifact)
+    return dict(artifact), path
+
+
+def _evaluate_candidate_worker(
+    job: tuple[CandidateModel, tuple[str, ...], Path, Path | None, GateThresholds],
+) -> EvaluationResult:
+    candidate, event_ids, repo_root, chi404_summary, gates = job
+    if len(event_ids) == 1:
+        return evaluate_model(candidate, event_ids[0], repo_root, chi404_summary=chi404_summary, gates=gates)
+    return evaluate_candidate_events(
+        candidate,
+        event_ids,
+        repo_root,
+        chi404_summary=chi404_summary,
+        gates=gates,
+    )
+
+
+def _evaluate_candidates_batch(
+    candidates: Sequence[CandidateModel],
+    *,
+    event_id: str | None = None,
+    event_ids: Sequence[str] | None = None,
+    repo_root: Path,
+    chi404_summary: Path | None,
+    gates_by_candidate_id: Mapping[str, GateThresholds],
+    workers: int,
+) -> list[EvaluationResult]:
+    workers = _positive_int(workers, name="evaluation.workers")
+    raw_event_ids: str | Sequence[str]
+    if event_ids is not None:
+        raw_event_ids = event_ids
+    elif event_id is not None:
+        raw_event_ids = event_id
+    else:
+        raw_event_ids = []
+    parsed_event_ids = tuple(parse_event_ids(raw_event_ids))
+    jobs = [
+        (candidate, parsed_event_ids, repo_root, chi404_summary, gates_by_candidate_id[candidate.candidate_id])
+        for candidate in candidates
+    ]
+    if workers == 1 or len(jobs) <= 1:
+        return [_evaluate_candidate_worker(job) for job in jobs]
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        return list(executor.map(_evaluate_candidate_worker, jobs))
+
+
+def _emit_risk_metric_gate_warnings(results: Sequence[EvaluationResult]) -> None:
+    for result in results:
+        if result.risk_metric_warning:
+            print(
+                f"Warning: {result.candidate.candidate_id} {result.risk_metric_warning}",
+                file=sys.stderr,
+            )
+
+
+def _main_impl(
+    argv: list[str] | None = None,
+    failure_context: dict[str, Any] | None = None,
+    log_contexts: list[tuple[logging.Handler, contextvars.Token[str | None]]] | None = None,
+) -> int:
+    if failure_context is None:
+        failure_context = {}
     parser = argparse.ArgumentParser(description="Autoresearch pipeline")
     parser.add_argument("--thesis", required=True, help="Natural-language trading thesis")
-    parser.add_argument("--doc", type=Path, help="Optional research document (PDF/DOCX/URL)")
+    parser.add_argument("--doc", help="Optional research document (PDF/DOCX/URL)")
     parser.add_argument("--event-id", required=True, help="Explicit catalog event id from events.csv")
     parser.add_argument(
         "--symbol",
-        default="MES",
-        help="Target symbol for feature-store fs_v1 VectorBT path (default MES)",
+        default=None,
+        help="Target symbol for feature-store fs_v1 VectorBT path; defaults to the parsed compatible instrument",
     )
-    parser.add_argument("--max-candidates", type=int, default=5)
+    parser.add_argument("--max-candidates", type=int, default=None)
     parser.add_argument("--chi404-summary", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true", help="Parse and generate only")
     parser.add_argument("--no-llm", action="store_true", help="Heuristic hypothesis parse only")
     parser.add_argument("--repo-root", type=Path, default=REPO)
     parser.add_argument("--vectorbt", action="store_true", help="Enable VectorBT pre-filter before HftBacktest")
-    parser.add_argument("--vectorbt-only", action="store_true", help="Run VectorBT filter only, skip HftBacktest")
+    parser.add_argument(
+        "--vectorbt-only",
+        action="store_true",
+        help="Run VectorBT filter only and stop before the downstream realism handoff",
+    )
     parser.add_argument(
         "--vectorbt-scope",
         choices=[
@@ -146,7 +1462,7 @@ def main() -> int:
             "all-models",
             "all_models",
         ],
-        default="pilot",
+        default=None,
         help="VectorBT screening scope; all non-pilot broad/refine/paid scopes require the Rust engine",
     )
     parser.add_argument("--vectorbt-max-trials", type=int, default=None)
@@ -170,9 +1486,68 @@ def main() -> int:
     parser.add_argument("--native-hot-path-evidence", action="append", default=[])
     parser.add_argument("--idea-set", action="store_true", help="Use packet-strict LLM idea set before candidate tests")
     parser.add_argument("--max-ideas", type=int, default=None, help="Maximum idea records to accept before static filtering")
-    parser.add_argument("--review-memory-limit", type=int, default=5, help="Prior AAR/KG memory facts to include")
+    parser.add_argument("--review-memory-limit", type=int, default=None, help="Prior AAR/KG memory facts to include")
     parser.add_argument("--idea-temperature", type=float, default=None, help="Sampling temperature for idea generation only")
     parser.add_argument("--idea-top-p", type=float, default=None, help="Top-p sampling for idea generation only")
+    parser.add_argument(
+        "--candidate-search-method",
+        choices=sorted(SUPPORTED_SEARCH_METHODS),
+        default=None,
+        help="Candidate parameter search method before VectorBT screening",
+    )
+    parser.add_argument(
+        "--candidate-search-seed",
+        type=int,
+        default=None,
+        help="Seed for deterministic candidate parameter search",
+    )
+    parser.add_argument("--rl-training-data", type=Path, default=None, help="JSON/JSONL RL training rows")
+    parser.add_argument(
+        "--rl-feature",
+        action="append",
+        default=None,
+        help="Microstructure feature name to expose to the RL policy artifact; repeatable",
+    )
+    parser.add_argument(
+        "--rl-device",
+        choices=sorted(SUPPORTED_RL_DEVICES),
+        default=None,
+        help="RL training device; cuda writes a blocked GPU handoff artifact on MSI",
+    )
+    parser.add_argument("--rl-required", action="store_true", help="Fail the run if RL does not train")
+    parser.add_argument("--rl-seed", type=int, default=None, help="Seed for RL policy training")
+    parser.add_argument(
+        "--evaluation-workers",
+        type=int,
+        default=None,
+        help="Bounded worker count for legacy candidate evaluation; VectorBT paid-screen uses its own controls",
+    )
+    parser.add_argument("--gate-profile", default=None, help="Legacy evaluation gate profile name")
+    parser.add_argument("--gate-min-net-pnl", type=float, default=None)
+    parser.add_argument("--gate-min-trades", type=int, default=None)
+    parser.add_argument("--gate-max-tail-loss", type=float, default=None)
+    parser.add_argument("--gate-min-win-rate", type=float, default=None)
+    parser.add_argument(
+        "--gate-min-sharpe",
+        "--min-sharpe",
+        dest="gate_min_sharpe",
+        type=float,
+        default=None,
+    )
+    parser.add_argument(
+        "--gate-min-sortino",
+        "--min-sortino",
+        dest="gate_min_sortino",
+        type=float,
+        default=None,
+    )
+    parser.add_argument(
+        "--gate-max-drawdown",
+        "--max-drawdown",
+        dest="gate_max_drawdown",
+        type=float,
+        default=None,
+    )
     parser.add_argument(
         "--orchestrator-result",
         action="store_true",
@@ -185,13 +1560,40 @@ def main() -> int:
         default=REPO / "config" / "autoresearch" / "default.yaml",
         help="Autoresearch loop YAML config",
     )
+    parser.add_argument(
+        "--pipeline-config",
+        type=Path,
+        default=_DEFAULT_PIPELINE_CONFIG_PATH,
+        help="Research pipeline runtime JSON config",
+    )
     parser.add_argument("--resume", action="store_true", help="Resume autoresearch campaign from manifest")
     parser.add_argument("--campaign-id", default=None, help="Autoresearch campaign id (required with --resume)")
     parser.add_argument("--max-generations", type=int, default=None, help="Override config max_generations")
     parser.add_argument("--stop-file", type=Path, default=None, help="Stop autoresearch loop when this file exists")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+
+    try:
+        runtime_config = load_pipeline_runtime_config(args.pipeline_config)
+        _apply_pipeline_runtime_defaults(args, runtime_config)
+        _resolve_idea_sampling_values(args, runtime_config)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        event_ids = parse_event_ids(args.event_id)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    primary_event_id = event_ids[0]
 
     if args.autoresearch:
+        if len(event_ids) > 1:
+            print(
+                "Error: --autoresearch accepts exactly one event id; multi-event autoresearch is not wired yet.",
+                file=sys.stderr,
+            )
+            return 2
         from research_pipeline.generation_loop import (
             load_autoresearch_config,
             make_default_robustness_fn,
@@ -199,6 +1601,26 @@ def main() -> int:
         )
 
         repo_root = args.repo_root.resolve()
+        run_id = _run_id()
+        artifact_dir = repo_root / "research_cards" / "pipeline_runs" / run_id
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        _log_path, log_handler, log_token = _configure_run_logging(artifact_dir, run_id)
+        if log_contexts is not None:
+            log_contexts.append((log_handler, log_token))
+        _set_active_run_failure_context(
+            failure_context,
+            run_id=run_id,
+            artifact_dir=str(artifact_dir),
+            orchestrator_result=bool(args.orchestrator_result),
+        )
+        _write_json(
+            artifact_dir / "pipeline_runtime_config.json",
+            _pipeline_config_receipt(
+                config=runtime_config,
+                config_path=args.pipeline_config,
+                args=args,
+            ),
+        )
         overrides = {
             "max_generations": args.max_generations,
             "stop_file": str(args.stop_file) if args.stop_file else None,
@@ -212,7 +1634,7 @@ def main() -> int:
         code, report = run_autoresearch_loop(
             repo_root=repo_root,
             thesis=args.thesis,
-            event_id=args.event_id,
+            event_id=primary_event_id,
             cfg=cfg,
             campaign_id=args.campaign_id,
             resume=bool(args.resume),
@@ -221,6 +1643,8 @@ def main() -> int:
         )
         _emit_pipeline_payload(
             {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
                 "status": "autoresearch_complete" if code == 0 else "autoresearch_failed",
                 "autoresearch_report": report,
             },
@@ -230,6 +1654,13 @@ def main() -> int:
 
     if args.resume and not args.autoresearch:
         print("Error: --resume requires --autoresearch.", file=sys.stderr)
+        return 2
+
+    if len(event_ids) > 1 and (args.vectorbt or args.vectorbt_only or args.hftbacktest_realism):
+        print(
+            "Error: multi-event VectorBT/HftBacktest screening is not implemented; run one event per screening pass.",
+            file=sys.stderr,
+        )
         return 2
 
     if args.hftbacktest_realism and args.vectorbt_only:
@@ -254,32 +1685,110 @@ def main() -> int:
     repo_root = args.repo_root.resolve()
     run_id = _run_id()
     doc_summary = None
+    document_cache = None
     doc_ref = str(args.doc) if args.doc else None
 
     request = build_pipeline_request(
         request_id=run_id,
         thesis=args.thesis,
-        event_id=args.event_id,
+        event_id=primary_event_id,
+        event_ids=event_ids,
         repo_root=repo_root,
         max_candidates=args.max_candidates,
         document_ref=doc_ref,
     )
     artifact_dir = repo_root / "research_cards" / "pipeline_runs" / run_id
     artifact_dir.mkdir(parents=True, exist_ok=True)
+    _log_path, log_handler, log_token = _configure_run_logging(artifact_dir, run_id)
+    if log_contexts is not None:
+        log_contexts.append((log_handler, log_token))
+    _set_active_run_failure_context(
+        failure_context,
+        run_id=run_id,
+        artifact_dir=str(artifact_dir),
+        orchestrator_result=bool(args.orchestrator_result),
+        request_packet=request,
+    )
+    logger.info(
+        "pipeline_run_start",
+        extra={
+            "payload": {
+                "artifact_dir": str(artifact_dir),
+                "event_id": primary_event_id,
+                "event_ids": event_ids,
+                "vectorbt": bool(args.vectorbt),
+                "vectorbt_only": bool(args.vectorbt_only),
+                "dry_run": bool(args.dry_run),
+            }
+        },
+    )
+    _write_json(
+        artifact_dir / "pipeline_runtime_config.json",
+        _pipeline_config_receipt(
+            config=runtime_config,
+            config_path=args.pipeline_config,
+            args=args,
+        ),
+    )
     (artifact_dir / "request_packet.json").write_text(
         json.dumps(request, indent=2), encoding="utf-8"
     )
 
+    rl_policy_artifact, rl_policy_path = _run_rl_training_stage(
+        args,
+        artifact_dir=artifact_dir,
+        repo_root=repo_root,
+    )
+    if rl_policy_artifact is not None:
+        logger.info(
+            "rl_training_stage_complete",
+            extra={
+                "payload": {
+                    "status": rl_policy_artifact.get("status"),
+                    "path": str(rl_policy_path) if rl_policy_path else None,
+                    "device": rl_policy_artifact.get("device"),
+                }
+            },
+        )
+        _update_active_run_failure_context(
+            failure_context,
+            rl_policy_artifact=rl_policy_artifact,
+            rl_policy_artifact_path=str(rl_policy_path) if rl_policy_path else None,
+        )
+        if rl_policy_artifact.get("status") != "trained_research_only":
+            payload = {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
+                "status": "blocked_rl_training",
+                "detail": (
+                    "RL training was enabled but did not produce a trained research-only policy artifact. "
+                    "CUDA requests require a named GPU host/sub-agent handoff and are not launched on MSI."
+                ),
+                "request_packet": request,
+                "rl_policy_artifact": rl_policy_artifact,
+                "paths": {"rl_policy_artifact_path": str(rl_policy_path) if rl_policy_path else None},
+            }
+            _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
+            return 2
+
     if args.doc:
         try:
-            text = extract_text(args.doc)
-            doc_summary = summarise_text(text)
-            doc_id = f"doc:{args.doc.stem}"
-            kg = build_knowledge_graph(text, doc_id=doc_id)
-            persist_graph_slice(repo_root, kg)
+            doc_summary, document_cache = ingest_document_with_cache(
+                args.doc,
+                repo_root=repo_root,
+                cache_config=_section(runtime_config, "doc_cache"),
+            )
+            logger.info("document_ingestion_complete", extra={"payload": document_cache})
         except Exception as exc:
             print(f"Warning: document ingestion failed, continuing without doc: {exc}", file=sys.stderr)
-            doc_summary = {"error": str(exc)}
+            doc_summary = None
+            document_cache = {"status": "error", "error": str(exc)}
+            logger.warning("document_ingestion_failed", extra={"payload": document_cache})
+    _update_active_run_failure_context(
+        failure_context,
+        document_summary=doc_summary,
+        document_cache=document_cache,
+    )
 
     idea_packet = None
     idea_candidates_count = 0
@@ -292,25 +1801,45 @@ def main() -> int:
             max_candidates=args.max_candidates,
             review_memory_limit=args.review_memory_limit,
             use_llm=not args.no_llm,
-            temperature=(
-                args.idea_temperature
-                if args.idea_temperature is not None
-                else _optional_float(os.environ.get("HFT3_IDEA_TEMPERATURE")) or 0.7
-            ),
-            top_p=(
-                args.idea_top_p
-                if args.idea_top_p is not None
-                else _optional_float(os.environ.get("HFT3_IDEA_TOP_P")) or 0.95
-            ),
+            temperature=args.resolved_idea_temperature,
+            top_p=args.resolved_idea_top_p,
         )
-        candidates = candidates_from_ideas(
-            idea_packet,
-            max_candidates=args.max_candidates,
-            expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
-        )
-        idea_candidates_count = len(candidates)
-        queued = [idea for idea in idea_packet.get("ideas", []) if idea.get("status") == "queued_for_test"]
+        try:
+            candidates = candidates_from_ideas(
+                idea_packet,
+                max_candidates=args.max_candidates,
+                expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+                target_event_id=primary_event_id,
+                target_symbol_resolver=lambda idea_parsed: _resolve_target_symbol(
+                    idea_parsed, args.symbol
+                ),
+                search_method=args.candidate_search_method,
+                search_seed=args.candidate_search_seed,
+            )
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        queued = [
+            idea
+            for idea in idea_packet.get("ideas", [])
+            if idea.get("status") == "queued_for_test"
+        ]
         parsed = parsed_from_idea(queued[0]) if queued else parse_hypothesis(args.thesis, use_llm=False)
+        try:
+            target_symbol = _resolve_target_symbol(parsed, args.symbol)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        idea_candidates_count = len(candidates)
+        candidate_symbols = {candidate.target_symbol for candidate in candidates}
+        if len(candidate_symbols) > 1:
+            print(
+                f"Error: --idea-set produced multiple target symbols {sorted(candidate_symbols)}; run one symbol per screening pass.",
+                file=sys.stderr,
+            )
+            return 2
+        if candidate_symbols:
+            target_symbol = next(iter(candidate_symbols))
         (artifact_dir / "review_memory.json").write_text(
             json.dumps(
                 {
@@ -330,11 +1859,30 @@ def main() -> int:
             vectorbt=args.vectorbt,
             vectorbt_only=args.vectorbt_only,
         ):
+            candidates, candidate_prefilter = prefilter_candidates(
+                candidates,
+                config=_section(runtime_config, "candidate_prefilter"),
+            )
+            _write_json(artifact_dir / "candidate_prefilter.json", candidate_prefilter)
+            logger.info("candidate_prefilter_complete", extra={"payload": candidate_prefilter})
+            _update_active_run_failure_context(failure_context, candidate_prefilter=candidate_prefilter)
+            payload = {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
+                "status": "blocked_idea_set_requires_vectorbt_prefilter",
+                "detail": "--idea-set full runs require --vectorbt so generated ideas pass the prefilter before evaluation.",
+                "request_packet": request,
+                "idea_set_packet": idea_packet,
+                "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
+            }
+            _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             print(
                 "Error: --idea-set full runs require --vectorbt so generated ideas pass the prefilter before evaluation.",
                 file=sys.stderr,
             )
-            return 1
+            return 2
     else:
         parsed = parse_hypothesis(
             args.thesis,
@@ -342,13 +1890,28 @@ def main() -> int:
             pipeline_request=request,
             repo_root=repo_root,
         )
-        candidates = list(generate_candidates(
-            parsed,
-            max_candidates=args.max_candidates,
-            expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
-            target_event_id=args.event_id,
-            target_symbol=args.symbol,
-        ))
+        try:
+            target_symbol = _resolve_target_symbol(parsed, args.symbol)
+            candidates = list(generate_candidates(
+                parsed,
+                max_candidates=args.max_candidates,
+                expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+                target_event_id=primary_event_id,
+                target_symbol=target_symbol,
+                search_method=args.candidate_search_method,
+                search_seed=args.candidate_search_seed,
+            ))
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+
+    candidates, candidate_prefilter = prefilter_candidates(
+        candidates,
+        config=_section(runtime_config, "candidate_prefilter"),
+    )
+    _write_json(artifact_dir / "candidate_prefilter.json", candidate_prefilter)
+    logger.info("candidate_prefilter_complete", extra={"payload": candidate_prefilter})
+    _update_active_run_failure_context(failure_context, candidate_prefilter=candidate_prefilter)
 
     if args.vectorbt or args.vectorbt_only:
         print(f"Running VectorBT filter on {len(candidates)} candidates x grid...")
@@ -358,29 +1921,17 @@ def main() -> int:
             max_drawdown_pct=-50.0,
             min_trades=3 if args.vectorbt_only else 10,
         )
-        run_budget = {
-            key: value
-            for key, value in {
-                "max_trials": args.vectorbt_max_trials,
-                "max_models": args.vectorbt_max_models,
-                "max_symbols": args.vectorbt_max_symbols,
-                "max_feature_sets": args.vectorbt_max_feature_sets,
-                "max_total_trials": args.vectorbt_max_total_trials,
-                "max_wall_clock_seconds": args.vectorbt_max_wall_clock_seconds,
-                "max_peak_memory_mb_or_null": args.vectorbt_max_peak_memory_mb,
-            }.items()
-            if value is not None
-        }
+        run_budget = _vectorbt_run_budget(args, runtime_config)
         filter_result = filter_candidates(
             candidates=candidates,
             parsed=parsed,
-            event_id=args.event_id,
+            event_id=primary_event_id,
             repo_root=repo_root,
             gates=vbt_gates,
             screening_scope=args.vectorbt_scope,
             run_budget=run_budget or None,
             feature_store_root=feature_store_root(repo_root),
-            symbol=args.symbol,
+            symbol=target_symbol,
         )
         vectorbt_artifact = filter_result.to_dict()
         print(
@@ -439,6 +1990,7 @@ def main() -> int:
                         "asset_class": p.asset_class,
                         "symbol": p.symbol,
                     },
+                    target_symbol=p.symbol,
                 )
                 for p in filter_result.promoted
             ]
@@ -471,7 +2023,8 @@ def main() -> int:
             report = PipelineReport(
                 run_id=run_id,
                 thesis=args.thesis,
-                event_id=args.event_id,
+                event_id=primary_event_id,
+                event_ids=event_ids,
                 parsed=parsed,
                 candidates_tested=int(filter_result.total_candidates),
                 results=[],
@@ -499,6 +2052,7 @@ def main() -> int:
             payload = {
                 "run_id": run_id,
                 "artifact_dir": str(artifact_dir),
+                "status": "vectorbt_only_complete" if candidates else "vectorbt_only_no_survivors",
                 "request_packet": request,
                 "response_packet": response,
                 "vectorbt_filter": vectorbt_artifact,
@@ -507,16 +2061,21 @@ def main() -> int:
                     "primary_model_id": parsed.primary_model_id,
                     "source": parsed.source,
                     "param_ranges": parsed.param_ranges,
+                    "metadata": parsed.metadata,
+                    "target_symbol": target_symbol,
                 },
                 "candidates": [
                     {
                         "candidate_id": c.candidate_id,
                         "model_id": c.model_id,
                         "params": c.strategy_params,
+                        "target_symbol": c.target_symbol,
                     }
                     for c in candidates
                 ],
                 "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
             }
             if idea_packet:
                 payload["idea_summary"] = idea_summary
@@ -527,6 +2086,7 @@ def main() -> int:
             "screening_artifact_path": str(screening_path),
             "vectorbt_filter_path": str(artifact_dir / "vectorbt_filter.json"),
         }
+        _update_active_run_failure_context(failure_context, paths=paths)
         if not args.hftbacktest_realism:
             payload = {
                 "run_id": run_id,
@@ -539,6 +2099,9 @@ def main() -> int:
                 "vectorbt_filter": vectorbt_artifact,
                 "screening_artifact": vectorbt_artifact,
                 "paths": paths,
+                "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
             }
             _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 2
@@ -559,9 +2122,64 @@ def main() -> int:
                 "hftbacktest_realism": None,
                 "replay_summary": replay_summary,
                 "paths": paths,
+                "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
             }
             _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 2
+        strict_eligible_ids, strict_ineligible_reasons = _strict_replay_eligible_ids(vectorbt_artifact)
+        if not strict_eligible_ids:
+            replay_summary = {
+                "run_id": run_id,
+                "replay_realism_status": "fail",
+                "fail_closed_reasons": ["screening_artifact_has_no_strict_replay_eligible_candidate"],
+                "ineligible_reasons": strict_ineligible_reasons,
+            }
+            payload = {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
+                "status": "blocked_hftbacktest_realism_replay_ineligible",
+                "detail": (
+                    "HftBacktest realism handoff requires at least one promoted row with "
+                    "strict replay eligibility from the robustness evidence applicator"
+                ),
+                "vectorbt_filter": vectorbt_artifact,
+                "screening_artifact": vectorbt_artifact,
+                "hftbacktest_realism": None,
+                "replay_summary": replay_summary,
+                "paths": paths,
+                "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
+            }
+            _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
+            return 2
+        if args.hftbacktest_candidate_id and args.hftbacktest_candidate_id not in strict_eligible_ids:
+            replay_summary = {
+                "run_id": run_id,
+                "replay_realism_status": "fail",
+                "fail_closed_reasons": ["requested_candidate_not_strict_replay_eligible"],
+                "eligible_candidate_ids": strict_eligible_ids,
+                "ineligible_reasons": strict_ineligible_reasons,
+            }
+            payload = {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
+                "status": "blocked_hftbacktest_realism_candidate_not_eligible",
+                "detail": "Requested HftBacktest candidate is not strict replay-eligible.",
+                "vectorbt_filter": vectorbt_artifact,
+                "screening_artifact": vectorbt_artifact,
+                "hftbacktest_realism": None,
+                "replay_summary": replay_summary,
+                "paths": paths,
+                "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
+            }
+            _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
+            return 2
+        hftbacktest_candidate_id = args.hftbacktest_candidate_id or strict_eligible_ids[0]
         missing_hbt_inputs = _missing_hftbacktest_realism_inputs(args)
         if missing_hbt_inputs:
             replay_summary = {
@@ -582,6 +2200,9 @@ def main() -> int:
                 "hftbacktest_realism": None,
                 "replay_summary": replay_summary,
                 "paths": paths,
+                "document_summary": doc_summary,
+                "document_cache": document_cache,
+                "candidate_prefilter": candidate_prefilter,
             }
             _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 2
@@ -595,7 +2216,7 @@ def main() -> int:
             latency_model_path=_optional_resolved_path(args.hftbacktest_latency_model),
             fill_queue_model_path=_optional_resolved_path(args.hftbacktest_fill_queue_model),
             observation_artifact_path=_optional_resolved_path(args.hftbacktest_observation_artifact),
-            candidate_id=args.hftbacktest_candidate_id,
+            candidate_id=hftbacktest_candidate_id,
             upstream_ref=args.hftbacktest_upstream_ref,
             native_hot_path_evidence=list(args.native_hot_path_evidence or []),
             run_id=run_id,
@@ -624,6 +2245,9 @@ def main() -> int:
             "hftbacktest_realism": hftbacktest_realism,
             "replay_summary": replay_summary,
             "paths": paths,
+            "document_summary": doc_summary,
+            "document_cache": document_cache,
+            "candidate_prefilter": candidate_prefilter,
         }
         _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
         return 0 if replay_summary.get("replay_realism_status") == "pass" else 2
@@ -637,7 +2261,8 @@ def main() -> int:
         report = PipelineReport(
             run_id=run_id,
             thesis=args.thesis,
-            event_id=args.event_id,
+            event_id=primary_event_id,
+            event_ids=event_ids,
             parsed=parsed,
             candidates_tested=0,
             results=[],
@@ -665,23 +2290,34 @@ def main() -> int:
         payload = {
             "run_id": run_id,
             "artifact_dir": str(artifact_dir),
+            "status": "dry_run_complete",
             "request_packet": request,
             "response_packet": response,
             "parsed": {
                 "primary_model_id": parsed.primary_model_id,
                 "source": parsed.source,
                 "param_ranges": parsed.param_ranges,
+                "metadata": parsed.metadata,
+                "target_symbol": target_symbol,
             },
             "candidates": [
-                {"candidate_id": c.candidate_id, "model_id": c.model_id, "params": c.strategy_params}
+                {
+                    "candidate_id": c.candidate_id,
+                    "model_id": c.model_id,
+                    "params": c.strategy_params,
+                    "target_symbol": c.target_symbol,
+                    "metadata": c.metadata,
+                }
                 for c in candidates
             ],
             "document_summary": doc_summary,
+            "document_cache": document_cache,
+            "candidate_prefilter": candidate_prefilter,
         }
         if idea_packet:
             payload["idea_summary"] = idea_summary
             payload["idea_set_packet"] = idea_packet
-        print(json.dumps(payload, indent=2))
+        _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
         return 0
 
     chi404 = args.chi404_summary
@@ -691,13 +2327,55 @@ def main() -> int:
     if chi404 is None:
         print("Warning: no latency data available; backtest will run without CHI404 latency", file=sys.stderr)
 
-    gates = GateThresholds(min_trades=0)
-    results = []
+    gate_profile_plan = _candidate_gate_profile_plan(
+        args,
+        runtime_config,
+        candidates,
+    )
+    _write_json(
+        artifact_dir / "pipeline_runtime_config.json",
+        _pipeline_config_receipt(
+            config=runtime_config,
+            config_path=args.pipeline_config,
+            args=args,
+            gate_profile_plan=gate_profile_plan,
+        ),
+    )
+    logger.info("gate_profile_selected", extra={"payload": gate_profile_plan})
+    _update_active_run_failure_context(failure_context, gate_profile_plan=gate_profile_plan)
+    gates_by_candidate_id = {
+        candidate_id: _gate_thresholds_from_values(resolution["thresholds"])
+        for candidate_id, resolution in gate_profile_plan["by_candidate"].items()
+    }
     for cand in candidates:
-        print(f"Evaluating {cand.model_id} threshold={cand.strategy_params.get('signal_threshold')}...")
-        results.append(
-            evaluate_model(cand, args.event_id, repo_root, chi404_summary=chi404, gates=gates)
+        gate_profile = gate_profile_plan["by_candidate"][cand.candidate_id]["profile"]
+        print(
+            f"Evaluating {cand.model_id} threshold={cand.strategy_params.get('signal_threshold')} "
+            f"gate_profile={gate_profile}..."
         )
+    logger.info(
+        "candidate_evaluation_start",
+        extra={
+            "payload": {
+                "candidate_count": len(candidates),
+                "workers": args.evaluation_workers,
+                "gate_profile_plan": gate_profile_plan,
+            }
+        },
+    )
+    results = _evaluate_candidates_batch(
+        candidates,
+        event_ids=event_ids,
+        repo_root=repo_root,
+        chi404_summary=chi404,
+        gates_by_candidate_id=gates_by_candidate_id,
+        workers=args.evaluation_workers,
+    )
+    _emit_risk_metric_gate_warnings(results)
+    logger.info(
+        "candidate_evaluation_complete",
+        extra={"payload": {"result_count": len(results), "workers": args.evaluation_workers}},
+    )
 
     if idea_packet:
         update_idea_statuses_from_results(idea_packet, results)
@@ -708,7 +2386,8 @@ def main() -> int:
     report = PipelineReport(
         run_id=run_id,
         thesis=args.thesis,
-        event_id=args.event_id,
+        event_id=primary_event_id,
+        event_ids=event_ids,
         parsed=parsed,
         candidates_tested=len(results),
         results=results,
@@ -743,13 +2422,45 @@ def main() -> int:
         ),
     )
     write_pipeline_packets(artifact_dir, request, response)
-    print(json.dumps({"report": report.to_dict(), "response_packet": response}, indent=2))
+    status = "candidate_deployed" if artifact else "no_candidate_deployed"
+    payload = {
+        "run_id": run_id,
+        "artifact_dir": str(artifact_dir),
+        "status": status,
+        "report": report.to_dict(),
+        "response_packet": response,
+        "gate_profile_plan": gate_profile_plan,
+    }
+    if document_cache:
+        payload["document_cache"] = document_cache
+    payload["candidate_prefilter"] = candidate_prefilter
+    _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
     if artifact:
         print(f"Artifacts: {artifact}")
     else:
         print("No candidate deployed.", file=sys.stderr)
         return 1
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    failure_context: dict[str, Any] = {}
+    log_contexts: list[tuple[logging.Handler, contextvars.Token[str | None]]] = []
+    try:
+        return _main_impl(argv, failure_context=failure_context, log_contexts=log_contexts)
+    except Exception as exc:
+        try:
+            _emit_pipeline_failure_receipt(exc, failure_context)
+        except Exception as receipt_exc:
+            print(
+                f"Error: pipeline failed and failure receipt could not be written: {receipt_exc}",
+                file=sys.stderr,
+            )
+        print(f"Error: pipeline failed: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        for handler, token in reversed(log_contexts):
+            _close_run_logging(handler, token)
 
 
 if __name__ == "__main__":

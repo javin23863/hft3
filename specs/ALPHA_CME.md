@@ -34,7 +34,16 @@ contracts — it references and sequences existing ones.
 | M9 | **Paper-shadow SIM over 2026-01-01 → 2026-06-10** — deployed bundle replayed through all 2026 event windows in REPLAY/PAPER mode at measured p99 (DEPLOYMENT.md §4). Gate: positive net expectancy on 2026 window; zero code-attributable safety halts; determinism spot-check passes. 2026 NPZ coverage required. | CHI404 | CHI404_RUNTIME.md §10; DEPLOYMENT.md §4 | **OPEN** | M8, 2026 NPZ coverage |
 | M10 | **Live arm** — pre-arm checklist complete, kill-switch drill passed, ARM entry appended to audit log, `hft3_engine` started in LIVE mode. Defect ledger MUST be empty (CORRECTNESS.md §3; DEPLOYMENT.md §5). | CHI404 | DEPLOYMENT.md §5; CORRECTNESS.md §3 | **OPEN** | M9, empty defect ledger |
 
-**M2 caveat**: first CHI404 run of `scripts/run_c_lane.sh` executed 2026-06-11 — decision-runtime hardening (10053) and safety failure injection (129) green; explicit known-gaps remain: pybind .so not built on CHI404 (row-3 parity skip) and TSan stress targets (`spsc_queue_stress`, `risk_manager_atomic_stress`, `safety_poller_concurrent`) missing from CMake; caveat stays open until those rows run green on CHI404.
+**M2 caveat closure**: the first CHI404 run of `scripts/run_c_lane.sh` on
+2026-06-11 left two explicit gaps: pybind `.so` not built on CHI404 and TSan
+stress targets (`spsc_queue_stress`, `risk_manager_atomic_stress`,
+`safety_poller_concurrent`) missing from CMake. The 2026-06-24 C-lane patch
+adds the pybind build preflight, the three named TSan targets, and engine-loop
+release coverage. The parity gate pins `HFT3_FEATURES_CPP_BUILD_DIR` to the
+fresh CMake build and refuses stale fallback modules. CHI404 disposable checkout
+`/tmp/hft3-cpp-lane-20260624T175426` ran
+`BUILD_DIR=$PWD/build/run_c_lane_greptile_twofix PYTHON_BIN=python3 bash scripts/run_c_lane.sh --npz /root/hft3/data/npz/RTY.v.0_CORE_CPI_2020_01_14_TIGHT_mbo.npz`
+with `ALL CHECKS PASSED`; this closes the recorded M2 caveat for this branch.
 
 ---
 

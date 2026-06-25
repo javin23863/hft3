@@ -1,0 +1,205 @@
+from __future__ import annotations
+
+import sys
+import types
+from pathlib import Path
+
+
+_REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_REPO))
+
+
+def test_cpp_loader_prefers_active_build_dir(monkeypatch, tmp_path: Path) -> None:
+    from features_engine.src.features._cpp_loader import _candidate_dirs, _override_candidate_dirs
+
+    repo = tmp_path / "repo"
+    active_build = tmp_path / "cmake-build-lane"
+    monkeypatch.setenv("HFT3_FEATURES_CPP_BUILD_DIR", str(active_build))
+
+    override_candidates = list(_override_candidate_dirs())
+    fallback_candidates = list(_candidate_dirs(repo))
+
+    assert override_candidates == [
+        active_build.resolve(),
+        (active_build / "Release").resolve(),
+        (active_build / "Debug").resolve(),
+    ]
+    assert fallback_candidates == [
+        (repo / "build").resolve(),
+        (repo / "build" / "Release").resolve(),
+        (repo / "build" / "Debug").resolve(),
+    ]
+
+
+def test_cpp_loader_rejects_stale_sys_module_when_active_build_dir_is_set(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    import features_engine.src.features._cpp_loader as loader
+
+    active_build = tmp_path / "active-build"
+    stale_build = tmp_path / "stale-build"
+    active_build.mkdir()
+    stale_mod = types.SimpleNamespace(__file__=str(stale_build / "hft3_features_cpp.so"))
+
+    monkeypatch.setenv("HFT3_FEATURES_CPP_BUILD_DIR", str(active_build))
+    monkeypatch.setattr(loader, "_cached", stale_mod)
+    monkeypatch.setattr(loader, "_searched", True)
+    monkeypatch.setitem(sys.modules, loader._MODULE_NAME, stale_mod)
+
+    assert loader.load_cpp_features() is None
+    assert loader._MODULE_NAME not in sys.modules
+
+
+def test_cpp_loader_override_load_failure_returns_none_without_fallback(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    import features_engine.src.features._cpp_loader as loader
+
+    active_build = tmp_path / "active-build"
+    active_build.mkdir()
+    corrupt_module = active_build / "hft3_features_cpp.so"
+    corrupt_module.write_bytes(b"not a shared library")
+    calls = []
+
+    def fail_load(entry, repo):
+        calls.append(entry)
+        raise ImportError("synthetic corrupt extension")
+
+    monkeypatch.setenv("HFT3_FEATURES_CPP_BUILD_DIR", str(active_build))
+    monkeypatch.setattr(loader, "_cached", None)
+    monkeypatch.setattr(loader, "_searched", False)
+    monkeypatch.setattr(loader, "_load_cpp_module_from_path", fail_load)
+    monkeypatch.delitem(sys.modules, loader._MODULE_NAME, raising=False)
+
+    assert loader.load_cpp_features() is None
+    assert calls == [corrupt_module]
+    assert loader._searched is True
+    assert loader._MODULE_NAME not in sys.modules
+
+
+def test_cpp_loader_prefers_editable_install_before_default_build(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    import features_engine.src.features._cpp_loader as loader
+
+    repo = tmp_path / "repo"
+    default_build = repo / "build"
+    default_build.mkdir(parents=True)
+    default_artifact = default_build / "hft3_features_cpp.so"
+    default_artifact.write_bytes(b"placeholder")
+    editable_mod = types.SimpleNamespace(
+        __file__=str(tmp_path / "editable" / "hft3_features_cpp.so")
+    )
+    default_load_attempts = []
+
+    def fail_default_load(entry, repo_root):
+        default_load_attempts.append(entry)
+        raise AssertionError("default build must not shadow editable install")
+
+    monkeypatch.delenv("HFT3_FEATURES_CPP_BUILD_DIR", raising=False)
+    monkeypatch.setattr(loader, "_cached", None)
+    monkeypatch.setattr(loader, "_searched", False)
+    monkeypatch.setattr(loader, "_searched_active_build", None)
+    monkeypatch.setattr(loader, "_repo_root", lambda: repo)
+    monkeypatch.setattr(loader.importlib, "import_module", lambda name: editable_mod)
+    monkeypatch.setattr(loader, "_load_cpp_module_from_path", fail_default_load)
+    monkeypatch.delitem(sys.modules, loader._MODULE_NAME, raising=False)
+
+    assert loader.load_cpp_features() is editable_mod
+    assert default_load_attempts == []
+
+
+def test_cpp_loader_empty_active_build_dir_blocks_editable_and_default_fallbacks(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    import features_engine.src.features._cpp_loader as loader
+
+    repo = tmp_path / "repo"
+    active_build = tmp_path / "active-build"
+    default_build = repo / "build"
+    active_build.mkdir()
+    default_build.mkdir(parents=True)
+    default_artifact = default_build / "hft3_features_cpp.so"
+    default_artifact.write_bytes(b"placeholder")
+    default_load_attempts = []
+    editable_import_attempts = []
+
+    def fail_editable_import(name):
+        editable_import_attempts.append(name)
+        raise AssertionError("active build override must block editable import")
+
+    def fail_default_load(entry, repo_root):
+        default_load_attempts.append(entry)
+        raise AssertionError("active build override must block default fallback")
+
+    monkeypatch.setenv("HFT3_FEATURES_CPP_BUILD_DIR", str(active_build))
+    monkeypatch.setattr(loader, "_cached", None)
+    monkeypatch.setattr(loader, "_searched", False)
+    monkeypatch.setattr(loader, "_searched_active_build", None)
+    monkeypatch.setattr(loader, "_repo_root", lambda: repo)
+    monkeypatch.setattr(loader.importlib, "import_module", fail_editable_import)
+    monkeypatch.setattr(loader, "_load_cpp_module_from_path", fail_default_load)
+    monkeypatch.delitem(sys.modules, loader._MODULE_NAME, raising=False)
+
+    assert loader.load_cpp_features() is None
+    assert editable_import_attempts == []
+    assert default_load_attempts == []
+
+
+def test_cpp_loader_retries_when_active_build_dir_changes_after_miss(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    import features_engine.src.features._cpp_loader as loader
+
+    first_build = tmp_path / "first-build"
+    second_build = tmp_path / "second-build"
+    first_build.mkdir()
+    second_build.mkdir()
+    module_path = second_build / "hft3_features_cpp.so"
+    module_path.write_bytes(b"placeholder")
+    loaded_mod = types.SimpleNamespace(__file__=str(module_path))
+    calls = []
+
+    def fake_load(entry, repo):
+        calls.append(entry)
+        return loaded_mod
+
+    monkeypatch.setattr(loader, "_cached", None)
+    monkeypatch.setattr(loader, "_searched", False)
+    monkeypatch.setattr(loader, "_searched_active_build", None)
+    monkeypatch.setattr(loader, "_load_cpp_module_from_path", fake_load)
+    monkeypatch.delitem(sys.modules, loader._MODULE_NAME, raising=False)
+
+    monkeypatch.setenv("HFT3_FEATURES_CPP_BUILD_DIR", str(first_build))
+    assert loader.load_cpp_features() is None
+
+    monkeypatch.setenv("HFT3_FEATURES_CPP_BUILD_DIR", str(second_build))
+    assert loader.load_cpp_features() is loaded_mod
+    assert calls == [module_path]
+
+
+def test_run_c_lane_uses_standard_cmake_python_hint() -> None:
+    script = (_REPO / "scripts" / "run_c_lane.sh").read_text(encoding="utf-8")
+    cmake = (_REPO / "CMakeLists.txt").read_text(encoding="utf-8")
+
+    assert "-DPython3_EXECUTABLE=\"$PYTHON_BIN\"" in script
+    assert "-DHFT3_PYTHON_EXECUTABLE=\"$PYTHON_BIN\"" not in script
+    assert "CC_BIN=\"${CC:-gcc}\"" in script
+    assert "CXX_BIN=\"${CXX:-g++}\"" in script
+    assert "-DCMAKE_CXX_COMPILER=\"$CXX_BIN\"" in script
+    assert "\"$CXX_BIN\" -std=c++20" in script
+    assert "CPP_LANE_REPORT_DIR=\"${CPP_LANE_REPORT_DIR:-$REPO/reports/cpp_lane}\"" in script
+    assert "HFT3_COMMIT=\"$(git -C \"$REPO\" rev-parse HEAD" in script
+    assert "\"status\": \"pass\"" in script
+    assert "\"hft3_commit\": hft3_commit" in script
+    assert "hft3_features_cpp_verify_cpp_parity" in script
+    assert "risk_manager_atomic_stress_spsc_queue_stress_safety_poller_concurrent" in script
+    assert "test_decision_runtime_hardening_test_safety_failure_injection" in script
+    assert "test_engine_loop_hft3_engine" in script
+    assert "set(Python3_EXECUTABLE" in cmake
+    assert "set(PYTHON_EXECUTABLE" in cmake

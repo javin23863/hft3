@@ -1,0 +1,92 @@
+{
+  "schema_version": "hft3_research_pipeline_runtime_v1",
+  "max_candidates": 5,
+  "vectorbt": {
+    "scope": "pilot",
+    "budget": {
+      "max_trials": null,
+      "max_models": null,
+      "max_symbols": null,
+      "max_feature_sets": null,
+      "max_total_trials": null,
+      "max_wall_clock_seconds": null,
+      "max_peak_memory_mb_or_null": null,
+      "abort_on_budget_exhaustion": null
+    }
+  },
+  "llm_ideas": {
+    "max_ideas": null,
+    "review_memory_limit": 5,
+    "temperature": 0.7,
+    "top_p": 0.95
+  },
+  "doc_cache": {
+    "enabled": true,
+    "root": "runtime/research_pipeline/doc_cache",
+    "cache_urls": false
+  },
+  "candidate_prefilter": {
+    "enabled": true,
+    "model_id_pattern": "^[A-Z][A-Z0-9_]*$",
+    "signal_threshold_min": 0.0,
+    "signal_threshold_max": 1.0,
+    "require_positive_holding_period_bars": true
+  },
+  "candidate_search": {
+    "method": "grid",
+    "seed": 42
+  },
+  "rl_training": {
+    "enabled": false,
+    "required": false,
+    "features": [],
+    "device": "cpu",
+    "seed": 42,
+    "cache": {
+      "enabled": true,
+      "root": "runtime/research_pipeline/rl_policy_cache"
+    }
+  },
+  "evaluation": {
+    "workers": 1,
+    "max_workers": 8,
+    "msi_max_workers": 1
+  },
+  "gate_profiles": {
+    "default_profile": "normal",
+    "volatility_regime_profiles": {
+      "normal": "normal",
+      "high_volatility": "high_volatility",
+      "low_volatility": "low_volatility"
+    },
+    "profiles": {
+      "normal": {
+        "min_net_pnl": -1000000000.0,
+        "min_trades": 0,
+        "max_tail_loss": 1000000000.0,
+        "min_win_rate": 0.0,
+        "min_sharpe": -1000000000.0,
+        "min_sortino": -1000000000.0,
+        "max_drawdown": 1000000000.0
+      },
+      "high_volatility": {
+        "min_net_pnl": 0.0,
+        "min_trades": 10,
+        "max_tail_loss": 5000.0,
+        "min_win_rate": 0.45,
+        "min_sharpe": -1000000000.0,
+        "min_sortino": -1000000000.0,
+        "max_drawdown": 1000000000.0
+      },
+      "low_volatility": {
+        "min_net_pnl": 0.0,
+        "min_trades": 5,
+        "max_tail_loss": 2500.0,
+        "min_win_rate": 0.4,
+        "min_sharpe": -1000000000.0,
+        "min_sortino": -1000000000.0,
+        "max_drawdown": 1000000000.0
+      }
+    }
+  }
+}

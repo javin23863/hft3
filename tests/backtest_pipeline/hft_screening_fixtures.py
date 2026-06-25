@@ -1,6 +1,8 @@
 """Shared HftBacktest realism test fixtures (§10 evidence + native hot-path pins)."""
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 from backtest_pipeline.src.feature_plane import build_feature_plane_payload
@@ -9,9 +11,16 @@ from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_ha
 
 NATIVE_CPP_LATENCY_EVIDENCE_HASH = f"sha256:{'a' * 64}"
 NATIVE_CPP_LATENCY_EVIDENCE_PATH = (
-    "reports/latency_baselines/order_ack_campaign_20260611T072116Z_summary.json"
+    "runtime/latency_reports/rithmic_latency_probe_latency_summary.json"
 )
 NATIVE_CPP_LATENCY_EVIDENCE = f"{NATIVE_CPP_LATENCY_EVIDENCE_PATH}#{NATIVE_CPP_LATENCY_EVIDENCE_HASH}"
+NATIVE_CPP_HOT_PATH_EVIDENCE = [
+    NATIVE_CPP_LATENCY_EVIDENCE,
+    f"reports/cpp_lane/hft3_features_cpp_verify_cpp_parity.json#sha256:{'b' * 64}",
+    f"reports/cpp_lane/risk_manager_atomic_stress_spsc_queue_stress_safety_poller_concurrent.json#sha256:{'c' * 64}",
+    f"reports/cpp_lane/test_decision_runtime_hardening_test_safety_failure_injection.json#sha256:{'d' * 64}",
+    f"reports/cpp_lane/test_engine_loop_hft3_engine.json#sha256:{'e' * 64}",
+]
 
 SECTION_10_EVIDENCE_KEYS = (
     "fee_stress_or_not_run",
@@ -78,6 +87,7 @@ def replay_eligible_promoted_candidate(
         "opportunity_type_or_event_type": "CPI",
         "parameter_values": {"signal_threshold": 0.15},
         "parameter_values_hash": "sha256:parameter-values",
+        "feature_recipe_hash": "sha256:feature-recipe",
         "trials_budget_tier": "pilot",
         "in_sample_metrics": {"sharpe": 1.2, "net_pnl": 125.0},
         "out_of_sample_metrics": {"sharpe": 1.0, "net_pnl": 80.0},
@@ -124,6 +134,50 @@ def replay_eligible_promoted_candidate(
     return row
 
 
+def _receipt_hash(receipt: Any) -> str:
+    payload = json.dumps(receipt, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _attach_applied_robustness_receipt(artifact: dict[str, Any]) -> None:
+    input_hash = compute_screening_artifact_hash(artifact)
+    row_receipt_hashes: dict[str, str] = {}
+    matched_ids: list[str] = []
+    for row in artifact.get("promoted") or []:
+        if not isinstance(row, dict):
+            continue
+        candidate_id = str(row.get("candidate_id") or "")
+        if not candidate_id:
+            continue
+        matched_ids.append(candidate_id)
+        receipt = {
+            "schema": "hft3_robustness_evidence_inputs_v1",
+            "binding": {
+                "screening_artifact_hash": input_hash,
+                "candidate_id": candidate_id,
+                "parameter_values_hash": row.get("parameter_values_hash"),
+                "feature_recipe_hash": row.get("feature_recipe_hash"),
+                "data_manifest_hash": artifact.get("data_manifest_hash"),
+                "lake_manifest_hash": artifact.get("lake_manifest_hash"),
+            },
+            "source_evidence": {
+                "fixture": "tests/backtest_pipeline/hft_screening_fixtures.py#sha256:" + "c" * 64,
+            },
+            "evidence_entry_hash": "d" * 64,
+        }
+        row["robustness_evidence_receipt"] = receipt
+        row_receipt_hashes[candidate_id] = _receipt_hash(receipt)
+    artifact["robustness_evidence_receipt"] = {
+        "schema": "hft3_robustness_evidence_application_receipt_v1",
+        "input_screening_artifact_hash": input_hash,
+        "robustness_evidence_schema": "hft3_robustness_evidence_inputs_v1",
+        "matched_candidate_ids": matched_ids,
+        "eligible_candidate_ids": matched_ids,
+        "row_receipt_hashes": row_receipt_hashes,
+    }
+    artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
+
+
 def screening_artifact_shell(
     run_id: str,
     candidate_id: str,
@@ -145,6 +199,8 @@ def screening_artifact_shell(
         "license_review": "pilot_license_review_recorded",
         "screening_scope": "pilot",
         "research_clock": "event_window_pilot",
+        "data_manifest_hash": "sha256:data-manifest",
+        "lake_manifest_hash": "sha256:lake-manifest",
         "candidate_ids": [candidate_id],
         "candidate_reasons": {candidate_id: "queued_for_vectorbt_screen"},
         "promoted_ids": [candidate_id],
@@ -167,7 +223,7 @@ def screening_artifact_shell(
         )
     )
     artifact.update(artifact_overrides)
-    artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
+    _attach_applied_robustness_receipt(artifact)
     return artifact
 
 

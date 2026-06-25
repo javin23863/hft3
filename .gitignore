@@ -182,6 +182,8 @@ runtime/reports/vbt_*_status.json
 runtime/reports/vbt_*_audit.json
 runtime/reports/vbt_*_watcher*.json
 runtime/reports/vbt_*_regen_check.jsonl
+runtime/research_pipeline/doc_cache/
+runtime/research_pipeline/rl_policy_cache/
 runtime/vbt_full_v2_cost_monitor*.jsonl
 runtime/launch_vbt_*.sh
 runtime/poll_vbt_*.sh
