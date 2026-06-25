@@ -23,7 +23,7 @@ setup_repo_paths()
 from backtest_pipeline.src.hft_campaign.artifacts import write_json_atomic  # noqa: E402
 from features_engine.feature_sets import MICROSTRUCTURE_FEATURE_RECEIPTS  # noqa: E402
 from research_pipeline.rl_campaign_budget import plan_rl_campaign_budget  # noqa: E402
-from research_pipeline.rl_training_data import FEATURE_STORE_SUPPORTED_RL_FEATURES  # noqa: E402
+from research_pipeline.rl_training_data import FEATURE_STORE_SUPPORTED_RL_FEATURES, GPU_SUPPORTED_RL_FEATURES  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -140,10 +140,10 @@ def _registry_feature_names() -> list[str]:
 
 def _validated_supported_features(values: Sequence[str]) -> list[str]:
     supported = sorted({str(value).strip() for value in values if str(value).strip()})
-    unsupported = sorted(set(supported) - set(FEATURE_STORE_SUPPORTED_RL_FEATURES))
+    unsupported = sorted(set(supported) - set(GPU_SUPPORTED_RL_FEATURES))
     if unsupported:
         raise ValueError(
-            "supported features must be implemented by the fs_v1 RL builder: "
+            "supported features must be implemented by the fs_v1 RL builder or VIX options clue builder: "
             + ", ".join(unsupported)
         )
     return supported

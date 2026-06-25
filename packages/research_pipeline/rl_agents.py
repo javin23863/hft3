@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from features_engine.feature_sets import MICROSTRUCTURE_FEATURE_RECEIPTS
+from features_engine.feature_sets import MICROSTRUCTURE_FEATURE_RECEIPTS, VIX_OPTIONS_RL_FEATURE_RECEIPTS
 
 PROMOTION_BLOCKED_STATUS = "blocked_downstream_validation_required"
 SUPPORTED_RL_DEVICES = {"cpu", "cuda"}
@@ -38,8 +38,12 @@ _LEAKY_FEATURE_RE = re.compile(
 
 
 def available_rl_feature_names() -> set[str]:
-    features = MICROSTRUCTURE_FEATURE_RECEIPTS.get("features", {})
-    return set(features) if isinstance(features, Mapping) else set()
+    out: set[str] = set()
+    for receipt in (MICROSTRUCTURE_FEATURE_RECEIPTS, VIX_OPTIONS_RL_FEATURE_RECEIPTS):
+        features = receipt.get("features", {})
+        if isinstance(features, Mapping):
+            out.update(str(name) for name in features)
+    return out
 
 
 def validate_rl_features(feature_names: Sequence[str]) -> list[str]:

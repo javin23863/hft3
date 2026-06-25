@@ -29,6 +29,15 @@ sys.path.insert(0, str(_REPO_ROOT))
 from data_system.src.feature_store import feature_index_hash, load_manifest, load_store  # noqa: E402
 from features_engine.src.features.feature_index import FeatureIndex  # noqa: E402
 from research_pipeline.rl_campaign_budget import plan_rl_campaign_budget  # noqa: E402
+from research_pipeline.rl_training_data import (  # noqa: E402
+    VIX_OPTIONS_DEFAULT_RL_FEATURES,
+    VIX_OPTIONS_DEFAULT_RL_REWARD_COLUMN,
+    VIX_OPTIONS_RL_FEATURE_STORE_SCHEMA_VERSION,
+    VIX_OPTIONS_RL_REWARD_COST_MODEL,
+    VIX_OPTIONS_RL_REWARD_UNITS,
+    VIX_OPTIONS_SUPPORTED_RL_FEATURES,
+    vix_options_feature_schema_hash,
+)
 
 SUPPORTED_FEATURES = (
     "order_book_imbalance",
@@ -37,6 +46,10 @@ SUPPORTED_FEATURES = (
     "micro_price",
     "spread",
 )
+VIX_OPTIONS_SYMBOL = "VIX.OPT"
+VIX_OPTIONS_SOURCE_FAMILY = "vix_options_clue"
+FS_V1_ACTION_SPACE = ("hold", "enter_long", "enter_short")
+VIX_OPTIONS_ACTION_SPACE = ("hold", "clue_up", "clue_down")
 SCHEMA_VERSION = "hft3_rl_gpu_vectorized_campaign_v1"
 PROMOTION_STATUS = "blocked_downstream_validation_required"
 
@@ -45,6 +58,12 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=_REPO_ROOT)
     parser.add_argument("--feature-store-root", type=Path, required=True)
+    parser.add_argument(
+        "--feature-manifest",
+        type=Path,
+        default=None,
+        help="Optional manifest JSONL path; defaults to <feature-store-root>/feature_manifest.jsonl.",
+    )
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--budget-plan", type=Path, required=True)
     parser.add_argument("--budget-plan-sha256", required=True)
@@ -60,6 +79,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--reward-horizon-ns", type=int, default=None)
     parser.add_argument("--feature-latency-ms", type=float, default=1.0)
     parser.add_argument("--spread-cost-multiplier", type=float, default=0.05)
+    parser.add_argument("--vix-reward-column", default=VIX_OPTIONS_DEFAULT_RL_REWARD_COLUMN)
     parser.add_argument("--steps", type=int, default=1000)
     parser.add_argument("--batch-size", type=int, default=4096)
     parser.add_argument("--hidden-dim", type=int, default=64)
@@ -76,10 +96,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if plan_sha.lower() != args.budget_plan_sha256.lower():
         raise SystemExit("budget plan sha256 mismatch")
     launch_gate = _require_launch_gate(args=args, argv=argv, budget_plan_sha256=plan_sha)
-    features = tuple(args.feature or SUPPORTED_FEATURES)
-    unsupported = sorted(set(features) - set(SUPPORTED_FEATURES))
+    features = _resolve_campaign_features(symbols=args.symbol, requested=args.feature)
+    unsupported = _unsupported_campaign_features(symbols=args.symbol, features=features)
     if unsupported:
-        raise SystemExit("unsupported fs_v1 RL features: " + ", ".join(unsupported))
+        raise SystemExit("unsupported RL campaign features: " + ", ".join(unsupported))
+    source_family = _campaign_source_family(args.symbol)
+    _require_campaign_manifest_allowed(source_family=source_family, feature_manifest=args.feature_manifest)
     plan = json.loads(args.budget_plan.read_text(encoding="utf-8"))
 
     import torch
@@ -90,8 +112,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     started = time.perf_counter()
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
-    manifest = load_manifest(Path(args.feature_store_root))
-    _require_budget_ready(plan, features, manifest)
+    manifest = _load_campaign_manifest(Path(args.feature_store_root), args.feature_manifest)
+    _require_budget_ready(plan, features, manifest, source_family=source_family)
     all_results: list[dict[str, Any]] = []
     for symbol in args.symbol:
         try:
@@ -125,9 +147,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "device": "cuda",
         "cuda_device_name": str(torch.cuda.get_device_name(0)),
         "feature_store_root": str(args.feature_store_root),
+        "feature_manifest": str(args.feature_manifest or Path(args.feature_store_root) / "feature_manifest.jsonl"),
         "output_root": str(output_root),
         "symbols": list(args.symbol),
         "feature_names": list(features),
+        "source_family": source_family,
+        "vix_reward_column": (
+            str(args.vix_reward_column) if source_family == VIX_OPTIONS_SOURCE_FAMILY else None
+        ),
         "max_events": args.max_events,
         "event_inventory_truncated": event_inventory_truncated,
         "launch_gate": launch_gate,
@@ -137,11 +164,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "duration_seconds": round(time.perf_counter() - started, 6),
         "symbol_results": all_results,
         "decision_time_boundary": (
-            "features use source_timestamp_ns <= decision timestamp minus feature_latency_ns; "
-            "future mid-price is used only as the offline reward label"
+            _decision_time_boundary(source_family)
         ),
         "receipts": {
             "feature_registry": "features_engine.feature_sets.MICROSTRUCTURE_FEATURE_RECEIPTS",
+            "vix_options_feature_registry": "features_engine.feature_sets.VIX_OPTIONS_RL_FEATURE_RECEIPTS",
             "feature_store": "data_system.src.feature_store",
             "rl_execution": "https://www.cis.upenn.edu/~mkearns/KN.html",
         },
@@ -173,6 +200,7 @@ def _run_symbol(
         feature_latency_ns=int(round(_finite_non_negative(args.feature_latency_ms, "feature_latency_ms") * 1_000_000)),
         spread_cost_multiplier=_finite_non_negative(args.spread_cost_multiplier, "spread_cost_multiplier"),
         max_events=args.max_events,
+        vix_reward_column=str(args.vix_reward_column),
     )
     build_seconds = time.perf_counter() - build_started
     train_started = time.perf_counter()
@@ -189,6 +217,7 @@ def _run_symbol(
         learning_rate=_positive_float(args.learning_rate, "learning_rate"),
         eval_fraction=_eval_fraction(args.eval_fraction),
         source_row_count=int(arrays["source_row_count"]),
+        action_space=arrays["action_space"],
     )
     train_seconds = time.perf_counter() - train_started
     result = {
@@ -199,6 +228,7 @@ def _run_symbol(
         "algorithm_status": "pre_ppo_deep_q_proxy_not_rl5_completion",
         "symbol": symbol,
         "feature_names": list(features),
+        "source_family": arrays["source_family"],
         "row_count": int(arrays["x"].shape[0]),
         "source_row_count": int(arrays["source_row_count"]),
         "skipped_row_count": int(arrays["skipped_row_count"]),
@@ -213,10 +243,8 @@ def _run_symbol(
         "train_seconds": round(train_seconds, 6),
         "duration_seconds": round(time.perf_counter() - symbol_started, 6),
         "row_materialization": "in_memory_numpy_arrays_no_jsonl",
-        "decision_time_boundary": (
-            "source feature index is vectorized searchsorted(ts, timestamp_ns - feature_latency_ns); "
-            "source_row_index never exceeds decision_row_index"
-        ),
+        "decision_time_boundary": arrays["decision_time_boundary"],
+        "reward_rule": arrays["reward_rule"],
         "sources": arrays["sources"],
         "training_summary": train,
     }
@@ -253,6 +281,90 @@ def _campaign_status(*, failure_count: int, event_inventory_truncated: bool) -> 
     return "completed_research_only"
 
 
+def _resolve_campaign_features(*, symbols: Sequence[str], requested: Sequence[str] | None) -> tuple[str, ...]:
+    source_family = _campaign_source_family(symbols)
+    if source_family == "mixed":
+        raise SystemExit("mixed fs_v1 target and VIX.OPT clue campaigns must run separately")
+    if requested:
+        return tuple(str(feature).strip() for feature in requested if str(feature).strip())
+    if source_family == VIX_OPTIONS_SOURCE_FAMILY:
+        return tuple(VIX_OPTIONS_DEFAULT_RL_FEATURES)
+    return tuple(SUPPORTED_FEATURES)
+
+
+def _unsupported_campaign_features(*, symbols: Sequence[str], features: Sequence[str]) -> list[str]:
+    if _campaign_source_family(symbols) == VIX_OPTIONS_SOURCE_FAMILY:
+        return sorted(set(features) - set(VIX_OPTIONS_SUPPORTED_RL_FEATURES))
+    return sorted(set(features) - set(SUPPORTED_FEATURES))
+
+
+def _campaign_source_family(symbols: Sequence[str]) -> str:
+    has_vix = any(_is_vix_options_symbol(symbol) for symbol in symbols)
+    has_target = any(not _is_vix_options_symbol(symbol) for symbol in symbols)
+    if has_vix and has_target:
+        return "mixed"
+    if has_vix:
+        return VIX_OPTIONS_SOURCE_FAMILY
+    return "fs_v1_target"
+
+
+def _is_vix_options_symbol(symbol: str) -> bool:
+    return str(symbol).upper() == VIX_OPTIONS_SYMBOL
+
+
+def _decision_time_boundary(source_family: str) -> str:
+    if source_family == VIX_OPTIONS_SOURCE_FAMILY:
+        return (
+            "VIX options clue features use source_timestamp_ns <= decision timestamp minus feature_latency_ns; "
+            "future VIX clue delta is used only as the offline reward label and makes no execution claim"
+        )
+    return (
+        "features use source_timestamp_ns <= decision timestamp minus feature_latency_ns; "
+        "future mid-price is used only as the offline reward label"
+    )
+
+
+def _load_campaign_manifest(feature_store_root: Path, feature_manifest: Path | None) -> dict[tuple[str, str], dict[str, Any]]:
+    if feature_manifest is None:
+        return load_manifest(feature_store_root)
+    path = Path(feature_manifest)
+    if not path.is_file():
+        raise FileNotFoundError(f"feature manifest not found: {path}")
+    result: dict[tuple[str, str], dict[str, Any]] = {}
+    with path.open("r", encoding="utf-8") as handle:
+        for line_no, line in enumerate(handle, start=1):
+            text = line.strip()
+            if not text:
+                continue
+            value = json.loads(text)
+            if not isinstance(value, Mapping):
+                raise ValueError(f"feature manifest row {line_no} must be an object")
+            symbol = str(value.get("symbol") or "").strip()
+            event_id = str(value.get("event_id") or "").strip()
+            if not symbol or not event_id:
+                raise ValueError(f"feature manifest row {line_no} missing symbol/event_id")
+            result[(symbol, event_id)] = dict(value)
+    return result
+
+
+def _require_campaign_manifest_allowed(*, source_family: str, feature_manifest: Path | None) -> None:
+    if source_family != VIX_OPTIONS_SOURCE_FAMILY and feature_manifest is not None:
+        raise SystemExit("custom --feature-manifest is reserved for VIX.OPT clue campaigns")
+
+
+def _require_vix_options_features(features: Sequence[str]) -> None:
+    unsupported = sorted(set(features) - set(VIX_OPTIONS_SUPPORTED_RL_FEATURES))
+    if unsupported:
+        raise ValueError("unsupported VIX options RL features: " + ", ".join(unsupported))
+
+
+def _require_vix_options_reward_column(value: str) -> str:
+    reward_column = str(value).strip()
+    if reward_column not in VIX_OPTIONS_SUPPORTED_RL_FEATURES:
+        raise ValueError(f"unsupported VIX options RL reward column: {reward_column!r}")
+    return reward_column
+
+
 def _build_symbol_arrays(
     *,
     feature_store_root: Path,
@@ -264,6 +376,7 @@ def _build_symbol_arrays(
     feature_latency_ns: int,
     spread_cost_multiplier: float,
     max_events: int | None,
+    vix_reward_column: str,
 ) -> dict[str, Any]:
     all_records = [
         (str(record.get("event_id") or key[1]), record)
@@ -277,6 +390,20 @@ def _build_symbol_arrays(
         records = records[: _positive_int(max_events, "max_events")]
     if not records:
         raise ValueError(f"symbol not found in feature manifest: {symbol}")
+    if _is_vix_options_symbol(symbol):
+        return _build_vix_options_symbol_arrays(
+            feature_store_root=feature_store_root,
+            records=records,
+            manifest_event_count=manifest_event_count,
+            symbol=symbol,
+            features=features,
+            reward_horizon_rows=reward_horizon_rows,
+            reward_horizon_ns=reward_horizon_ns,
+            feature_latency_ns=feature_latency_ns,
+            max_events=max_events,
+            events_truncated_count=max(0, manifest_event_count - len(records)),
+            vix_reward_column=vix_reward_column,
+        )
 
     x_parts: list[np.ndarray] = []
     reward_parts: list[np.ndarray] = []
@@ -342,6 +469,115 @@ def _build_symbol_arrays(
         "max_events": max_events,
         "events_truncated_count": max(0, manifest_event_count - len(records)),
         "sources": sources,
+        "source_family": "fs_v1_target",
+        "action_space": FS_V1_ACTION_SPACE,
+        "reward_rule": {
+            "name": "future_mid_minus_decision_mid_minus_spread_cost",
+            "reward_units": "price_points",
+            "cost_model": "future_mid_delta_minus_spread_multiplier",
+            "label_only": True,
+        },
+        "decision_time_boundary": (
+            "source feature index is vectorized searchsorted(ts, timestamp_ns - feature_latency_ns); "
+            "source_row_index never exceeds decision_row_index; future mid-price is label-only"
+        ),
+    }
+
+
+def _build_vix_options_symbol_arrays(
+    *,
+    feature_store_root: Path,
+    records: Sequence[tuple[str, Mapping[str, Any]]],
+    manifest_event_count: int,
+    symbol: str,
+    features: Sequence[str],
+    reward_horizon_rows: int,
+    reward_horizon_ns: int | None,
+    feature_latency_ns: int,
+    max_events: int | None,
+    events_truncated_count: int,
+    vix_reward_column: str,
+) -> dict[str, Any]:
+    _require_vix_options_features(features)
+    reward_column = _require_vix_options_reward_column(vix_reward_column)
+    x_parts: list[np.ndarray] = []
+    reward_parts: list[np.ndarray] = []
+    ts_parts: list[np.ndarray] = []
+    source_rows = 0
+    skipped_rows = 0
+    sources: list[dict[str, Any]] = []
+    for event_id, record in records:
+        store_path = _store_path(feature_store_root, record)
+        store_sha256 = _sha256_file(store_path)
+        store = _load_vix_options_store(store_path)
+        _require_vix_options_store_authority(
+            record=record,
+            store=store,
+            store_path=store_path,
+            store_sha256=store_sha256,
+            features=features,
+            reward_column=reward_column,
+        )
+        unit = _arrays_from_vix_options_store(
+            store=store,
+            features=features,
+            reward_horizon_rows=reward_horizon_rows,
+            reward_horizon_ns=reward_horizon_ns,
+            feature_latency_ns=feature_latency_ns,
+            reward_column=reward_column,
+        )
+        source_rows += int(unit["source_rows"])
+        skipped_rows += int(unit["skipped_rows"])
+        if unit["x"].size:
+            x_parts.append(unit["x"])
+            reward_parts.append(unit["reward"])
+            ts_parts.append(unit["timestamp_ns"])
+        sources.append(
+            {
+                "symbol": symbol,
+                "event_id": event_id,
+                "store_path": str(store_path),
+                "store_sha256": store_sha256,
+                "source_family": VIX_OPTIONS_SOURCE_FAMILY,
+                "manifest_record": dict(record),
+                "row_summary": {
+                    "source_rows": int(unit["source_rows"]),
+                    "built_rows": int(unit["x"].shape[0]),
+                    "skipped_rows": int(unit["skipped_rows"]),
+                },
+            }
+        )
+    if not x_parts:
+        raise ValueError(f"no PIT-valid VIX options clue rows built for {symbol}")
+    x = np.concatenate(x_parts, axis=0).astype(np.float32, copy=False)
+    reward = np.concatenate(reward_parts, axis=0).astype(np.float32, copy=False)
+    timestamp_ns = np.concatenate(ts_parts, axis=0)
+    order = np.argsort(timestamp_ns, kind="stable")
+    return {
+        "x": x[order],
+        "reward": reward[order],
+        "timestamp_ns": timestamp_ns[order],
+        "source_row_count": source_rows,
+        "skipped_row_count": skipped_rows,
+        "event_count": len(records),
+        "manifest_event_count": manifest_event_count,
+        "max_events": max_events,
+        "events_truncated_count": events_truncated_count,
+        "sources": sources,
+        "source_family": VIX_OPTIONS_SOURCE_FAMILY,
+        "action_space": VIX_OPTIONS_ACTION_SPACE,
+        "reward_rule": {
+            "name": "future_vix_options_clue_delta",
+            "reward_column": reward_column,
+            "reward_units": VIX_OPTIONS_RL_REWARD_UNITS,
+            "cost_model": VIX_OPTIONS_RL_REWARD_COST_MODEL,
+            "label_only": True,
+            "execution_claim": False,
+        },
+        "decision_time_boundary": (
+            "VIX options clue features use source_timestamp_ns <= decision timestamp minus feature_latency_ns; "
+            "future VIX clue delta is label-only and not an executable instrument reward"
+        ),
     }
 
 
@@ -397,6 +633,71 @@ def _arrays_from_store(
     }
 
 
+def _arrays_from_vix_options_store(
+    *,
+    store: Mapping[str, Any],
+    features: Sequence[str],
+    reward_horizon_rows: int,
+    reward_horizon_ns: int | None,
+    feature_latency_ns: int,
+    reward_column: str,
+) -> dict[str, Any]:
+    ts = np.asarray(store.get("ts"), dtype=np.int64)
+    n = len(ts)
+    if n and not np.all(np.diff(ts) >= 0):
+        raise ValueError("VIX options clue store ts not monotonic")
+    if n < 2:
+        return {
+            "x": np.empty((0, len(features)), dtype=np.float32),
+            "reward": np.empty(0),
+            "timestamp_ns": np.empty(0),
+            "source_rows": n,
+            "skipped_rows": n,
+        }
+    decision_idx = np.arange(n, dtype=np.int64)
+    source_idx = np.searchsorted(ts, ts - int(feature_latency_ns), side="right").astype(np.int64) - 1
+    source_idx = np.minimum(source_idx, decision_idx)
+    if reward_horizon_ns is None:
+        future_idx = decision_idx + int(reward_horizon_rows)
+    else:
+        future_idx = np.searchsorted(ts, ts + int(reward_horizon_ns), side="left").astype(np.int64)
+    valid = (source_idx >= 0) & (future_idx >= 0) & (future_idx < n)
+    ts_event_raw = _vix_required_timestamp_array(store, "ts_event_raw", Path("<in-memory-vix-options-store>"))
+    ts_recv_raw = _vix_required_timestamp_array(store, "ts_recv_raw", Path("<in-memory-vix-options-store>"))
+    row_causal = (ts_recv_raw <= ts) & (ts_event_raw <= ts_recv_raw)
+    source_causal = np.zeros(n, dtype=bool)
+    source_valid = source_idx >= 0
+    source_causal[source_valid] = row_causal[source_idx[source_valid]]
+    valid &= row_causal & source_causal
+    decision_clue = np.full(n, np.nan, dtype=np.float64)
+    future_clue = np.full(n, np.nan, dtype=np.float64)
+    reward_idx = valid.copy()
+    if np.any(reward_idx):
+        decision_clue[reward_idx] = _vix_options_array(store, reward_column, decision_idx[reward_idx])
+        future_clue[reward_idx] = _vix_options_array(store, reward_column, future_idx[reward_idx])
+    reward = future_clue - decision_clue
+    valid &= np.isfinite(decision_clue) & np.isfinite(future_clue) & np.isfinite(reward)
+
+    columns: list[np.ndarray] = []
+    for feature in features:
+        column = np.full(n, np.nan, dtype=np.float64)
+        feature_idx = valid.copy()
+        if np.any(feature_idx):
+            column[feature_idx] = _vix_options_array(store, feature, source_idx[feature_idx])
+        columns.append(column)
+        valid &= np.isfinite(column)
+    x = np.column_stack(columns)
+    valid_count = int(np.count_nonzero(valid))
+    skipped = int(n - valid_count)
+    return {
+        "x": x[valid].astype(np.float32, copy=False),
+        "reward": reward[valid].astype(np.float32, copy=False),
+        "timestamp_ns": ts[valid],
+        "source_rows": n,
+        "skipped_rows": skipped,
+    }
+
+
 def _train_arrays(
     *,
     torch: Any,
@@ -411,9 +712,13 @@ def _train_arrays(
     learning_rate: float,
     eval_fraction: float,
     source_row_count: int,
+    action_space: Sequence[str],
 ) -> dict[str, Any]:
     if x.shape[0] < 3:
         raise ValueError("deep RL vectorized training requires at least three rows")
+    actions = [str(action) for action in action_space]
+    if len(actions) != 3 or any(not action for action in actions):
+        raise ValueError("action_space must contain exactly three action labels")
     torch.manual_seed(seed)
     device = torch.device("cuda")
     x_raw = torch.from_numpy(x).to(device=device, dtype=torch.float32)
@@ -468,7 +773,7 @@ def _train_arrays(
             },
             "seed": seed,
             "steps": steps,
-            "action_space": ["hold", "enter_long", "enter_short"],
+            "action_space": actions,
         },
         checkpoint_path,
     )
@@ -493,11 +798,11 @@ def _train_arrays(
         "loss_start": losses[0],
         "loss_end": losses[-1],
         "eval_mse": eval_loss,
-        "action_space": ["hold", "enter_long", "enter_short"],
+        "action_space": actions,
         "eval_action_counts": {
-            "hold": int(np.count_nonzero(action_ids == 0)),
-            "enter_long": int(np.count_nonzero(action_ids == 1)),
-            "enter_short": int(np.count_nonzero(action_ids == 2)),
+            actions[0]: int(np.count_nonzero(action_ids == 0)),
+            actions[1]: int(np.count_nonzero(action_ids == 1)),
+            actions[2]: int(np.count_nonzero(action_ids == 2)),
         },
         "checkpoint": {
             "path": str(checkpoint_path),
@@ -590,6 +895,33 @@ def _safe_imbalance(left: np.ndarray, right: np.ndarray) -> np.ndarray:
     return np.divide(left - right, denom, out=out, where=denom != 0.0)
 
 
+def _vix_options_array(store: Mapping[str, Any], feature: str, idx: np.ndarray) -> np.ndarray:
+    if feature not in VIX_OPTIONS_SUPPORTED_RL_FEATURES:
+        raise ValueError(f"unsupported VIX options RL feature {feature!r}")
+    if feature not in store:
+        raise ValueError(f"VIX options clue store missing feature {feature!r}")
+    raw = np.asarray(store[feature], dtype=np.float64)
+    if raw.ndim != 1:
+        raise ValueError(f"VIX options clue feature {feature!r} must be a 1D array")
+    idx_array = np.asarray(idx, dtype=np.int64)
+    if np.any(idx_array < 0) or np.any(idx_array >= raw.shape[0]):
+        raise ValueError(f"VIX options clue feature {feature!r} index out of bounds")
+    return raw[idx_array]
+
+
+def _load_vix_options_store(path: Path) -> dict[str, Any]:
+    with np.load(str(path), allow_pickle=False) as arch:
+        result: dict[str, Any] = {}
+        for key in arch.files:
+            if key == "_attrs_json":
+                continue
+            arr = arch[key]
+            if not np.issubdtype(arr.dtype, np.number):
+                continue
+            result[key] = arr.item() if arr.ndim == 0 else arr
+    return result
+
+
 def _store_path(root: Path, record: Mapping[str, Any]) -> Path:
     raw = str(record.get("store_path") or record.get("path") or "")
     rel = raw.replace("\\", "/")
@@ -612,6 +944,80 @@ def _require_store_authority(*, record: Mapping[str, Any], store: Mapping[str, A
     ts = np.asarray(store.get("ts"), dtype=np.int64)
     if len(ts) and not np.all(np.diff(ts) >= 0):
         raise ValueError(f"feature store ts not monotonic: {store_path}")
+
+
+def _require_vix_options_store_authority(
+    *,
+    record: Mapping[str, Any],
+    store: Mapping[str, Any],
+    store_path: Path,
+    store_sha256: str,
+    features: Sequence[str],
+    reward_column: str,
+) -> None:
+    family = str(record.get("source_family") or record.get("feature_family") or "")
+    if family != VIX_OPTIONS_SOURCE_FAMILY:
+        raise ValueError(
+            f"VIX options RL manifest row must declare source_family={VIX_OPTIONS_SOURCE_FAMILY!r}: {store_path}"
+        )
+    store_schema = str(record.get("store_schema_version") or "")
+    if store_schema != VIX_OPTIONS_RL_FEATURE_STORE_SCHEMA_VERSION:
+        raise ValueError(
+            "VIX options RL manifest row store_schema_version mismatch: "
+            f"stored={store_schema!r} expected={VIX_OPTIONS_RL_FEATURE_STORE_SCHEMA_VERSION!r} path={store_path}"
+        )
+    record_features = [str(name) for name in (record.get("feature_names") or []) if str(name)]
+    requested_features = [str(name) for name in features]
+    if record_features != requested_features:
+        raise ValueError(
+            "VIX options RL manifest row feature_names must match requested features exactly and in order: "
+            f"manifest={record_features!r} requested={requested_features!r}"
+        )
+    record_reward = str(record.get("reward_column") or "")
+    if record_reward != reward_column:
+        raise ValueError(
+            f"VIX options RL reward column mismatch: manifest={record_reward!r} requested={reward_column!r}"
+        )
+    manifest_schema_hash = str(record.get("feature_schema_hash") or "")
+    expected_schema_hash = vix_options_feature_schema_hash(
+        feature_names=record_features,
+        reward_column=record_reward,
+    )
+    if manifest_schema_hash != expected_schema_hash:
+        raise ValueError(
+            "VIX options RL feature schema hash mismatch: "
+            f"stored={manifest_schema_hash!r} expected={expected_schema_hash!r} path={store_path}"
+        )
+    expected_file_hash = str(record.get("store_sha256") or record.get("sha256") or record.get("content_hash") or "")
+    if not expected_file_hash:
+        raise ValueError(f"VIX options RL manifest row missing store_sha256/content_hash: {store_path}")
+    if expected_file_hash.lower() != store_sha256.lower():
+        raise ValueError(f"VIX options RL store sha256 mismatch: {store_path}")
+    ts = np.asarray(store.get("ts"), dtype=np.int64)
+    if len(ts) and not np.all(np.diff(ts) >= 0):
+        raise ValueError(f"VIX options clue store ts not monotonic: {store_path}")
+    ts_event_raw = _vix_required_timestamp_array(store, "ts_event_raw", store_path)
+    ts_recv_raw = _vix_required_timestamp_array(store, "ts_recv_raw", store_path)
+    if ts_event_raw.shape[0] != ts.shape[0] or ts_recv_raw.shape[0] != ts.shape[0]:
+        raise ValueError(f"VIX options clue audit timestamp shape mismatch: {store_path}")
+    if not np.all(np.diff(ts_recv_raw) >= 0):
+        raise ValueError(f"VIX options clue ts_recv_raw not monotonic: {store_path}")
+    causal_row_count = int(np.count_nonzero((ts_recv_raw <= ts) & (ts_event_raw <= ts_recv_raw)))
+    if causal_row_count < 2:
+        raise ValueError(f"VIX options clue store has fewer than two causal timestamp rows: {store_path}")
+    for feature in sorted(set(features) | {reward_column}):
+        values = np.asarray(store.get(feature), dtype=np.float64)
+        if values.ndim != 1 or values.shape[0] != ts.shape[0]:
+            raise ValueError(f"VIX options clue feature {feature!r} shape mismatch: {store_path}")
+
+
+def _vix_required_timestamp_array(store: Mapping[str, Any], key: str, store_path: Path) -> np.ndarray:
+    if key not in store:
+        raise ValueError(f"VIX options clue store missing {key}: {store_path}")
+    values = np.asarray(store[key], dtype=np.int64)
+    if values.ndim != 1:
+        raise ValueError(f"VIX options clue {key} must be a 1D array: {store_path}")
+    return values
 
 
 def _require_launch_gate(
@@ -683,10 +1089,18 @@ def _require_budget_ready(
     plan: Mapping[str, Any],
     features: Sequence[str],
     manifest: Mapping[Any, Mapping[str, Any]],
+    *,
+    source_family: str,
 ) -> None:
     if plan.get("status") != "full_training_plan_ready":
         raise ValueError("budget plan is not full_training_plan_ready")
-    if set(plan.get("required_features") or []) != set(features):
+    planned_features = [str(name) for name in (plan.get("required_features") or [])]
+    campaign_features = [str(name) for name in features]
+    if source_family == VIX_OPTIONS_SOURCE_FAMILY:
+        feature_mismatch = planned_features != campaign_features
+    else:
+        feature_mismatch = sorted(planned_features) != sorted(campaign_features)
+    if feature_mismatch:
         raise ValueError("budget plan required_features do not match campaign features")
     if plan.get("measured_throughput_row_basis") != "manifest_source_rows":
         raise ValueError("budget plan throughput row basis is not manifest_source_rows")

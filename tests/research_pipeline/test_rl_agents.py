@@ -151,6 +151,7 @@ def test_rl_policy_cache_hits_same_inputs(tmp_path):
 
 def test_rl_feature_validation_uses_microstructure_registry():
     assert validate_rl_features(["order_flow_imbalance"]) == ["order_flow_imbalance"]
+    assert validate_rl_features(["vix_opt_spread_stress"]) == ["vix_opt_spread_stress"]
 
     with pytest.raises(ValueError, match="non-PIT or label-like"):
         validate_rl_features(["future_pnl_label"])
