@@ -17,6 +17,8 @@ from research_pipeline.statistics import (
     adjusted_p_value as multiple_test_adjusted_p_value,
     deflated_sharpe_ratio,
     probabilistic_sharpe_ratio,
+    sample_kurtosis,
+    sample_skewness,
 )
 from research_pipeline.types import (
     CandidateModel,
@@ -380,16 +382,16 @@ def _find_pnl_series(out: Mapping[str, Any]) -> List[float]:
 
 
 def _moments(values: Sequence[float]) -> tuple[Optional[float], Optional[float]]:
-    if len(values) < 2:
-        return None, None
-    avg = _mean(values)
-    centered = [value - avg for value in values]
-    variance = sum(value * value for value in centered) / len(centered)
-    if variance <= 0.0:
-        return 0.0, 3.0
-    stdev = math.sqrt(variance)
-    skew = sum((value / stdev) ** 3 for value in centered) / len(centered)
-    kurt = sum((value / stdev) ** 4 for value in centered) / len(centered)
+    skew: float | None
+    kurt: float | None
+    try:
+        skew = sample_skewness(values)
+    except ValueError:
+        skew = None
+    try:
+        kurt = sample_kurtosis(values)
+    except ValueError:
+        kurt = None
     return skew, kurt
 
 
@@ -483,12 +485,12 @@ def refresh_selection_bias_metrics(
         )
         result.dsr = deflated_sharpe_ratio(
             result.sharpe,
-            sr_benchmark,
-            sample_size,
-            skew,
-            kurtosis,
-            result.trial_sr_variance,
-            result.num_trials,
+            benchmark_sharpe=sr_benchmark,
+            n_obs=sample_size,
+            n_trials=result.num_trials,
+            skewness=skew,
+            kurtosis=kurtosis,
+            trial_sr_variance=result.trial_sr_variance,
         )
         result.adjusted_p_value = multiple_test_adjusted_p_value(
             1.0 - result.psr,

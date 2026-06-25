@@ -79,7 +79,7 @@ def achieved_power(
     """Approximate achieved power for a standardized effect and sample size."""
 
     effect = abs(float(effect_size))
-    if effect < 0.0 or not math.isfinite(effect):
+    if not math.isfinite(effect):
         raise ValueError("effect_size must be finite")
     if n_obs < 2:
         raise ValueError("n_obs must be at least 2")

@@ -134,29 +134,26 @@ def expected_maximum_sharpe(n_trials: int) -> float:
 
 def deflated_sharpe_ratio(
     observed_sharpe: float,
-    benchmark_or_n_obs: float,
-    n_obs_or_n_trials: int,
+    *,
+    benchmark_sharpe: float = 0.0,
+    n_obs: int,
+    n_trials: int,
     skewness: float = 0.0,
     kurtosis: float = 3.0,
     trial_sr_variance: float = 0.0,
-    n_trials: int | None = None,
 ) -> float:
     """Return DSR as a CDF adjusted for the expected best trial."""
 
-    if n_trials is None:
-        benchmark_sharpe = expected_maximum_sharpe(int(n_obs_or_n_trials))
-        n_obs = int(benchmark_or_n_obs)
-    else:
-        n_obs = int(n_obs_or_n_trials)
-        benchmark_sharpe = float(benchmark_or_n_obs)
-        if trial_sr_variance > 0.0:
-            benchmark_sharpe += math.sqrt(trial_sr_variance) * expected_maximum_sharpe(n_trials)
-        elif n_trials > 1:
-            benchmark_sharpe += expected_maximum_sharpe(n_trials)
+    benchmark = float(benchmark_sharpe)
+    trials = int(n_trials)
+    if trial_sr_variance > 0.0:
+        benchmark += math.sqrt(trial_sr_variance) * expected_maximum_sharpe(trials)
+    elif trials > 1:
+        benchmark += expected_maximum_sharpe(trials)
     return probabilistic_sharpe_ratio(
         observed_sharpe,
-        benchmark_sharpe,
-        n_obs,
+        benchmark,
+        int(n_obs),
         skewness=skewness,
         kurtosis=kurtosis,
     )

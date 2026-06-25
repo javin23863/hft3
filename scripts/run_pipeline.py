@@ -1258,6 +1258,8 @@ def _apply_validation_summary_to_results(
     cscv = validation_summary.get("cscv")
     if not isinstance(cscv, Mapping) or cscv.get("status") == "skipped":
         return
+    # CSCV PBO scores the whole candidate-selection procedure, so this gate is
+    # intentionally all-or-nothing across candidates rather than per-model.
     for result in results:
         result.pbo = _optional_float(str(cscv.get("pbo"))) if cscv.get("pbo") is not None else None
         result.performance_degradation = (

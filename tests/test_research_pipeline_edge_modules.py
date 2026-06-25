@@ -46,8 +46,8 @@ def test_psr_dsr_and_min_track_record_behave_monotonically() -> None:
     strong = probabilistic_sharpe_ratio(1.0, 0.0, 30)
     assert strong > weak
 
-    single_trial = deflated_sharpe_ratio(1.0, 30, 1)
-    many_trials = deflated_sharpe_ratio(1.0, 30, 100)
+    single_trial = deflated_sharpe_ratio(1.0, n_obs=30, n_trials=1)
+    many_trials = deflated_sharpe_ratio(1.0, n_obs=30, n_trials=100)
     assert many_trials < single_trial
 
     assert minimum_track_record_length(1.0, benchmark_sharpe=0.0) < minimum_track_record_length(
