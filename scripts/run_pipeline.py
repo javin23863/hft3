@@ -1512,7 +1512,7 @@ def _main_impl(
         "--rl-device",
         choices=sorted(SUPPORTED_RL_DEVICES),
         default=None,
-        help="RL training device; cuda writes a blocked GPU handoff artifact on MSI",
+        help="RL training device; cuda writes a blocked GPU handoff artifact in this pipeline",
     )
     parser.add_argument("--rl-required", action="store_true", help="Fail the run if RL does not train")
     parser.add_argument("--rl-seed", type=int, default=None, help="Seed for RL policy training")

@@ -934,7 +934,7 @@ def test_rl_training_rejects_non_monotonic_timestamps(tmp_path):
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="strictly increasing"):
+    with pytest.raises(ValueError, match="non-decreasing"):
         train_rl_policy_artifact(
             training_data_path=training_path,
             feature_names=["order_book_imbalance"],

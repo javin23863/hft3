@@ -10,6 +10,11 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "jsonschema>=4.20.0",
+    "networkx>=3.2",
+    "pandas>=2.0.0",
+    "pdfplumber>=0.11.0",
+    "pydantic>=2.6",
+    "pyarrow>=15.0.0",
     "qrcode[pil]>=7.4.2",
 ]
 
@@ -19,8 +24,12 @@ economic-event-universe = "economic_event_universe.cli:main"
 llm-slow-tier = "llm_slow_tier.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["apps", "packages", "."]
-exclude = ["connectors*"]
+where = [".", "apps", "packages"]
+exclude = ["connectors*", "runtime*", "research_cards*", "artifacts*"]
+namespaces = false
+
+[tool.setuptools]
+py-modules = ["hft3_bootstrap"]
 
 [tool.setuptools.package-data]
 "models.ghost_route" = ["*.yaml", "*.json"]

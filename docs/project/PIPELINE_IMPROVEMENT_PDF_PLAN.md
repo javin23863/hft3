@@ -185,7 +185,7 @@ Implementation receipt:
   same-input policy reuse for CPU artifacts.
 - `scripts/run_pipeline.py` accepts `--rl-training-data`, `--rl-feature`, `--rl-device`, `--rl-required`, and `--rl-seed`.
 - Enabled RL writes `rl_policy_artifact.json` before document/candidate work; blocked RL stops the run with `status=blocked_rl_training`.
-- CPU is limited to small research-only tabular policy artifacts. CUDA writes a blocked GPU handoff artifact and does not launch on MSI.
+- CPU is limited to small research-only tabular policy artifacts. CUDA through the normal pipeline writes a blocked GPU handoff artifact until a host, command, output directory, duration, stop rule, and passing runtime smoke receipt are named.
 - Default enablement remains deferred until real training data, GPU host, and resumable command are named; the code path is fail-closed once enabled.
 
 Implementation requirements:
@@ -216,7 +216,7 @@ Spawn the GPU-training sub-agent only after all are true:
 Gate:
 
 - Unit tests mock training and require policy artifact metadata.
-- No real GPU training in local CI or on MSI.
+- No full GPU training in local CI or on MSI. A bounded MSI CUDA smoke is allowed only when the operator explicitly approves it and it writes a non-promotable readiness/smoke receipt.
 
 ### Phase 4 - Advanced Parameter Search
 
