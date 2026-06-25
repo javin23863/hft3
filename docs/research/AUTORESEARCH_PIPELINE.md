@@ -38,7 +38,12 @@ pip install -r packages/research_pipeline/requirements.txt
 python scripts/run_pipeline.py \
   --thesis "Fade spread blowout after CPI surprise" \
   --event-id CPI_2024_09_11_TIGHT \
-  --max-candidates 5
+  --max-candidates 5 \
+  --min-psr 0.95 \
+  --min-dsr 0.90 \
+  --cscv \
+  --max-pbo 0.20 \
+  --commission-per-trade 1.25
 
 # Parse + candidate generation only (no backtest)
 python scripts/run_pipeline.py --thesis "..." --event-id CPI_2024_09_11_TIGHT --dry-run
@@ -105,6 +110,8 @@ Each artifact-producing run writes:
 - `pipeline_runtime_config.json` — loaded/effective runtime defaults plus hash
 - `pipeline_run.log` — JSON-lines run log for operational debugging
 - `candidate_prefilter.json` — lightweight prefilter receipt
+- `num_trials.json` — generated/evaluated candidate counts and Sharpe variance
+- `edge_evaluation_summary.json` — PSR/DSR, costs, power checks, PBO, and tail metrics
 - `pipeline_run_receipt.json` — final structured payload for the run,
   including fail-closed failures after artifact setup
 
@@ -192,6 +199,48 @@ promoted screening row is strict replay-eligible and carries a robustness
 evidence receipt from the robustness applicator.
 
 Implementation plan and review gates: [AUTORESEARCH_PIPELINE_UPGRADE_PLAN.md](../project/AUTORESEARCH_PIPELINE_UPGRADE_PLAN.md).
+
+Edge-testing implementation plan: [EDGE_TESTING_ALPHA_EVALUATION_PLAN.md](../project/EDGE_TESTING_ALPHA_EVALUATION_PLAN.md).
+
+## Edge Evaluation
+
+The simple Workbench evaluation path now records statistical, cost, validation,
+and tail-risk evidence for every candidate. Defaults are configured under
+`edge_evaluation` in `config/research_pipeline/default_runtime.json`; CLI flags
+override the JSON runtime config for a single run.
+
+Statistical significance:
+
+- `psr` is the probabilistic Sharpe ratio, the probability that the observed
+  Sharpe exceeds `--sr-benchmark` after skewness and kurtosis adjustment.
+- `dsr` is the deflated Sharpe ratio. It uses the number of generated
+  candidates and the variance of candidate Sharpes to account for selection
+  bias across trials.
+- `adjusted_p_value` stores the Holm-adjusted selected-test p-value derived
+  from PSR. The run also writes `num_trials.json` so reviewers can recompute
+  their own correction.
+- `required_sample_size` and `sample_size_pass` come from the configured
+  `--alpha` and `--power` assumptions. By default this is recorded but not a
+  hard gate; pass `--require-sample-size` to fail candidates that are too short.
+
+Validation and overfitting:
+
+- `--cscv` computes combinatorially symmetric cross-validation diagnostics from
+  the aligned candidate PnL matrix. `--cscv-subsets` controls chronological
+  partitioning and `--max-pbo` can gate candidates by probability of backtest
+  overfitting.
+- `--rolling-validation --rolling-window N` writes rolling PnL-window summaries
+  for each candidate into `edge_evaluation_summary.json`.
+
+Costs and risk:
+
+- `--spread-cost`, `--commission-per-trade`, `--slippage-bps`, and
+  `--market-impact-coeff` subtract estimated execution costs from the gross PnL
+  series before gates are evaluated.
+- Evaluation results include gross PnL, net PnL, cost breakdown, Sharpe,
+  Sortino, skewness, kurtosis, CVaR 95/99, and tail ratio.
+- `--min-tail-ratio`, `--max-cvar-95`, and `--max-cvar-99` can be used as
+  fail gates for fat-tail exposure.
 
 ## LLM
 

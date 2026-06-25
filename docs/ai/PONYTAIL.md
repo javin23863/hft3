@@ -7,6 +7,18 @@
 
 Ponytail is **not** a Vast/SSH tool. It is the standing **lazy-senior-dev** ruleset: YAGNI, stdlib-first, minimal diffs, deletion over addition. Safety rails (validation, security, accessibility, finance/math invariants) are never cut.
 
+## Fable preflight (mandatory first)
+
+Before applying Ponytail, agents must load Fable:
+
+1. `.cursor/rules/00-fable-mindset.mdc`
+2. `docs/vault/FABLE_MINDSET.md`
+3. Full reference when needed: `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md`
+
+Only after the Fable loop is active should Ponytail trim scope. Fable supplies
+the ground/reason/act/observe/verify discipline; Ponytail supplies the minimum
+code shape inside that discipline.
+
 ## When agents MUST apply ponytail
 
 - Any code or doc edit in hft3 (always-on via `.cursor/rules/01-ponytail-mindset.mdc`, second after Fable)

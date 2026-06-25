@@ -32,6 +32,20 @@ def test_plan_drift_passes_for_npz_abort_scope(tmp_path):
     assert "completed_phase" in payload
 
 
+def test_edge_evaluation_scope_allows_current_plan_paths():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("run_plan_drift_review", _REVIEW)
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+
+    allowed = mod._allowed_for_phase("edge-evaluation")
+    assert mod._path_allowed("packages/research_pipeline/statistics.py", allowed)
+    assert mod._path_allowed("scripts/run_plan_drift_review.py", allowed)
+    assert not mod._path_allowed("rithmic_gateway/src/rithmic_adapter.cpp", allowed)
+
+
 def test_main_preserves_run_review_errors(monkeypatch, tmp_path):
     import importlib.util
 

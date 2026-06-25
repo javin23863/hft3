@@ -53,6 +53,14 @@ class GateThresholds:
     min_sharpe: float = -1e9
     min_sortino: float = -1e9
     max_drawdown: float = 1e9
+    min_psr: Optional[float] = None
+    min_dsr: Optional[float] = None
+    max_pbo: Optional[float] = None
+    min_tail_ratio: Optional[float] = None
+    max_cvar_95: Optional[float] = None
+    max_cvar_99: Optional[float] = None
+    require_sample_size: bool = False
+    min_observations: Optional[int] = None
 
     def requires_gateable_risk_metrics(self) -> bool:
         return (
@@ -77,6 +85,15 @@ class GateThresholds:
         sortino: float = 0.0,
         max_drawdown: float = 0.0,
         include_risk_metrics: bool = True,
+        include_edge_metrics: bool = True,
+        psr: Optional[float] = None,
+        dsr: Optional[float] = None,
+        pbo: Optional[float] = None,
+        tail_ratio: Optional[float] = None,
+        cvar_95: Optional[float] = None,
+        cvar_99: Optional[float] = None,
+        sample_size_pass: bool = True,
+        observations: Optional[int] = None,
     ) -> bool:
         if net_pnl < self.min_net_pnl:
             return False
@@ -86,6 +103,23 @@ class GateThresholds:
             return False
         if win_rate < self.min_win_rate:
             return False
+        if include_edge_metrics:
+            if self.min_psr is not None and (psr is None or psr < self.min_psr):
+                return False
+            if self.min_dsr is not None and (dsr is None or dsr < self.min_dsr):
+                return False
+            if self.max_pbo is not None and (pbo is None or pbo > self.max_pbo):
+                return False
+            if self.min_tail_ratio is not None and (tail_ratio is None or tail_ratio < self.min_tail_ratio):
+                return False
+            if self.max_cvar_95 is not None and (cvar_95 is None or cvar_95 > self.max_cvar_95):
+                return False
+            if self.max_cvar_99 is not None and (cvar_99 is None or cvar_99 > self.max_cvar_99):
+                return False
+            if self.require_sample_size and not sample_size_pass:
+                return False
+            if self.min_observations is not None and (observations is None or observations < self.min_observations):
+                return False
         if not include_risk_metrics:
             return True
         if sharpe < self.min_sharpe:
@@ -107,8 +141,8 @@ class EvaluationResult:
     expectancy: float
     tail_loss: float
     gates: GateThresholds
-    sharpe: float = 0.0
-    sortino: float = 0.0
+    sharpe: Optional[float] = 0.0
+    sortino: Optional[float] = 0.0
     max_drawdown: float = 0.0
     risk_metrics_source: str = "not_computed"
     risk_metrics_gateable: bool = False
@@ -116,6 +150,30 @@ class EvaluationResult:
     event_results: List[Dict[str, Any]] = field(default_factory=list)
     workbench_out: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    gross_pnl: Optional[float] = None
+    cost_total: float = 0.0
+    cost_breakdown: Dict[str, float] = field(default_factory=dict)
+    pnl_series: List[float] = field(default_factory=list)
+    gross_pnl_series: List[float] = field(default_factory=list)
+    psr: Optional[float] = None
+    dsr: Optional[float] = None
+    adjusted_p_value: Optional[float] = None
+    trial_sr_variance: Optional[float] = None
+    num_trials: int = 1
+    required_sample_size: Optional[int] = None
+    sample_size_pass: bool = True
+    skew: Optional[float] = None
+    kurtosis: Optional[float] = None
+    cvar_95: Optional[float] = None
+    cvar_99: Optional[float] = None
+    tail_ratio: Optional[float] = None
+    turnover: Optional[float] = None
+    avg_trade_duration: Optional[float] = None
+    pbo: Optional[float] = None
+    performance_degradation: Optional[float] = None
+    probability_of_loss: Optional[float] = None
+    regime_metrics: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    instrument_metrics: Dict[str, Dict[str, float]] = field(default_factory=dict)
 
     def passes_all_gates(self) -> bool:
         if self.error:
@@ -127,10 +185,18 @@ class EvaluationResult:
             self.num_trades,
             self.tail_loss,
             self.win_rate,
-            sharpe=self.sharpe,
-            sortino=self.sortino,
+            sharpe=self.sharpe or 0.0,
+            sortino=self.sortino or 0.0,
             max_drawdown=self.max_drawdown,
             include_risk_metrics=self.risk_metrics_gateable,
+            psr=self.psr,
+            dsr=self.dsr,
+            pbo=self.pbo,
+            tail_ratio=self.tail_ratio,
+            cvar_95=self.cvar_95,
+            cvar_99=self.cvar_99,
+            sample_size_pass=self.sample_size_pass,
+            observations=len(self.pnl_series) if self.pnl_series else self.num_trades,
         )
 
 
@@ -172,8 +238,25 @@ class PipelineReport:
                 {
                     "candidate_id": r.candidate.candidate_id,
                     "model_id": r.candidate.model_id,
+                    "gross_pnl": r.gross_pnl,
                     "net_pnl": r.net_pnl,
+                    "cost_total": r.cost_total,
                     "num_trades": r.num_trades,
+                    "psr": r.psr,
+                    "dsr": r.dsr,
+                    "adjusted_p_value": r.adjusted_p_value,
+                    "pbo": r.pbo,
+                    "performance_degradation": r.performance_degradation,
+                    "probability_of_loss": r.probability_of_loss,
+                    "sample_size_pass": r.sample_size_pass,
+                    "required_sample_size": r.required_sample_size,
+                    "skew": r.skew,
+                    "kurtosis": r.kurtosis,
+                    "cvar_95": r.cvar_95,
+                    "cvar_99": r.cvar_99,
+                    "tail_ratio": r.tail_ratio,
+                    "num_trials": r.num_trials,
+                    "trial_sr_variance": r.trial_sr_variance,
                     "passes": r.passes_all_gates(),
                     "sharpe": r.sharpe,
                     "sortino": r.sortino,
