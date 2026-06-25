@@ -27,6 +27,8 @@ from research_pipeline.types import (
     signed_tail_loss_value,
 )
 
+_NO_LOSS_TAIL_RATIO = 1e9
+
 
 def parse_event_ids(values: str | Sequence[str]) -> list[str]:
     """Parse repeated and comma-separated event ids, preserving order."""
@@ -416,7 +418,7 @@ def _tail_ratio(values: Sequence[float], quantile: float = 0.05) -> Optional[flo
     lower_loss = sum(max(0.0, -value) for value in lower) / len(lower)
     if lower_loss <= 0.0:
         if upper_gain > 0.0:
-            return math.inf
+            return _NO_LOSS_TAIL_RATIO
         return None
     return upper_gain / lower_loss
 

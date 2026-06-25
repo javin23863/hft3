@@ -2516,7 +2516,9 @@ def test_evaluate_model_no_loss_tail_ratio_passes_gate(tmp_path, monkeypatch):
         gates=GateThresholds(min_tail_ratio=1.0),
     )
 
-    assert result.tail_ratio == math.inf
+    assert math.isfinite(result.tail_ratio)
+    assert result.tail_ratio >= 1e9
+    json.dumps({"tail_ratio": result.tail_ratio}, allow_nan=False)
     assert result.passes_all_gates()
 
 
