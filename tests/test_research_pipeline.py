@@ -870,9 +870,9 @@ def test_rl_training_stage_cache_miss_then_hit(tmp_path):
 
     training_path = tmp_path / "rl_rows.jsonl"
     rows = [
-        {"order_book_imbalance": 0.5, "spread": 1.0, "reward": 0.10},
-        {"order_book_imbalance": -0.5, "spread": 1.0, "reward": -0.20},
-        {"order_book_imbalance": 0.0, "spread": 2.0, "reward": 0.00},
+        {"timestamp_ns": 1, "order_book_imbalance": 0.5, "spread": 1.0, "reward": 0.10},
+        {"timestamp_ns": 2, "order_book_imbalance": -0.5, "spread": 1.0, "reward": -0.20},
+        {"timestamp_ns": 3, "order_book_imbalance": 0.0, "spread": 2.0, "reward": 0.00},
     ]
     training_path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
     artifact_dir = tmp_path / "research_cards" / "pipeline_runs" / "rl_cache_test"

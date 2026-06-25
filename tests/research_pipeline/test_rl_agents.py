@@ -16,9 +16,9 @@ from research_pipeline.rl_agents import (
 def test_rl_cpu_training_writes_non_promotable_policy_artifact(tmp_path):
     training_path = tmp_path / "rl_rows.jsonl"
     rows = [
-        {"order_book_imbalance": 0.5, "spread": 1.0, "reward": 0.10},
-        {"order_book_imbalance": -0.5, "spread": 1.0, "reward": -0.20},
-        {"order_book_imbalance": 0.0, "spread": 2.0, "reward": 0.00},
+        {"timestamp_ns": 1, "order_book_imbalance": 0.5, "spread": 1.0, "reward": 0.10},
+        {"timestamp_ns": 2, "order_book_imbalance": -0.5, "spread": 1.0, "reward": -0.20},
+        {"timestamp_ns": 3, "order_book_imbalance": 0.0, "spread": 2.0, "reward": 0.00},
     ]
     training_path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
 
@@ -47,8 +47,8 @@ def test_rl_cuda_builds_blocked_gpu_handoff_artifact(tmp_path):
         json.dumps(
             {
                 "rows": [
-                    {"order_book_imbalance": 0.5, "reward": 0.1},
-                    {"order_book_imbalance": -0.2, "reward": -0.1},
+                    {"timestamp_ns": 1, "order_book_imbalance": 0.5, "reward": 0.1},
+                    {"timestamp_ns": 2, "order_book_imbalance": -0.2, "reward": -0.1},
                 ]
             }
         ),
@@ -71,9 +71,9 @@ def test_rl_cuda_builds_blocked_gpu_handoff_artifact(tmp_path):
 def test_rl_policy_cache_hits_same_inputs(tmp_path):
     training_path = tmp_path / "rl_rows.jsonl"
     rows = [
-        {"order_book_imbalance": 0.5, "spread": 1.0, "reward": 0.10},
-        {"order_book_imbalance": -0.5, "spread": 1.0, "reward": -0.20},
-        {"order_book_imbalance": 0.0, "spread": 2.0, "reward": 0.00},
+        {"timestamp_ns": 1, "order_book_imbalance": 0.5, "spread": 1.0, "reward": 0.10},
+        {"timestamp_ns": 2, "order_book_imbalance": -0.5, "spread": 1.0, "reward": -0.20},
+        {"timestamp_ns": 3, "order_book_imbalance": 0.0, "spread": 2.0, "reward": 0.00},
     ]
     training_path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
     cache_root = tmp_path / "rl_cache"
@@ -136,3 +136,64 @@ def test_rl_feature_validation_uses_microstructure_registry():
 
     with pytest.raises(ValueError, match="non-PIT or label-like"):
         validate_rl_features(["future_pnl_label"])
+
+
+def test_rl_training_requires_timestamps_unless_explicitly_allowed(tmp_path):
+    training_path = tmp_path / "rl_rows.jsonl"
+    rows = [
+        {"order_book_imbalance": 0.5, "reward": 0.10},
+        {"order_book_imbalance": -0.5, "reward": -0.20},
+    ]
+    training_path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="requires a timestamp_ns"):
+        train_rl_policy_artifact(
+            training_data_path=training_path,
+            feature_names=["order_book_imbalance"],
+            device="cpu",
+        )
+
+    artifact = train_rl_policy_artifact(
+        training_data_path=training_path,
+        feature_names=["order_book_imbalance"],
+        device="cpu",
+        allow_missing_timestamps=True,
+    )
+    assert artifact["training_summary"]["train_eval_split"]["chronology_status"] == "missing_timestamp"
+    assert artifact["training_summary"]["train_eval_split"]["missing_timestamps_allowed"] is True
+
+
+def test_rl_training_rejects_mixed_reward_columns(tmp_path):
+    training_path = tmp_path / "rl_rows.jsonl"
+    rows = [
+        {"timestamp_ns": 1, "order_book_imbalance": 0.5, "reward": 0.10},
+        {"timestamp_ns": 2, "order_book_imbalance": -0.5, "return": -0.20},
+    ]
+    training_path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="mixed rl reward columns"):
+        train_rl_policy_artifact(
+            training_data_path=training_path,
+            feature_names=["order_book_imbalance"],
+            device="cpu",
+        )
+
+
+def test_rl_training_reports_budget_exhaustion_after_truncation(tmp_path):
+    training_path = tmp_path / "rl_rows.jsonl"
+    rows = [
+        {"timestamp_ns": idx, "order_book_imbalance": 0.5, "reward": 0.10}
+        for idx in range(1, 6)
+    ]
+    training_path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+
+    artifact = train_rl_policy_artifact(
+        training_data_path=training_path,
+        feature_names=["order_book_imbalance"],
+        device="cpu",
+        max_rows=3,
+    )
+
+    assert artifact["training_summary"]["source_row_count"] == 5
+    assert artifact["training_summary"]["row_count"] == 3
+    assert artifact["training_summary"]["training_budget"]["budget_exhausted"] is True

@@ -107,9 +107,11 @@ def rl_policy_cache_receipt(
     device: str = "cpu",
     seed: int = 42,
     max_rows: int = 4096,
+    allow_missing_timestamps: bool = False,
 ) -> dict[str, Any]:
     features = validate_rl_features(feature_names)
     device = _validate_device(device)
+    max_rows = _validate_max_rows(max_rows)
     receipt = training_data_receipt(training_data_path)
     invalidation_inputs = {
         "schema_version": RL_POLICY_CACHE_INPUT_VERSION,
@@ -127,7 +129,8 @@ def rl_policy_cache_receipt(
         "feature_names": features,
         "device": device,
         "seed": int(seed),
-        "max_rows": int(max_rows),
+        "max_rows": max_rows,
+        "allow_missing_timestamps": bool(allow_missing_timestamps),
     }
     cache_key = hashlib.sha256(
         json.dumps(invalidation_inputs, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -147,11 +150,13 @@ def train_rl_policy_artifact(
     device: str = "cpu",
     seed: int = 42,
     max_rows: int = 4096,
+    allow_missing_timestamps: bool = False,
 ) -> dict[str, Any]:
     """Build an RL policy artifact or a CUDA handoff block."""
     started = time.perf_counter()
     features = validate_rl_features(feature_names)
     device = _validate_device(device)
+    max_rows = _validate_max_rows(max_rows)
     receipt = training_data_receipt(training_data_path)
     if device == "cuda":
         return blocked_rl_artifact(
@@ -167,11 +172,15 @@ def train_rl_policy_artifact(
     rows = load_training_rows(training_data_path)
     if len(rows) < 2:
         raise ValueError("rl training data requires at least two rows")
+    source_row_count = len(rows)
+    budget_exhausted = source_row_count > max_rows
     if len(rows) > max_rows:
         rows = rows[:max_rows]
-    chronology = _chronology_audit(rows)
-    parsed_rows = _validate_rows(rows, features)
+    chronology = _chronology_audit(rows, allow_missing_timestamps=allow_missing_timestamps)
+    reward_key = _reward_key_for_rows(rows)
+    parsed_rows = _validate_rows(rows, features, reward_key=reward_key)
     policy = _train_tabular_policy(parsed_rows, features)
+    # CPU smoke keeps the final chronological row as a fixed one-row holdout.
     train_rows = max(0, len(parsed_rows) - 1)
     eval_rows = len(parsed_rows) - train_rows
     return {
@@ -195,17 +204,20 @@ def train_rl_policy_artifact(
         },
         "training_summary": {
             "row_count": len(parsed_rows),
+            "source_row_count": source_row_count,
             "max_rows": max_rows,
+            "reward_key": reward_key,
             "train_eval_split": {
                 "train_rows": train_rows,
                 "eval_rows": eval_rows,
                 "chronology_status": chronology["status"],
                 "timestamp_field": chronology.get("timestamp_field"),
+                "missing_timestamps_allowed": bool(allow_missing_timestamps),
             },
             "training_budget": {
                 "max_rows": max_rows,
                 "updates_used": train_rows,
-                "budget_exhausted": False,
+                "budget_exhausted": budget_exhausted,
             },
             "state_count": len(policy["q_table"]),
             "action_space": ["hold", "enter_long", "enter_short"],
@@ -224,6 +236,7 @@ def train_or_load_rl_policy_artifact(
     max_rows: int = 4096,
     cache_root: Path | None = None,
     cache_enabled: bool = True,
+    allow_missing_timestamps: bool = False,
 ) -> dict[str, Any]:
     """Load a matching CPU policy from cache, otherwise train and cache it."""
     if not cache_enabled or cache_root is None:
@@ -233,6 +246,7 @@ def train_or_load_rl_policy_artifact(
             device=device,
             seed=seed,
             max_rows=max_rows,
+            allow_missing_timestamps=allow_missing_timestamps,
         )
         return _with_cache_receipt(artifact, status="disabled", receipt=None, cache_path=None)
 
@@ -242,6 +256,7 @@ def train_or_load_rl_policy_artifact(
         device=device,
         seed=seed,
         max_rows=max_rows,
+        allow_missing_timestamps=allow_missing_timestamps,
     )
     cache_path = Path(cache_root) / f"{receipt['cache_key']}.json"
     if receipt["invalidation_inputs"]["device"] == "cuda":
@@ -251,6 +266,7 @@ def train_or_load_rl_policy_artifact(
             device=device,
             seed=seed,
             max_rows=max_rows,
+            allow_missing_timestamps=allow_missing_timestamps,
         )
         return _with_cache_receipt(artifact, status="blocked", receipt=receipt, cache_path=cache_path)
 
@@ -269,6 +285,7 @@ def train_or_load_rl_policy_artifact(
         device=device,
         seed=seed,
         max_rows=max_rows,
+        allow_missing_timestamps=allow_missing_timestamps,
     )
     artifact = _with_cache_receipt(artifact, status="miss", receipt=receipt, cache_path=cache_path)
     write_rl_policy_artifact(cache_path, artifact)
@@ -370,6 +387,13 @@ def _validate_device(device: str) -> str:
     return value
 
 
+def _validate_max_rows(max_rows: int) -> int:
+    parsed = int(max_rows)
+    if parsed < 2:
+        raise ValueError("rl max_rows must be at least 2")
+    return parsed
+
+
 def _file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -465,13 +489,22 @@ def _normalise_feature_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", with_boundaries).lower().strip("_")
 
 
-def _chronology_audit(rows: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+def _chronology_audit(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    allow_missing_timestamps: bool,
+) -> dict[str, str]:
     present = [
         field
         for field in _TIMESTAMP_FIELDS
         if all(isinstance(row, Mapping) and field in row for row in rows)
     ]
     if not present:
+        if not allow_missing_timestamps:
+            raise ValueError(
+                "rl training data requires a timestamp_ns, ts_ns, timestamp, or decision_time column; "
+                "set allow_missing_timestamps=True only for synthetic smoke fixtures"
+            )
         return {"status": "missing_timestamp"}
     field = present[0]
     timestamps = [
@@ -484,7 +517,33 @@ def _chronology_audit(rows: Sequence[Mapping[str, Any]]) -> dict[str, str]:
     return {"status": "monotonic_timestamp", "timestamp_field": field}
 
 
-def _validate_rows(rows: Sequence[Mapping[str, Any]], feature_names: Sequence[str]) -> list[dict[str, float]]:
+def _reward_key_for_rows(rows: Sequence[Mapping[str, Any]]) -> str:
+    selected: str | None = None
+    for row_idx, row in enumerate(rows):
+        row_key = next(
+            (key for key in ("reward", "next_return", "return") if key in row),
+            None,
+        )
+        if row_key is None:
+            raise ValueError(f"row {row_idx} missing reward, next_return, or return")
+        if selected is None:
+            selected = row_key
+            continue
+        if row_key != selected:
+            raise ValueError(
+                f"mixed rl reward columns: expected {selected!r}, row {row_idx} uses {row_key!r}"
+            )
+    if selected is None:
+        raise ValueError("rl training data requires reward, next_return, or return")
+    return selected
+
+
+def _validate_rows(
+    rows: Sequence[Mapping[str, Any]],
+    feature_names: Sequence[str],
+    *,
+    reward_key: str,
+) -> list[dict[str, float]]:
     parsed: list[dict[str, float]] = []
     for row_idx, row in enumerate(rows):
         out: dict[str, float] = {}
@@ -492,9 +551,8 @@ def _validate_rows(rows: Sequence[Mapping[str, Any]], feature_names: Sequence[st
             if feature not in row:
                 raise ValueError(f"row {row_idx} missing rl feature {feature!r}")
             out[feature] = _finite_float(row[feature], f"row {row_idx} feature {feature}")
-        reward_key = "reward" if "reward" in row else "next_return" if "next_return" in row else "return"
         if reward_key not in row:
-            raise ValueError(f"row {row_idx} missing reward, next_return, or return")
+            raise ValueError(f"row {row_idx} missing reward column {reward_key!r}")
         out["reward"] = _finite_float(row[reward_key], f"row {row_idx} reward")
         parsed.append(out)
     return parsed
