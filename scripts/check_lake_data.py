@@ -78,9 +78,11 @@ def _count_jsonl_unit_rows(path: Path) -> int:
 
 
 def _check_unit_row(row: dict[str, Any], repo_root: Path, symbols: tuple[str, ...]) -> tuple[str, str, str | None]:
-    unit_id = str(row["unit_id"])
-    symbol = str(row["symbol"])
-    event_id = str(row["event_id"])
+    unit_id = str(row.get("unit_id") or "")
+    symbol = str(row.get("symbol") or "")
+    event_id = str(row.get("event_id") or "")
+    if not unit_id:
+        unit_id = f"{symbol}_{event_id}" if symbol and event_id else "unknown"
     path, present, _ = resolve_npz_for_event(repo_root, event_id, symbol, symbols)
     if not present or path is None:
         return unit_id, "missing_npz", None
