@@ -489,6 +489,22 @@ def test_vast_full_script_pins_vectorbt_compatible_pandas() -> None:
     assert "expected pandas<3.0" in launch_script
 
 
+def test_vast_launchers_do_not_auto_prefer_forensic_ready_gate() -> None:
+    launch_script = (REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh").read_text(encoding="utf-8")
+    ssh_script = (REPO / "scripts" / "vast_ssh_run_vbt_paid_screen.sh").read_text(encoding="utf-8")
+
+    assert "paid_screen_ready_gate_after_forensic_probe" not in launch_script
+    assert "paid_screen_ready_gate_after_forensic_probe" not in ssh_script
+    assert 'GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"' in launch_script
+    assert 'VBT_READY_GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"' in ssh_script
+    assert "Validating ready gate provenance" in launch_script
+    assert '"events_csv_hash", events_hash' in launch_script
+    assert '"lake_manifest_hash", lake_hash' in launch_script
+    assert "ready gate {name} missing" in launch_script
+    assert "Ready gate OK:" in launch_script
+    assert "VBT_READY_GATE_FILE=$VBT_READY_GATE_FILE bash scripts/run_vbt_paid_screen_vast_full.sh" in ssh_script
+
+
 def test_stage_a_survivors_expansion_not_capped_at_fifty(tmp_path: Path) -> None:
     """Full scope uses all TIGHT events per cell — not [:50] and not CPI+NFP-only smoke."""
     survivors = tmp_path / "stage_a_survivors.json"

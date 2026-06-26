@@ -25,13 +25,7 @@ export HFT3_MANIFEST_PATH="${HFT3_MANIFEST_PATH:-/data/npz/manifest.parquet}"
 
 EVENTS_CSV="${VBT_EVENTS_CSV:-packages/data_system/config/events.csv}"
 UNITS_JSONL="${VBT_FULL_UNITS_JSONL:-runtime/reports/vbt_full_units.jsonl}"
-if [[ -z "${VBT_READY_GATE_FILE:-}" && -f "runtime/reports/paid_screen_ready_gate_after_forensic_probe.json" ]]; then
-  GATE_FILE="runtime/reports/paid_screen_ready_gate_after_forensic_probe.json"
-elif [[ -n "${VBT_READY_GATE_FILE:-}" ]]; then
-  GATE_FILE="$VBT_READY_GATE_FILE"
-else
-  GATE_FILE="runtime/reports/paid_screen_ready_gate.json"
-fi
+GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"
 SYMBOLS="${VBT_SYMBOLS:-MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0}"
 MODEL_SCOPE="${VBT_MODEL_SCOPE:-active}"
 MODEL_IDS="${VBT_MODEL_IDS:-}"
@@ -151,6 +145,46 @@ if [[ -z "$LAKE_MANIFEST_HASH" ]]; then
   exit 1
 fi
 GIT_HEAD="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+
+echo "Validating ready gate provenance"
+python3 - "$GATE_FILE" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" <<'PY'
+import json
+import sys
+
+gate_path, events_hash, lake_hash = sys.argv[1:4]
+payload = json.load(open(gate_path, encoding="utf-8"))
+errors = []
+
+if not isinstance(payload, dict):
+    errors.append("ready gate file must contain a JSON object")
+elif payload.get("ready_for_full_run") is not True:
+    errors.append("ready gate file reports ready_for_full_run=false")
+else:
+    gate_errors = payload.get("errors", [])
+    if gate_errors not in (None, []):
+        errors.append(f"ready gate errors are not empty: {gate_errors}")
+    pilot_hashes = payload.get("pilot_hashes", {})
+    if pilot_hashes is None:
+        pilot_hashes = {}
+    if not isinstance(pilot_hashes, dict):
+        errors.append("ready gate pilot_hashes must be a JSON object")
+    else:
+        for name, expected in (
+            ("events_csv_hash", events_hash),
+            ("lake_manifest_hash", lake_hash),
+        ):
+            actual = pilot_hashes.get(name, payload.get(name))
+            if not isinstance(actual, str) or not actual.strip():
+                errors.append(f"ready gate {name} missing")
+            elif actual.strip() != expected:
+                errors.append(f"ready gate {name} {actual.strip()} != current {expected}")
+
+if errors:
+    for err in errors:
+        print(f"ERROR: {err}", file=sys.stderr)
+    sys.exit(1)
+print(f"Ready gate OK: {gate_path}")
+PY
 
 if [[ "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "1" || "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "true" ]]; then
   DECL_ABORT_ON_FAILED_UNITS="${VBT_DECL_ABORT_ON_FAILED_UNITS:-true}"
