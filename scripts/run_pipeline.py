@@ -312,6 +312,42 @@ def _deep_merge(base: dict[str, Any], updates: Mapping[str, Any]) -> dict[str, A
     return base
 
 
+def _load_skipped_unit_ids(config_path: Path, skip_bad_units_file: Path | None) -> set[str]:
+    """Build the skip set from autoresearch config + optional check_lake_data file.
+
+    Merges ``skipped_unit_ids`` from ``config/autoresearch/default.yaml`` with
+    invalid unit IDs from a ``check_lake_data.py`` JSON report.  When the config
+    file is absent or has no ``skipped_unit_ids`` key, returns the set from the
+    bad-units file alone (or an empty set).
+    """
+    import yaml
+
+    skip: set[str] = set()
+
+    try:
+        cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
+        if isinstance(cfg, dict):
+            for uid in cfg.get("skipped_unit_ids") or []:
+                if uid:
+                    skip.add(str(uid))
+    except (OSError, yaml.YAMLError):
+        pass
+
+    if skip_bad_units_file:
+        try:
+            data = json.loads(Path(skip_bad_units_file).read_text(encoding="utf-8"))
+            invalid = data.get("invalid_units") or data.get("invalid") or []
+            for entry in invalid:
+                uid = entry.get("unit_id") if isinstance(entry, dict) else str(entry)
+                if uid:
+                    skip.add(str(uid))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"WARNING: could not read skip-bad-units file {skip_bad_units_file}: {exc}",
+                  file=sys.stderr)
+
+    return skip
+
+
 def load_pipeline_runtime_config(path: Path | None = None) -> dict[str, Any]:
     config = copy.deepcopy(_DEFAULT_PIPELINE_RUNTIME_CONFIG)
     config_path = path or _DEFAULT_PIPELINE_CONFIG_PATH
@@ -2064,6 +2100,17 @@ def _main_impl(
     parser.add_argument("--campaign-id", default=None, help="Autoresearch campaign id (required with --resume)")
     parser.add_argument("--max-generations", type=int, default=None, help="Override config max_generations")
     parser.add_argument("--stop-file", type=Path, default=None, help="Stop autoresearch loop when this file exists")
+    parser.add_argument(
+        "--skip-bad-units-file",
+        type=Path,
+        default=None,
+        help="JSON file with invalid unit IDs from check_lake_data.py. Units listed are skipped before evaluation.",
+    )
+    parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        help="Abort on first unit failure (CI mode). Default: continue past failures for multi-event runs.",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -2406,6 +2453,19 @@ def _main_impl(
     _write_json(artifact_dir / "candidate_prefilter.json", candidate_prefilter)
     logger.info("candidate_prefilter_complete", extra={"payload": candidate_prefilter})
     _update_active_run_failure_context(failure_context, candidate_prefilter=candidate_prefilter)
+
+    # Data-quality skip list — remove candidates whose unit_id is known-bad
+    # before any compute.  Merges config skipped_unit_ids with an optional
+    # check_lake_data.py report passed via --skip-bad-units-file.
+    skip_set = _load_skipped_unit_ids(args.config, args.skip_bad_units_file)
+    if skip_set:
+        before = len(candidates)
+        candidates = [c for c in candidates if c.metadata.get("unit_id", "") not in skip_set]
+        dropped = before - len(candidates)
+        if dropped:
+            print(f"[skip-bad-units] removed {dropped} candidates from data-quality skip list "
+                  f"(config + {args.skip_bad_units_file or 'no file'})", flush=True)
+            logger.info("skip_bad_units", extra={"payload": {"skipped": dropped, "total_skip_set": len(skip_set)}})
 
     if args.vectorbt or args.vectorbt_only:
         print(f"Running VectorBT filter on {len(candidates)} candidates x grid...")

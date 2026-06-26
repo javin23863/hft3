@@ -13,6 +13,17 @@ run_hft_campaign: false
 hft_stages: [0]
 vectorbt_min_trades: 3
 
+# Data-quality skip list — unit IDs that should never be evaluated because
+# their NPZ files are known to lack OHLCV data (empty arrays, corrupt files,
+# missing bars).  These are skipped before dispatch without counting as
+# failures.  Run scripts/check_lake_data.py to generate a fresh report.
+# Comments explain why each unit is skipped.
+skipped_unit_ids:
+  # ZN.v.0_EIA_NATGAS_2019_11_28 — NPZ exists but contains <2 MBO events;
+  # cannot build OHLCV bars.  Feed issue on 2019-11-28, regeneration not
+  # attempted yet.  Detected: 2026-06-26 full-lake run abort.
+  - ZN.v.0_EIA_NATGAS_2019_11_28_TIGHT
+
 # Edge-evaluation defaults for direct `scripts/run_pipeline.py` runs live in
 # config/research_pipeline/default_runtime.json. Keep the loop aligned with
 # those gates when forwarding explicit pipeline runtime overrides.

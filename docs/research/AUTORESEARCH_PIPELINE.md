@@ -105,6 +105,72 @@ Legacy `scripts/run_pipeline.py` now loads a separate JSON runtime config
 (`config/research_pipeline/default_runtime.json` by default). This is distinct
 from the autoresearch loop YAML passed through `--config`.
 
+## Data-Quality Pre-Check and Skip List
+
+Missing bars in an OHLCV file invalidate trading signals and performance
+metrics derived from that period. A single corrupt or empty NPZ file can
+abort an entire full-lake backtest when `abort_on_failed_units=true`. The
+data-quality pre-check catches these files *before* dispatch.
+
+### Pre-checking the NPZ lake
+
+```bash
+# Check every NPZ file under HFT3_NPZ_ROOT for OHLCV validity
+python scripts/check_lake_data.py
+
+# Filter by instrument or event substring
+python scripts/check_lake_data.py --pattern ZN
+
+# Write report to a custom path
+python scripts/check_lake_data.py --out runtime/reports/lake_data_quality.json
+```
+
+The script runs `research_pipeline.data_quality.check_npz_ohlcv()` on each
+`.npz` file, checking that the MBO event array (`data` member) has ≥2 rows
+with the required fields (`ev`, `local_ts`, `px`, `qty`, `order_id`). Files
+that pass `--require-runnable-npz` (existence + row count) but contain
+insufficient data to build OHLCV bars are flagged as invalid.
+
+### Skip list mechanism
+
+Unit IDs flagged by the pre-check (or known-bad from prior runs) are
+maintained in `config/autoresearch/default.yaml` under `skipped_unit_ids`:
+
+```yaml
+skipped_unit_ids:
+  - ZN.v.0_EIA_NATGAS_2019_11_28_TIGHT  # NPZ exists but <2 MBO events
+```
+
+`run_pipeline.py` merges this config list with an optional
+`--skip-bad-units-file` (output of `check_lake_data.py`) and removes matching
+candidates before any VectorBT compute. Skipped units are logged but not
+counted as failures.
+
+The v2 paid-screen orchestrator (`run_vectorbt_paid_screen_v2.py`) accepts
+the same `--skip-bad-units-file` flag and removes matching units before
+batch grouping.
+
+### Failure handling
+
+- `abort_on_failed_units` defaults to **false** for multi-event / full-lake
+  runs. A single bad NPZ no longer kills 217 workers.
+- `--fail-fast` forces `abort_on_failed_units=true` for CI or single-unit
+  tests where immediate abort is desired.
+- `NoOHLCVDataError` (in `research_pipeline.data_quality`) distinguishes
+  data-quality failures from algorithmic failures. The paid-screen batch
+  path tags these with `error_category="data_quality"`.
+- The run manifest includes `failure_counts_by_type` — a dictionary keyed
+  by `"{error_category}:{error}"` (e.g. `data_quality:no_ohlcv_data: 18`)
+  to separate data issues from model failures.
+
+### Fixing bad NPZ files
+
+Once a unit is flagged, attempt to regenerate its OHLCV bars from raw
+order-book or trade data. If regeneration succeeds, replace the faulty NPZ
+and remove the unit from the skip list. If regeneration is not possible
+(e.g. exchange feed was down), document the reason in the config comments
+and keep the unit in the permanent skip list.
+
 Each artifact-producing run writes:
 
 - `pipeline_runtime_config.json` — loaded/effective runtime defaults plus hash

@@ -208,6 +208,7 @@ class UnitScreeningResult:
     screening_artifact_path: str | None = None
     screening_artifact_hash: str | None = None
     error: str | None = None
+    error_category: str | None = None  # data_quality | algorithmic | timeout | system
     elapsed_seconds: float = 0.0
     promoted_ids: list[str] = field(default_factory=list)
     rejected_ids: list[str] = field(default_factory=list)

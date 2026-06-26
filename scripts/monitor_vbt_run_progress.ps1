@@ -122,7 +122,10 @@ if ($MaxRounds -le 0) {
     exit 0
 }
 
-scp -o ConnectTimeout=15 -P $Port scripts/audit_vbt_run_progress.py "${SshHost}:/root/hft3/repo/scripts/" | Out-Null
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+scp -o ConnectTimeout=15 -P $Port scripts/audit_vbt_run_progress.py "${SshHost}:/root/hft3/repo/scripts/" 2>&1 | Out-Null
+$ErrorActionPreference = $prevEap
 
 for ($round = 1; $round -le $MaxRounds; $round++) {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss UTC")
@@ -131,8 +134,11 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     $escSshHost = "'" + ($SshHost -replace "'", "'\''") + "'"
     $escTmux = "'" + ($TmuxSession -replace "'", "'\''") + "'"
     $escPattern = "'" + ($Pattern -replace "'", "'\''") + "'"
-    ssh -o ConnectTimeout=15 -p $Port $SshHost "cd /root/hft3/repo && export PYTHONPATH=/root/hft3/repo:/root/hft3/repo/packages VBT_HOST_LABEL=$escHostLabel VAST_SSH_HOST=$escSshHost VBT_TMUX_SESSION=$escTmux && python3 scripts/audit_vbt_run_progress.py --pattern $escPattern $AuditModeArg"
-    scp -o ConnectTimeout=15 -P $Port "${SshHost}:/root/hft3/repo/runtime/reports/vbt_run_progress_audit.json" "$Repo\runtime\reports\vbt_run_progress_audit.json" 2>$null | Out-Null
-    scp -o ConnectTimeout=15 -P $Port "${SshHost}:/root/hft3/repo/runtime/reports/vbt_full_status.json" "$Repo\runtime\reports\vbt_full_status.json" 2>$null | Out-Null
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    ssh -o ConnectTimeout=15 -p $Port $SshHost "cd /root/hft3/repo && export PYTHONPATH=/root/hft3/repo:/root/hft3/repo/packages VBT_HOST_LABEL=$escHostLabel VAST_SSH_HOST=$escSshHost VBT_TMUX_SESSION=$escTmux && python3 scripts/audit_vbt_run_progress.py --pattern $escPattern $AuditModeArg" 2>&1
+    scp -o ConnectTimeout=15 -P $Port "${SshHost}:/root/hft3/repo/runtime/reports/vbt_run_progress_audit.json" "$Repo\runtime\reports\vbt_run_progress_audit.json" 2>&1 | Out-Null
+    scp -o ConnectTimeout=15 -P $Port "${SshHost}:/root/hft3/repo/runtime/reports/vbt_full_status.json" "$Repo\runtime\reports\vbt_full_status.json" 2>&1 | Out-Null
+    $ErrorActionPreference = $prevEap
     if ($round -lt $MaxRounds) { Start-Sleep -Seconds $IntervalSec }
 }

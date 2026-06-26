@@ -18,3 +18,16 @@ PYTHON="${PYTHON:-python3}"
   "requests>=2.31.0" \
   pydantic scipy pytest
 bash scripts/install_hftbacktest_realism_deps.sh
+
+if "$PYTHON" -m pip install --quiet --upgrade "pybind11>=2.10" 2>/dev/null \
+   && PYBIND_DIR="$("$PYTHON" -m pybind11 --cmakedir 2>/dev/null)" && [ -n "$PYBIND_DIR" ]; then
+  if cmake -B "$REPO_ROOT/build" -S "$REPO_ROOT" -DCMAKE_BUILD_TYPE=Release \
+          -DPython3_EXECUTABLE="$(command -v "$PYTHON")" -Dpybind11_DIR="$PYBIND_DIR" -Wno-dev \
+          && cmake --build "$REPO_ROOT/build" --target hft3_features_cpp; then
+    echo "hft3_features_cpp built under $REPO_ROOT/build"
+  else
+    echo "WARNING: hft3_features_cpp build failed; workers will use python extractor fallback" >&2
+  fi
+else
+  echo "WARNING: pybind11 unavailable; hft3_features_cpp not built (python fallback)" >&2
+fi
