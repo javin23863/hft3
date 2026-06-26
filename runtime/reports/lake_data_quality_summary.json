@@ -1,0 +1,15 @@
+{
+  "checked_at": "2026-06-26T12:27:38.406192+00:00",
+  "source": "runtime/reports/vbt_full_units.jsonl",
+  "valid_count": 1092750,
+  "invalid_count": 50,
+  "invalid_reasons": {
+    "insufficient_events": 50
+  },
+  "invalid_sample_unit_ids": [
+    "ABSORPTION_FADE_ZN.v.0_EIA_NATGAS_2019_11_28_TIGHT",
+    "SPREAD_BLOWOUT_RECOMPRESSION_ZN.v.0_EIA_NATGAS_2019_11_28_TIGHT",
+    "ZN_ZB_ES_NQ_MACRO_IMPULSE_ZN.v.0_EIA_NATGAS_2019_11_28_TIGHT"
+  ],
+  "note": "Full unit-id lists live in local runtime/reports/lake_data_quality.json (not committed)."
+}

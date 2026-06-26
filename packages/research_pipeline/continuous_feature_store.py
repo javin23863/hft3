@@ -109,6 +109,28 @@ def assert_no_forbidden_feature_names(feature_names: Sequence[str]) -> None:
                 raise ValueError(f"forbidden_lookahead_feature:{name}")
 
 
+def validate_feature_group_missingness(group: Mapping[str, Any]) -> list[str]:
+    """Return missingness validation errors for one feature-group shell."""
+    errors: list[str] = []
+    row_count = group.get("row_count", 0)
+    if not isinstance(row_count, int) or row_count < 0:
+        errors.append("invalid_row_count")
+        return errors
+    missingness = group.get("missingness_ratio")
+    if row_count == 0:
+        return errors
+    if missingness is None:
+        errors.append("missing_missingness_ratio")
+        return errors
+    if isinstance(missingness, bool) or not isinstance(missingness, (int, float)):
+        errors.append("invalid_missingness_ratio")
+        return errors
+    ratio = float(missingness)
+    if ratio < 0.0 or ratio > 1.0:
+        errors.append("missingness_out_of_range")
+    return errors
+
+
 def validate_feature_row_pit(row: Mapping[str, Any]) -> list[str]:
     """Return PIT validation errors for one feature-matrix row shell."""
     errors: list[str] = []
@@ -162,6 +184,8 @@ def validate_feature_matrix_pit(matrix: Mapping[str, Any]) -> list[str]:
                 assert_no_forbidden_feature_names(feature_names)
             except ValueError as exc:
                 errors.append(f"group[{index}]:{exc}")
+            for err in validate_feature_group_missingness(group):
+                errors.append(f"group[{index}]:{err}")
 
     rows = matrix.get("rows") or []
     if not isinstance(rows, list):
@@ -217,6 +241,9 @@ def write_continuous_feature_store(repo_root: Path, matrix: dict[str, Any]) -> P
     pit_errors = validate_feature_matrix_pit(matrix)
     if pit_errors:
         raise ValueError(f"feature_matrix_pit_invalid:{','.join(pit_errors)}")
+    summary = matrix.setdefault("summary", {})
+    if isinstance(summary, dict):
+        summary["pit_validated"] = True
     path = feature_store_path(repo_root, week)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(matrix, indent=2, sort_keys=True) + "\n", encoding="utf-8")

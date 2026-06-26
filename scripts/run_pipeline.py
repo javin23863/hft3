@@ -119,6 +119,10 @@ def _run_continuous_lane(args: argparse.Namespace) -> int:
         write_coverage_manifest,
     )
     from research_pipeline.continuous_universe import validate_universe_profile
+    from research_pipeline.continuous_feature_store import (
+        build_continuous_feature_store_stub,
+        write_continuous_feature_store,
+    )
     from research_pipeline.relationship_graph import (
         build_relationship_graph_stub,
         write_relationship_graph,
@@ -148,6 +152,7 @@ def _run_continuous_lane(args: argparse.Namespace) -> int:
         "manifest_path": str(manifest_path),
     }
 
+    graph_path: Path | None = None
     if args.build_relationship_graph:
         graph = build_relationship_graph_stub(
             repo_root=repo_root,
@@ -158,6 +163,21 @@ def _run_continuous_lane(args: argparse.Namespace) -> int:
         payload["status"] = "continuous_manifest_and_graph"
         payload["relationship_graph_path"] = str(graph_path)
         payload["graph_summary"] = graph.get("summary")
+
+    if args.build_feature_store:
+        matrix = build_continuous_feature_store_stub(
+            repo_root=repo_root,
+            rithmic_week=args.rithmic_week,
+            universe_profile=profile,
+            relationship_graph_path=graph_path,
+        )
+        fs_path = write_continuous_feature_store(repo_root, matrix)
+        payload["feature_store_path"] = str(fs_path)
+        payload["feature_store_summary"] = matrix.get("summary")
+        if payload["status"] == "continuous_manifest":
+            payload["status"] = "continuous_manifest_and_feature_store"
+        elif payload["status"] == "continuous_manifest_and_graph":
+            payload["status"] = "continuous_manifest_graph_and_feature_store"
 
     _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
     return 0
@@ -192,6 +212,11 @@ def main() -> int:
         "--build-relationship-graph",
         action="store_true",
         help="Continuous lane: also write relationship graph stub for --rithmic-week",
+    )
+    parser.add_argument(
+        "--build-feature-store",
+        action="store_true",
+        help="Continuous lane: also write PIT-validated feature store stub for --rithmic-week",
     )
     parser.add_argument(
         "--symbol",
@@ -276,6 +301,12 @@ def main() -> int:
     if args.lane == "event" and args.build_relationship_graph:
         print(
             "Error: --build-relationship-graph requires --lane continuous.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.lane == "event" and args.build_feature_store:
+        print(
+            "Error: --build-feature-store requires --lane continuous.",
             file=sys.stderr,
         )
         return 2
