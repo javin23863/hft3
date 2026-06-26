@@ -53,7 +53,7 @@ def test_parse_continuous_lane_profile_returns_family() -> None:
     assert profile.primary_model_id == "CROSS_MARKET_OFI_IMPACT"
     assert profile.model_family == "cross_asset_flow"
     assert profile.universe_profile == "full_cme_research"
-    assert profile.relationship_family is None  # multi-family; disambiguated in Phase 5
+    assert profile.relationship_family == "metals_complex"
     assert profile.param_ranges["ofi_beta_lag"] == [1.0, 10.0]
 
 

@@ -74,12 +74,130 @@ def _event_lane_slug_set() -> set[str]:
     return {slug for slug in all_slugs() if slug not in _continuous_slug_set()}
 
 
-def _relationship_family_from_entry(entry: dict) -> Optional[str]:
-    """Single graph relationship type when registry lists exactly one; else Phase 5 disambiguation."""
-    types = entry.get("valid_relationship_types") or []
-    if len(types) != 1:
+_FAMILY_THESIS_PATTERNS: dict[str, list[str]] = {
+    "micro_standard": [
+        r"\bmicro\b",
+        r"\bMES\b",
+        r"\bMNQ\b",
+        r"\bMGC\b",
+        r"\bMCL\b",
+        r"\bES\b",
+        r"\bNQ\b",
+        r"lead.?lag",
+        r"flow transfer",
+    ],
+    "metals_complex": [
+        r"\bGC\b",
+        r"\bSI\b",
+        r"\bHG\b",
+        r"\bMGC\b",
+        r"gold",
+        r"silver",
+        r"metal",
+    ],
+    "energy_complex": [
+        r"\bCL\b",
+        r"\bRB\b",
+        r"\bHO\b",
+        r"\bNG\b",
+        r"\bMCL\b",
+        r"crude",
+        r"energy",
+        r"natgas",
+    ],
+    "rates_curve": [
+        r"\bZT\b",
+        r"\bZF\b",
+        r"\bZN\b",
+        r"\bZB\b",
+        r"\bUB\b",
+        r"rates",
+        r"treasury",
+        r"curve",
+    ],
+    "calendar_front_second": [
+        r"calendar",
+        r"front.?second",
+        r"term structure",
+        r"roll",
+    ],
+    "seasonal_state": [
+        r"seasonal",
+        r"seasonality",
+        r"day.?of.?week",
+        r"month.?of.?year",
+    ],
+}
+
+
+def _graph_active_families(graph: Optional[dict[str, Any]]) -> set[str]:
+    if not graph:
+        return set()
+    active: set[str] = set()
+    for edge in graph.get("edges") or []:
+        if not isinstance(edge, dict):
+            continue
+        family_id = edge.get("family_id")
+        if isinstance(family_id, str) and family_id.strip():
+            active.add(family_id.strip())
+    for family_id in graph.get("families") or []:
+        if isinstance(family_id, str) and family_id.strip():
+            active.add(family_id.strip())
+    return active
+
+
+def _score_relationship_family(thesis: str, family_id: str) -> int:
+    score = 0
+    for pattern in _FAMILY_THESIS_PATTERNS.get(family_id, []):
+        if re.search(pattern, thesis, re.I):
+            score += 1
+    return score
+
+
+def disambiguate_relationship_family(
+    thesis: str,
+    valid_types: list[str],
+    *,
+    relationship_graph: Optional[dict[str, Any]] = None,
+) -> Optional[str]:
+    """Pick one relationship family when registry lists multiple (Phase 5)."""
+    if not valid_types:
         return None
-    return str(types[0])
+    if len(valid_types) == 1:
+        return str(valid_types[0])
+
+    candidates = [str(t) for t in valid_types]
+    scores = {family_id: _score_relationship_family(thesis, family_id) for family_id in candidates}
+    active = _graph_active_families(relationship_graph)
+    for family_id in candidates:
+        if family_id in active:
+            scores[family_id] += 1
+
+    best_score = max(scores.values())
+    if best_score <= 0:
+        return None
+    winners = [family_id for family_id, score in scores.items() if score == best_score]
+    if len(winners) != 1:
+        return None
+    return winners[0]
+
+
+def _relationship_family_from_entry(
+    entry: dict,
+    *,
+    thesis: str = "",
+    relationship_graph: Optional[dict[str, Any]] = None,
+) -> Optional[str]:
+    types = entry.get("valid_relationship_types") or []
+    if not types:
+        return None
+    if len(types) == 1:
+        return str(types[0])
+    return disambiguate_relationship_family(
+        thesis,
+        [str(t) for t in types],
+        relationship_graph=relationship_graph,
+    )
 
 
 def _slug_from_parentheses(thesis: str) -> Optional[str]:
@@ -134,6 +252,7 @@ def parse_continuous_lane_profile(
     *,
     universe_profile: str = "full_cme_research",
     use_llm: bool = False,
+    relationship_graph: Optional[dict[str, Any]] = None,
 ) -> ContinuousLaneProfile:
     """Parse continuous microstructure lane profile without universe expansion."""
     thesis = thesis.strip()
@@ -154,7 +273,11 @@ def parse_continuous_lane_profile(
         primary_model_id=model_id,
         model_family=str(entry.get("model_family") or "unknown"),
         universe_profile=universe_profile,
-        relationship_family=_relationship_family_from_entry(entry),
+        relationship_family=_relationship_family_from_entry(
+            entry,
+            thesis=thesis,
+            relationship_graph=relationship_graph,
+        ),
         param_ranges=param_ranges,
         source="heuristic",
     )

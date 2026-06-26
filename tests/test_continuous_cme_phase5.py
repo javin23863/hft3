@@ -263,3 +263,116 @@ def test_run_pipeline_scan_flag_rejects_event_lane() -> None:
     )
     assert proc.returncode == 2
     assert "scan-continuous-candidates" in proc.stderr
+
+
+def test_cross_market_feature_shell_and_pair_validation() -> None:
+    from research_pipeline.cross_market_features import (
+        CROSS_MARKET_FEATURE_NAMES,
+        assert_cross_market_feature_names,
+        empty_cross_market_feature_shell,
+        validate_cross_market_pair,
+    )
+
+    shell = empty_cross_market_feature_shell(relationship_id="metals_complex:GC->SI")
+    assert shell["group_id"] == "cross_market"
+    assert shell["feature_names"] == list(CROSS_MARKET_FEATURE_NAMES)
+    assert_cross_market_feature_names(["lagged_ofi_beta"])
+    validate_cross_market_pair("GC", "SI")
+    with pytest.raises(ValueError, match="cross_market_self_pair"):
+        validate_cross_market_pair("GC", "GC")
+    with pytest.raises(ValueError, match="unknown_cross_market_feature"):
+        assert_cross_market_feature_names(["book_imbalance_future_bar"])
+
+
+def test_commodity_structure_shell_validation() -> None:
+    from research_pipeline.commodity_structure import (
+        COMMODITY_COMPLEX_FAMILY_IDS,
+        empty_commodity_structure_shell,
+        validate_commodity_complex_id,
+    )
+
+    assert "rates_curve" in COMMODITY_COMPLEX_FAMILY_IDS
+    shell = empty_commodity_structure_shell(complex_id="energy_complex")
+    assert shell["group_id"] == "calendar_curve"
+    assert shell["complex_id"] == "energy_complex"
+    with pytest.raises(ValueError, match="unknown_commodity_complex"):
+        validate_commodity_complex_id("micro_standard")
+
+
+def test_seasonal_state_feature_shell() -> None:
+    from research_pipeline.seasonal_state import (
+        SEASONAL_STATE_FEATURE_NAMES,
+        assert_seasonal_state_feature_names,
+        empty_seasonal_state_shell,
+    )
+
+    shell = empty_seasonal_state_shell()
+    assert shell["group_id"] == "seasonal_state"
+    assert shell["feature_names"] == list(SEASONAL_STATE_FEATURE_NAMES)
+    assert_seasonal_state_feature_names(["seasonal_state_weight"])
+    with pytest.raises(ValueError, match="unknown_seasonal_state_feature"):
+        assert_seasonal_state_feature_names(["lagged_ofi_beta"])
+
+
+def test_disambiguate_relationship_family_from_thesis_keywords() -> None:
+    from research_pipeline.hypothesis_parser import disambiguate_relationship_family
+
+    assert disambiguate_relationship_family(
+        "Cross-market OFI impact on GC to SI",
+        ["metals_complex", "energy_complex", "rates_curve"],
+    ) == "metals_complex"
+    assert disambiguate_relationship_family(
+        "Crude CL RB energy complex OFI",
+        ["metals_complex", "energy_complex", "rates_curve"],
+    ) == "energy_complex"
+    assert disambiguate_relationship_family(
+        "Treasury ZN ZB curve impulse",
+        ["rates_curve", "calendar_front_second"],
+    ) == "rates_curve"
+
+
+def test_disambiguate_relationship_family_uses_graph_context() -> None:
+    from research_pipeline.hypothesis_parser import disambiguate_relationship_family
+
+    graph = {
+        "edges": [
+            {"family_id": "metals_complex", "source_root": "GC", "target_root": "SI"},
+        ],
+        "families": ["metals_complex"],
+    }
+    result = disambiguate_relationship_family(
+        "Cross-market OFI impact",
+        ["metals_complex", "energy_complex", "rates_curve"],
+        relationship_graph=graph,
+    )
+    assert result == "metals_complex"
+
+
+def test_parse_continuous_lane_profile_disambiguates_with_graph() -> None:
+    from research_pipeline.hypothesis_parser import parse_continuous_lane_profile
+    from research_pipeline.relationship_graph import build_relationship_graph_stub
+
+    graph = build_relationship_graph_stub(
+        repo_root=REPO,
+        rithmic_week="2026-W27",
+        universe_profile="full_cme_research",
+    )
+    profile = parse_continuous_lane_profile(
+        "Structural spread dislocation on MES ES micro",
+        relationship_graph=graph,
+        use_llm=False,
+    )
+    assert profile.primary_model_id == "STRUCTURAL_SPREAD_MICRO_DISLOCATION"
+    assert profile.relationship_family == "micro_standard"
+
+
+def test_parse_continuous_lane_profile_calendar_front_second() -> None:
+    from research_pipeline.hypothesis_parser import parse_continuous_lane_profile
+
+    profile = parse_continuous_lane_profile(
+        "Calendar curve front second roll impulse",
+        use_llm=False,
+    )
+    assert profile.primary_model_id == "CALENDAR_CURVE_MICRO_IMPULSE"
+    assert profile.relationship_family == "calendar_front_second"
+
