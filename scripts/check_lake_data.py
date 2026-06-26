@@ -424,7 +424,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     if summary_path is not None:
         print(f"summary={summary_path}")
-    return 0
+    # Signal invalid units to CI: non-zero exit when any invalid units were found.
+    return 1 if report.get("invalid_count", 0) > 0 else 0
 
 
 if __name__ == "__main__":

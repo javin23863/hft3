@@ -358,9 +358,10 @@ def psr(returns: Iterable[float], sharpe_benchmark: float = 0.0, periods: int = 
         return 0.0
     skew = stream_skewness(arr)
     kurt = stream_kurtosis(arr, excess=True) + 3.0
-    denom = math.sqrt(1.0 - skew * sr + ((kurt - 1.0) / 4.0) * sr * sr)
-    if denom <= 0.0:
+    variance_term = 1.0 - skew * sr + ((kurt - 1.0) / 4.0) * sr * sr
+    if variance_term <= 0.0:
         return 0.0
+    denom = math.sqrt(variance_term)
     z = (sr - sharpe_benchmark) * math.sqrt(n - 1) / denom
     return _normal_cdf(z)
 

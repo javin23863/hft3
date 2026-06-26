@@ -222,7 +222,10 @@ def evaluate_continuous_from_candidate(
     if trades is None:
         trades = meta.get("trades") or []
 
-    has_returns = bool(list(gross_returns) if not isinstance(gross_returns, (list, tuple)) else gross_returns)
+    # Materialise once so generators are not exhausted by the emptiness check
+    # and then re-consumed by evaluate_continuous below.
+    gross_returns_list = list(gross_returns) if not isinstance(gross_returns, (list, tuple)) else list(gross_returns)
+    has_returns = len(gross_returns_list) > 0
     if not has_returns and not trades:
         return EvaluationResult(
             candidate=candidate,
@@ -247,7 +250,7 @@ def evaluate_continuous_from_candidate(
         )
 
     payload = evaluate_continuous(
-        gross_returns=gross_returns,
+        gross_returns=gross_returns_list,
         trades=trades,
         candidate=cand_map,
         num_trials=max(1, int(meta.get("num_trials", num_trials))),
