@@ -139,18 +139,20 @@ def evaluate_continuous(
     ``EvaluationResult`` plumbing and is the function tests call directly.
     """
     gross = np.asarray([r for r in gross_returns if isinstance(r, (int, float)) and np.isfinite(r)], dtype=np.float64)
+    # Materialise trades once — it may be a generator and is consumed below.
+    trades_list = list(trades)
     cfg = _cost_config_for_candidate(candidate)
     gross_pnl = float(gross.sum())
-    cost = apply_continuous_costs(gross_pnl, list(trades), cfg)
+    cost = apply_continuous_costs(gross_pnl, trades_list, cfg)
 
-    net_returns = cost_adjusted_returns(gross.tolist(), list(trades), cfg)
+    net_returns = cost_adjusted_returns(gross.tolist(), trades_list, cfg)
     net_returns_list = list(net_returns)
     stats = summary_metrics(net_returns_list, num_trials=max(1, num_trials))
     stats_gross = summary_metrics(gross.tolist(), num_trials=max(1, num_trials))
     pbo = cscv_pbo(net_returns_list, random_state=pbo_random_state)
     wf = walk_forward_eval(net_returns_list)
     power = power_summary(net_returns_list)
-    duration = _trade_duration_metrics(list(trades), cost.net_pnl)
+    duration = _trade_duration_metrics(trades_list, cost.net_pnl)
 
     entry = {}
     try:
