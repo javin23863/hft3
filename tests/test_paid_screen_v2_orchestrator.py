@@ -414,6 +414,41 @@ class TestV2ResumeManifestAccounting:
         assert failed == 0
 
 
+class TestV2DataQualitySkipAccounting:
+    def test_data_quality_skips_not_ok_cached(self):
+        v2 = _load_v2_module()
+        dq = v2._data_quality_skipped_unit_result("bad_u1")
+        assert dq["status"] == "SKIPPED"
+        assert dq["failure_class"] == "data_quality"
+        assert dq["error"] == "data_quality_unit_skipped"
+        assert dq["status"] != "OK_CACHED"
+
+    def test_dq_and_resume_cached_count_separately(self, tmp_path):
+        v2 = _load_v2_module()
+        unit_dir = tmp_path / "units" / "u1"
+        unit_dir.mkdir(parents=True)
+        (unit_dir / "screening_artifact.json").write_text(
+            json.dumps(
+                {
+                    "screening_artifact_hash": "abc123",
+                    "promoted_ids": ["p1"],
+                    "rejected_ids": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        resume = v2._resume_cached_unit_result(tmp_path, "u1")
+        dq = v2._data_quality_skipped_unit_result("bad_u2")
+        assert resume["status"] == "OK_CACHED"
+        completed, failed, skipped = v2._count_work_units([])
+        completed += 1  # one resume-cached unit only
+        skipped += 1  # one pre-dispatch DQ skip
+        assert completed == 1
+        assert skipped == 1
+        assert failed == 0
+        assert dq["failure_class"] == "data_quality"
+
+
 class TestDrainWorkersWallClockBudget:
     def test_drain_respects_run_wall_clock_deadline(self):
         v2 = _load_v2_module()

@@ -152,6 +152,18 @@ class TestScreenPaidBatch:
         # The returned dict should have model_id or slug
         assert "model_id" in model or "slug" in model
 
+    def test_model_resolution_error_sets_failure_class(self):
+        """Model-resolution ERROR rows tag failure_class=model."""
+        from backtest_pipeline.src.paid_screen_batch import _resolve_models_without_screening
+
+        ctx = make_context()
+        units = [make_unit(unit_id="u_bad", model_id="__NONEXISTENT_MODEL__")]
+        profiler = RunProfiler()
+        results = _resolve_models_without_screening(units, ctx, profiler)
+        errors = [r for r in results if r.status == "ERROR"]
+        assert len(errors) == 1
+        assert errors[0].failure_class == "model"
+
     def test_build_candidate_model_attaches_feature_recipe_hash(self):
         unit = make_unit()
         model_entry = {"model_id": "HYP_5", "hyp_id": 5}

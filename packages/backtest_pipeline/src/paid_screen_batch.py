@@ -108,6 +108,7 @@ def _resolve_models_without_screening(
                         unit_id=unit.unit_id,
                         status="ERROR",
                         error=str(e),
+                        failure_class="model",
                     ))
 
     for unit in units:

@@ -197,6 +197,22 @@ def _persist_unit_artifact(
     return None
 
 
+def _data_quality_skipped_unit_result(unit_id: str) -> Dict[str, Any]:
+    """Manifest row for a unit skipped before dispatch due to data quality."""
+    return {
+        "unit_id": unit_id,
+        "status": "SKIPPED",
+        "screening_artifact_path": None,
+        "screening_artifact_relpath": _unit_artifact_relpath(unit_id),
+        "screening_artifact_hash": None,
+        "error": "data_quality_unit_skipped",
+        "failure_class": "data_quality",
+        "elapsed_seconds": 0.0,
+        "promoted_ids": [],
+        "rejected_ids": [],
+    }
+
+
 def _resume_cached_unit_result(out_dir: Path, unit_id: str) -> Dict[str, Any]:
     """Manifest row for a resume-skipped unit with a valid on-disk artifact."""
     artifact_path = out_dir / _unit_artifact_relpath(unit_id)
@@ -1162,8 +1178,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         repo_root, events_csv_hash, lake_manifest_hash, git_commit=git_commit
     )
 
+    data_quality_result_dicts = [
+        _data_quality_skipped_unit_result(uid) for uid in data_quality_skipped_unit_ids
+    ]
+
     # Resume: filter out units whose artifact validates and matches run context
-    skipped_unit_ids: List[str] = list(data_quality_skipped_unit_ids)
+    resume_skipped_unit_ids: List[str] = []
     if args.resume:
         kept: List[PaidScreenUnit] = []
         for unit in units:
@@ -1177,13 +1197,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                 repo_root=repo_root,
                 git_commit=git_commit,
             ):
-                skipped_unit_ids.append(unit.unit_id)
+                resume_skipped_unit_ids.append(unit.unit_id)
             else:
                 kept.append(unit)
         units = kept
-        if skipped_unit_ids:
-            print(f"[resume] skipping {len(skipped_unit_ids)} units with valid artifacts",
-                  flush=True)
+        if resume_skipped_unit_ids:
+            print(
+                f"[resume] skipping {len(resume_skipped_unit_ids)} units with valid artifacts",
+                flush=True,
+            )
 
     bootstrap_started = datetime.now(timezone.utc)
     if not args.dry_run:
@@ -1198,10 +1220,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             units_raw_count=len(units_raw),
             completed=0,
             failed=0,
-            skipped=len(skipped_unit_ids),
-            unit_result_dicts=[],
+            skipped=len(data_quality_skipped_unit_ids),
+            unit_result_dicts=data_quality_result_dicts.copy(),
             resume_cached_results=[],
-            skipped_unit_ids=skipped_unit_ids,
+            skipped_unit_ids=resume_skipped_unit_ids,
             events_csv_hash=events_csv_hash,
             lake_manifest_hash=lake_manifest_hash,
             research_split=research_split,
@@ -1241,14 +1263,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     ]
 
     resume_cached_results = [
-        _resume_cached_unit_result(out_dir, uid) for uid in skipped_unit_ids
+        _resume_cached_unit_result(out_dir, uid) for uid in resume_skipped_unit_ids
     ]
 
     if not batches:
-        # All units skipped by resume — terminal OK when artifacts validate.
+        # All units skipped by resume and/or pre-dispatch data quality.
         started = datetime.now(timezone.utc)
         finished = datetime.now(timezone.utc)
         completed = len(resume_cached_results)
+        dq_skipped = len(data_quality_skipped_unit_ids)
         _write_run_manifest(
             manifest_path,
             status=determine_manifest_status(completed, 0, False, len(units_raw)),
@@ -1260,10 +1283,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             units_raw_count=len(units_raw),
             completed=completed,
             failed=0,
-            skipped=0,
-            unit_result_dicts=[],
+            skipped=dq_skipped,
+            unit_result_dicts=data_quality_result_dicts.copy(),
             resume_cached_results=resume_cached_results,
-            skipped_unit_ids=skipped_unit_ids,
+            skipped_unit_ids=resume_skipped_unit_ids,
             events_csv_hash=events_csv_hash,
             lake_manifest_hash=lake_manifest_hash,
             research_split=research_split,
@@ -1274,13 +1297,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         aggregate_path = write_aggregate_screening_artifact(
             out_dir,
-            resume_cached_results,
+            data_quality_result_dicts + resume_cached_results,
             finished_at_utc=finished.isoformat(),
         )
         if aggregate_path:
             print(f"Aggregate screening artifact: {aggregate_path}")
         print(f"Manifest: {manifest_path}")
-        print(f"completed={completed} failed=0 skipped=0 units_per_hour=0.00")
+        print(
+            f"completed={completed} failed=0 skipped={dq_skipped} units_per_hour=0.00"
+        )
         return 0
 
     started = bootstrap_started
@@ -1314,6 +1339,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             return
         completed, failed, skipped = _count_work_units(partial_results)
         completed += len(resume_cached_results)
+        skipped += len(data_quality_skipped_unit_ids)
         collected_batches = int(run_state["collected_batches"])
         aborted = finished is not None and collected_batches < expected_batches
         elapsed_hours = max(
@@ -1338,9 +1364,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             completed=completed,
             failed=failed,
             skipped=skipped,
-            unit_result_dicts=partial_result_dicts.copy(),
+            unit_result_dicts=partial_result_dicts.copy() + data_quality_result_dicts,
             resume_cached_results=resume_cached_results,
-            skipped_unit_ids=skipped_unit_ids,
+            skipped_unit_ids=resume_skipped_unit_ids,
             events_csv_hash=events_csv_hash,
             lake_manifest_hash=lake_manifest_hash,
             research_split=research_split,
@@ -1391,10 +1417,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         units_raw_count=len(units_raw),
         completed=len(resume_cached_results),
         failed=0,
-        skipped=0,
-        unit_result_dicts=[],
+        skipped=len(data_quality_skipped_unit_ids),
+        unit_result_dicts=data_quality_result_dicts.copy(),
         resume_cached_results=resume_cached_results,
-        skipped_unit_ids=skipped_unit_ids,
+        skipped_unit_ids=resume_skipped_unit_ids,
         events_csv_hash=events_csv_hash,
         lake_manifest_hash=lake_manifest_hash,
         research_split=research_split,
@@ -1508,6 +1534,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     completed, failed, skipped = _count_work_units(all_results)
     completed += len(resume_cached_results)
+    skipped += len(data_quality_skipped_unit_ids)
     collected_batches = len(collected)
     aborted = collected_batches < expected_batches or drain_stop_reason is not None
     elapsed_hours = max((finished - started).total_seconds() / 3600.0, 1e-9)
@@ -1525,9 +1552,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         completed=completed,
         failed=failed,
         skipped=skipped,
-        unit_result_dicts=partial_result_dicts,
+        unit_result_dicts=partial_result_dicts + data_quality_result_dicts,
         resume_cached_results=resume_cached_results,
-        skipped_unit_ids=skipped_unit_ids,
+        skipped_unit_ids=resume_skipped_unit_ids,
         events_csv_hash=events_csv_hash,
         lake_manifest_hash=lake_manifest_hash,
         research_split=research_split,
@@ -1539,7 +1566,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         profiler_summaries=profiler_summaries,
         units_per_hour=units_per_hour,
     )
-    unit_result_dicts = partial_result_dicts + resume_cached_results
+    unit_result_dicts = partial_result_dicts + data_quality_result_dicts + resume_cached_results
     aggregate_path = write_aggregate_screening_artifact(
         out_dir,
         unit_result_dicts,

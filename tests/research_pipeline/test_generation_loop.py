@@ -519,6 +519,35 @@ def test_failure_stop_reason_exits_nonzero(tmp_path: Path) -> None:
     assert report2["stop_reason"] == "prior_generation_summary_missing"
 
 
+def test_all_candidates_dq_skipped_exits_zero(tmp_path: Path, monkeypatch) -> None:
+    """Campaign unit on skip list → terminal stop with status 0."""
+    monkeypatch.setattr(
+        "research_pipeline.generation_loop.propose_next_candidates",
+        _fresh_proposal_candidates,
+    )
+    event_id = "E1"
+    symbol = "MES"
+    cfg = AutoresearchConfig(
+        max_generations=1,
+        max_candidates_per_generation=2,
+        run_robustness=False,
+        symbol=symbol,
+        skipped_unit_ids=(f"{symbol}_{event_id}",),
+    )
+    code, report = run_autoresearch_loop(
+        repo_root=tmp_path,
+        thesis="fade",
+        event_id=event_id,
+        cfg=cfg,
+        no_llm=True,
+        filter_fn=_fake_filter,
+        persist_fn=_fake_persist,
+    )
+    assert code == 0
+    assert report["stop_reason"] == "data_quality_unit_skipped"
+    assert report["generations_run"] == 0
+
+
 def test_robustness_fn_forwards_frozen_params(tmp_path: Path, monkeypatch) -> None:
     captured: list[dict[str, Any]] = []
 
