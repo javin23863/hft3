@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -701,6 +702,27 @@ def _record_event_count_ok(rec: Dict[str, Any]) -> bool:
         return False
 
 
+def _npz_has_rows(path: Path) -> bool:
+    try:
+        import numpy as np  # type: ignore[import-not-found]
+
+        with zipfile.ZipFile(path) as archive:
+            names = archive.namelist()
+            ordered = [name for name in ("data.npy", "quotes.npy") if name in names]
+            for npy_name in ordered:
+                with archive.open(npy_name) as handle:
+                    version = np.lib.format.read_magic(handle)
+                    if version == (1, 0):
+                        shape, _fortran, _dtype = np.lib.format.read_array_header_1_0(handle)
+                    else:
+                        shape, _fortran, _dtype = np.lib.format.read_array_header_2_0(handle)
+                if bool(shape) and int(shape[0]) > 0:
+                    return True
+        return False
+    except Exception:
+        return False
+
+
 def _runnable_npz_key_state(repo_root: Path) -> tuple[Set[tuple[str, str]], bool]:
     """Build (symbol, event_id) keys from the lake runnable-NPZ authority."""
     from data_system.src.npz_resolver import npz_root
@@ -745,7 +767,7 @@ def _runnable_npz_key_state(repo_root: Path) -> tuple[Set[tuple[str, str]], bool
             eid = str(rec.get("event_id") or "").strip()
             for npz_path in _candidate_npz_paths(root, repo_root, raw_path, sym, eid):
                 parsed = _parse_npz_name(npz_path)
-                if parsed is None or not npz_path.is_file():
+                if parsed is None or not npz_path.is_file() or not _npz_has_rows(npz_path):
                     continue
                 parsed_sym, parsed_eid = parsed
                 add_key(sym or parsed_sym, eid or parsed_eid)
@@ -759,7 +781,7 @@ def _runnable_npz_key_state(repo_root: Path) -> tuple[Set[tuple[str, str]], bool
 
     for npz_path in root.glob("*_mbo.npz"):
         parsed = _parse_npz_name(npz_path)
-        if parsed is None:
+        if parsed is None or not _npz_has_rows(npz_path):
             continue
         sym, eid = parsed
         add_key(sym, eid)

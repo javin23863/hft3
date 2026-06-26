@@ -640,6 +640,53 @@ def test_require_runnable_npz_derives_npz_from_raw_parquet_output_path(
     assert [unit["unit_id"] for unit in kept] == ["keep"]
 
 
+def test_require_runnable_npz_drops_zero_row_npz(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Present but empty NPZ files are not runnable for paid-compute units."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    manifest = npz_root / "manifest.parquet"
+    manifest.write_bytes(b"placeholder")
+    empty_npz = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    full_npz = npz_root / "ES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(empty_npz, data=np.array([], dtype=np.int64))
+    np.savez(full_npz, data=np.arange(3, dtype=np.int64))
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(manifest))
+    monkeypatch.setattr(
+        generator,
+        "_read_manifest_parquet_records",
+        lambda _path: [
+            {"symbol": "MES", "event_id": "CPI_2020_01_15_TIGHT", "npz_path": empty_npz.name},
+            {"symbol": "ES", "event_id": "CPI_2020_01_15_TIGHT", "npz_path": full_npz.name},
+        ],
+    )
+
+    kept = generator._filter_runnable_npz_units(
+        [
+            {"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"},
+            {"unit_id": "keep", "symbol": "ES.v.0", "event_id": "CPI_2020_01_15_TIGHT"},
+        ],
+        REPO,
+    )
+
+    assert [unit["unit_id"] for unit in kept] == ["keep"]
+
+
+def test_runnable_npz_row_check_accepts_quotes_member(tmp_path: Path) -> None:
+    """Nonempty quotes-only NPZ files are runnable."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_file = tmp_path / "quotes_only.npz"
+    np.savez(npz_file, quotes=np.arange(3, dtype=np.int64))
+
+    assert generator._npz_has_rows(npz_file)
+
+
 def test_require_runnable_npz_manifest_authority_blocks_glob_fallback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
