@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import csv
 import json
 import os
 import re
+import struct
 import sys
+import warnings
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -55,6 +59,7 @@ RESEARCH_SPLIT_CHOICES: Dict[str, Optional[List[str]]] = {
     "all": None,
 }
 DEFAULT_ALL_ACTIVE_RESEARCH_SPLIT = "discovery_confirmation"
+_CURRENT_LAKE_NPZ_ROW_MEMBERS = ("data.npy", "quotes.npy")
 
 
 def _display_name_for_slug(slug: str) -> str:
@@ -701,6 +706,176 @@ def _record_event_count_ok(rec: Dict[str, Any]) -> bool:
         return False
 
 
+_NPY_MAGIC = b"\x93NUMPY"
+_NPY_SUPPORTED_VERSIONS = {(1, 0), (2, 0), (3, 0)}
+_NPY_MAX_HEADER_LEN = 1024 * 1024
+
+
+def _npy_basic_descr_itemsize(descr: str) -> Optional[int]:
+    text = descr.strip()
+    if not text:
+        return None
+    body = text[1:] if text[0] in "<>=|" else text
+    if not body:
+        return None
+    kind = body[0]
+    suffix = body[1:]
+    if kind == "O":
+        return None
+    if kind == "?":
+        return 1 if suffix in {"", "1"} else None
+    if kind in {"i", "u", "f", "c", "b", "m", "M"}:
+        match = re.fullmatch(r"(\d+)", suffix)
+        if not match:
+            return None
+        size = int(match.group(1))
+        return size if size > 0 else None
+    if kind == "S":
+        if not suffix.isdigit():
+            return None
+        size = int(suffix)
+        return size if size > 0 else None
+    if kind == "U":
+        if not suffix.isdigit():
+            return None
+        chars = int(suffix)
+        return chars * 4 if chars > 0 else None
+    return None
+
+
+def _npy_field_shape_count(raw_shape: Any) -> Optional[int]:
+    if isinstance(raw_shape, bool):
+        return None
+    if isinstance(raw_shape, int):
+        dims = (raw_shape,)
+    elif isinstance(raw_shape, tuple):
+        dims = raw_shape
+    else:
+        return None
+    count = 1
+    for dim in dims:
+        if not isinstance(dim, int) or isinstance(dim, bool) or dim < 0:
+            return None
+        count *= dim
+    return count
+
+
+def _npy_descr_itemsize(descr: Any) -> Optional[int]:
+    if isinstance(descr, str):
+        return _npy_basic_descr_itemsize(descr)
+    if not isinstance(descr, list):
+        return None
+    total = 0
+    for field in descr:
+        if not isinstance(field, tuple) or len(field) not in {2, 3}:
+            return None
+        if not isinstance(field[0], str):
+            return None
+        field_size = _npy_descr_itemsize(field[1])
+        if field_size is None:
+            return None
+        count = 1
+        if len(field) == 3:
+            count = _npy_field_shape_count(field[2])
+            if count is None:
+                return None
+        total += field_size * count
+    return total if total > 0 else None
+
+
+def _npy_shape_from_header(handle: Any) -> Optional[Tuple[Tuple[int, ...], int, int]]:
+    if handle.read(6) != _NPY_MAGIC:
+        return None
+    raw_version = handle.read(2)
+    if len(raw_version) != 2:
+        return None
+    version = (int(raw_version[0]), int(raw_version[1]))
+    if version not in _NPY_SUPPORTED_VERSIONS:
+        return None
+    if version == (1, 0):
+        raw_len = handle.read(2)
+        if len(raw_len) != 2:
+            return None
+        header_len = struct.unpack("<H", raw_len)[0]
+        prefix_len = 10
+        encoding = "latin1"
+    else:
+        raw_len = handle.read(4)
+        if len(raw_len) != 4:
+            return None
+        header_len = struct.unpack("<I", raw_len)[0]
+        prefix_len = 12
+        encoding = "latin1" if version == (2, 0) else "utf-8"
+    if header_len > _NPY_MAX_HEADER_LEN:
+        return None
+    raw_header = handle.read(header_len)
+    if len(raw_header) != header_len:
+        return None
+    try:
+        header = ast.literal_eval(raw_header.decode(encoding))
+    except (SyntaxError, ValueError, UnicodeDecodeError):
+        return None
+    if not isinstance(header, dict):
+        return None
+    if set(header) != {"descr", "fortran_order", "shape"}:
+        return None
+    if not isinstance(header.get("fortran_order"), bool):
+        return None
+    shape = header.get("shape")
+    if not isinstance(shape, tuple):
+        return None
+    dims: List[int] = []
+    for dim in shape:
+        if not isinstance(dim, int) or isinstance(dim, bool) or dim < 0:
+            return None
+        dims.append(dim)
+    itemsize = _npy_descr_itemsize(header.get("descr"))
+    if itemsize is None:
+        return None
+    return tuple(dims), itemsize, prefix_len + header_len
+
+
+def _npy_payload_bytes_required(shape: Tuple[int, ...], itemsize: int) -> int:
+    count = 1
+    for dim in shape:
+        if dim <= 0:
+            return 0
+        count *= dim
+    return count * itemsize
+
+
+def _npz_has_rows(path: Path) -> bool:
+    """Return True when a current lake-schema NPZ member declares rows.
+
+    Only `data.npy` and `quotes.npy` are accepted by design; future lake schema
+    member changes must update this constant and its focused tests explicitly.
+    """
+    try:
+        with zipfile.ZipFile(path) as archive:
+            infos = {info.filename: info for info in archive.infolist()}
+            ordered = [name for name in _CURRENT_LAKE_NPZ_ROW_MEMBERS if name in infos]
+            for npy_name in ordered:
+                info = infos[npy_name]
+                with archive.open(info) as handle:
+                    parsed = _npy_shape_from_header(handle)
+                if parsed is None:
+                    continue
+                shape, itemsize, header_bytes = parsed
+                if not shape or shape[0] <= 0 or header_bytes > info.file_size:
+                    continue
+                required_payload = _npy_payload_bytes_required(shape, itemsize)
+                if required_payload > 0 and (info.file_size - header_bytes) >= required_payload:
+                    return True
+        return False
+    except Exception as exc:
+        warnings.warn(
+            f"failed to inspect NPZ row count for {path}: {exc!r}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return False
+
+
 def _runnable_npz_key_state(repo_root: Path) -> tuple[Set[tuple[str, str]], bool]:
     """Build (symbol, event_id) keys from the lake runnable-NPZ authority."""
     from data_system.src.npz_resolver import npz_root
@@ -745,7 +920,7 @@ def _runnable_npz_key_state(repo_root: Path) -> tuple[Set[tuple[str, str]], bool
             eid = str(rec.get("event_id") or "").strip()
             for npz_path in _candidate_npz_paths(root, repo_root, raw_path, sym, eid):
                 parsed = _parse_npz_name(npz_path)
-                if parsed is None or not npz_path.is_file():
+                if parsed is None or not npz_path.is_file() or not _npz_has_rows(npz_path):
                     continue
                 parsed_sym, parsed_eid = parsed
                 add_key(sym or parsed_sym, eid or parsed_eid)
@@ -759,7 +934,7 @@ def _runnable_npz_key_state(repo_root: Path) -> tuple[Set[tuple[str, str]], bool
 
     for npz_path in root.glob("*_mbo.npz"):
         parsed = _parse_npz_name(npz_path)
-        if parsed is None:
+        if parsed is None or not _npz_has_rows(npz_path):
             continue
         sym, eid = parsed
         add_key(sym, eid)

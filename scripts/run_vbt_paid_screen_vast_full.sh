@@ -3,7 +3,7 @@
 # Authority: docs/project/VBT_PAID_SCREEN_UNIT_SCOPE.md, PAID_SCREEN_OPS_COMMANDS.md
 # Run ON the Vast instance (NPZ lake already present). Do not use 4-worker smoke topology.
 # Units default to Stage-A survivors; all-active is an explicit override only.
-# v2 env knobs: VBT_CACHE_MEMORY_LIMIT_MB, VBT_CACHE_MAX_ENTRIES, VBT_MAX_BATCHES_BEFORE_RECYCLE, VBT_RESUME=1
+# v2 env knobs: VBT_BATCH_TIMEOUT_SECONDS, VBT_CACHE_MEMORY_LIMIT_MB, VBT_CACHE_MAX_ENTRIES, VBT_MAX_BATCHES_BEFORE_RECYCLE, VBT_RESUME=1
 # v2 provenance: passes --events-csv + derived --events-csv-hash; lake hash from HFT3_MANIFEST_PATH
 # (sha256 file content) or declaration lake_manifest_hash — fail-closed before v2 launch if unavailable.
 # tmux wrapper: survives SSH disconnect — the run keeps going after you log out.
@@ -36,6 +36,11 @@ STAGE_A_SURVIVORS="${VBT_STAGE_A_SURVIVORS:-research_cards/stage_a_full/stage_a_
 DECL_FILE="${VBT_FULL_RUN_DECLARATION:-runtime/reports/vbt_full_run_declaration.json}"
 TMUX_SESSION="${VBT_TMUX_SESSION:-vbt_full}"
 STALL_MINUTES="${VBT_STALL_MINUTES:-30}"
+BATCH_TIMEOUT_SECONDS="${VBT_BATCH_TIMEOUT_SECONDS:-1800}"
+if [[ ! "$BATCH_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || (( BATCH_TIMEOUT_SECONDS < 1 )); then
+  echo "ERROR: VBT_BATCH_TIMEOUT_SECONDS must be a positive integer (got '$BATCH_TIMEOUT_SECONDS')" >&2
+  exit 1
+fi
 
 NPROC="$(nproc)"
 if [[ -n "${VBT_WORKERS:-}" ]]; then
@@ -132,13 +137,13 @@ fi
 GIT_HEAD="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 
 if [[ "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "1" || "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "true" ]]; then
-  python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" "$STALL_MINUTES" <<'PY'
+  python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" "$STALL_MINUTES" "$BATCH_TIMEOUT_SECONDS" <<'PY'
 import json
 import os
 import sys
 from pathlib import Path
 
-decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash, stall_minutes = sys.argv[1:10]
+decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash, stall_minutes, batch_timeout_seconds = sys.argv[1:11]
 payload = {
     "host_vcpu": int(host_vcpu),
     "reserved_vcpu": 26,
@@ -146,6 +151,7 @@ payload = {
     "expected_work_units": int(unit_count),
     "units_source": units_source,
     "stall_minutes": int(stall_minutes),
+    "batch_timeout_seconds": int(batch_timeout_seconds),
     "abort_on_failed_units": True,
     "git_head": git_head,
     "events_csv_hash": events_hash,
@@ -183,11 +189,11 @@ if [[ "$DECL_EXPECTED" != "$UNIT_COUNT" ]]; then
   exit 1
 fi
 
-python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" "$STALL_MINUTES" <<'PY'
+python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" "$STALL_MINUTES" "$BATCH_TIMEOUT_SECONDS" <<'PY'
 import json
 import sys
 
-decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash, stall_minutes = sys.argv[1:10]
+decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash, stall_minutes, batch_timeout_seconds = sys.argv[1:11]
 payload = json.load(open(decl_path, encoding="utf-8"))
 errors = []
 
@@ -210,6 +216,7 @@ expect_int("host_vcpu", int(host_vcpu))
 expect_int("reserved_vcpu", 26)
 expect_int("workers_requested", int(workers))
 expect_int("stall_minutes", int(stall_minutes))
+expect_int("batch_timeout_seconds", int(batch_timeout_seconds))
 expect_str("units_source", units_source)
 expect_str("git_head", git_head)
 expect_str("events_csv_hash", events_hash)
@@ -268,6 +275,7 @@ export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
   --workers $WORKERS \\
   --ready-gate-file '$GATE_FILE' \\
   --max-wall-clock-seconds \${VBT_MAX_WALL_CLOCK_SECONDS:-86400} \\
+  --batch-timeout-seconds $BATCH_TIMEOUT_SECONDS \\
   --max-batches-before-recycle \${VBT_MAX_BATCHES_BEFORE_RECYCLE:-0} \\
   --cache-memory-limit-mb \${VBT_CACHE_MEMORY_LIMIT_MB:-65536} \\
   --cache-max-entries \${VBT_CACHE_MAX_ENTRIES:-20000} \\
