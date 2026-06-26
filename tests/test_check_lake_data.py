@@ -28,6 +28,8 @@ _EXPECTED_KEYS = frozenset(
         "source",
         "valid_count",
         "invalid_count",
+        "invalid_reasons",
+        "scan_progress",
     }
 )
 
@@ -94,3 +96,52 @@ def test_scan_lake_data_requires_exactly_one_source(tmp_path: Path) -> None:
             manifest_only=False,
             symbols=("MES",),
         )
+
+
+def test_scan_lake_data_offset_and_max_units(tmp_path: Path, monkeypatch) -> None:
+    mod = _load_check_lake_data()
+    units_path = tmp_path / "units.jsonl"
+    units_path.write_text(
+        "".join(
+            f'{{"unit_id":"u{i}","symbol":"MES","event_id":"E{i}"}}\n'
+            for i in range(5)
+        ),
+        encoding="utf-8",
+    )
+
+    def _ok_row(row, repo_root, symbols):
+        uid = str(row["unit_id"])
+        return uid, "ok", str(tmp_path / f"{uid}.npz")
+
+    monkeypatch.setattr(mod, "_check_unit_row", _ok_row)
+    report = mod.scan_lake_data(
+        repo_root=tmp_path,
+        units_jsonl=units_path,
+        manifest_only=False,
+        symbols=("MES",),
+        offset=2,
+        max_units=2,
+        total_source_rows=5,
+    )
+    assert report["valid_count"] == 2
+    assert report["valid_unit_ids"] == ["u2", "u3"]
+    assert report["scan_progress"]["next_offset"] == 4
+    assert report["scan_progress"]["complete"] is False
+
+
+def test_build_summary_report_counts_only(tmp_path: Path) -> None:
+    mod = _load_check_lake_data()
+    report = {
+        "valid_count": 2,
+        "invalid_count": 1,
+        "invalid_reasons": {"missing_npz": 1},
+        "source": "units.jsonl",
+        "checked_at": "2026-06-26T00:00:00+00:00",
+        "scan_progress": {"complete": False, "next_offset": 3},
+        "valid_unit_ids": ["a", "b"],
+        "invalid_unit_ids": {"c": "missing_npz"},
+    }
+    summary = mod.build_summary_report(report)
+    assert "valid_unit_ids" not in summary
+    assert summary["valid_count"] == 2
+    assert summary["invalid_reasons"] == {"missing_npz": 1}
