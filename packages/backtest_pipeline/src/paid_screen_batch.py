@@ -761,6 +761,7 @@ def screen_paid_batch(
                 unit_id=unit.unit_id,
                 status="ERROR",
                 error="no_ohlcv_data",
+                error_category="data_quality",
             ))
         return results
 

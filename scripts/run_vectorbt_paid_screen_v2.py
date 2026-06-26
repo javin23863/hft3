@@ -186,6 +186,7 @@ def _result_to_dict(result: UnitScreeningResult) -> Dict[str, Any]:
         "screening_artifact_relpath": _unit_artifact_relpath(result.unit_id),
         "screening_artifact_hash": result.screening_artifact_hash,
         "error": result.error,
+        "error_category": result.error_category,
         "elapsed_seconds": round(result.elapsed_seconds, 4),
         "promoted_ids": result.promoted_ids,
         "rejected_ids": result.rejected_ids,
@@ -402,6 +403,38 @@ def _print_dry_run_plan(
         print(f"... and {len(units) - 20} more")
 
 
+def _load_skip_bad_units_file(path: Path) -> set[str]:
+    """Load invalid unit IDs from a check_lake_data.py JSON report.
+
+    Supports two layouts:
+    1. ``{"invalid_units": [{"unit_id": "...", ...}, ...]}``
+    2. ``{"invalid": ["unit_id1", "unit_id2", ...]}``
+    """
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"WARNING: could not read skip-bad-units file {path}: {exc}",
+              file=sys.stderr)
+        return set()
+
+    if isinstance(data, dict):
+        invalid_list = data.get("invalid_units") or data.get("invalid") or []
+    elif isinstance(data, list):
+        invalid_list = data
+    else:
+        invalid_list = []
+
+    ids: set[str] = set()
+    for entry in invalid_list:
+        if isinstance(entry, dict):
+            uid = entry.get("unit_id") or entry.get("id") or ""
+        else:
+            uid = str(entry)
+        if uid:
+            ids.add(uid)
+    return ids
+
+
 def _write_run_manifest(
     manifest_path: Path,
     *,
@@ -460,6 +493,17 @@ def _write_run_manifest(
         "aborted": aborted,
         "stop_reason": stop_reason,
     }
+
+    # Failure counts per error type — separate data-quality from algorithmic.
+    failure_counts: Dict[str, int] = {}
+    for result in unit_result_dicts:
+        if result.get("status") == "ERROR":
+            cat = result.get("error_category") or "algorithmic"
+            err = result.get("error") or "unknown"
+            key = f"{cat}:{err}"
+            failure_counts[key] = failure_counts.get(key, 0) + 1
+    if failure_counts:
+        manifest["failure_counts_by_type"] = failure_counts
     worker_affinity_cpus = getattr(args, "worker_affinity_cpus", None)
     if worker_affinity_cpus:
         manifest["worker_affinity_cpus"] = list(worker_affinity_cpus)
@@ -1287,6 +1331,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         action="store_true",
         help="Stop dispatch after first batch with ERROR units (declaration abort_on_failed_units)",
     )
+    parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        help="Force abort_on_failed_units=true regardless of event count (CI/unit tests).",
+    )
+    parser.add_argument(
+        "--skip-bad-units-file",
+        type=Path,
+        default=None,
+        help="JSON file with invalid unit IDs from check_lake_data.py. Units listed are skipped before dispatch.",
+    )
 
     args = parser.parse_args(argv)
     try:
@@ -1295,6 +1350,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
     except ValueError as exc:
         parser.error(str(exc))
+
+    # --fail-fast forces abort_on_failed_units for CI / single-unit runs.
+    if args.fail_fast:
+        args.abort_on_failed_units = True
 
     repo_root = args.repo_root if args.repo_root.is_absolute() else _REPO / args.repo_root
     units_path = args.units_jsonl if args.units_jsonl.is_absolute() else repo_root / args.units_jsonl
@@ -1420,6 +1479,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         units = kept
         if skipped_unit_ids:
             print(f"[resume] skipping {len(skipped_unit_ids)} units with valid artifacts",
+                  flush=True)
+
+    # Skip bad units from a pre-check file (check_lake_data.py output).
+    # These are data-quality failures known before dispatch — they are
+    # skipped without counting as failures.
+    if args.skip_bad_units_file:
+        bad_ids = _load_skip_bad_units_file(args.skip_bad_units_file)
+        if bad_ids:
+            before = len(units)
+            kept = [u for u in units if u.unit_id not in bad_ids]
+            dropped = before - len(kept)
+            units = kept
+            skipped_unit_ids.extend(bad_ids)
+            print(f"[skip-bad-units] skipped {dropped} units from {args.skip_bad_units_file}",
                   flush=True)
 
     if args.dry_run:

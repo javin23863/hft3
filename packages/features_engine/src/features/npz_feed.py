@@ -16,6 +16,12 @@ from hftbacktest.types import (
 
 from .mbo_features import MBOEvent
 
+try:
+    from research_pipeline.data_quality import NoOHLCVDataError
+except ImportError:
+    class NoOHLCVDataError(ValueError):
+        """Fallback when research_pipeline is not on sys.path."""
+
 
 def _event_type(ev: int) -> str | None:
     base = int(ev) & 0xFF
@@ -50,7 +56,7 @@ def load_npz_events(path: str) -> np.ndarray:
     if missing:
         raise ValueError(f"NPZ {path} missing fields: {sorted(missing)}")
     if len(raw) == 0:
-        raise ValueError(f"NPZ {path} has zero events")
+        raise NoOHLCVDataError(f"NPZ {path} has zero events")
     return raw
 
 
