@@ -1,4 +1,4 @@
-# Unified model registry: 50 HYP + 11 PDF structural models.
+# Unified model registry: 45 HYP + 11 PDF structural models.
 # Canonical id = slug; legacy_id (HYP_N / PDF_MODEL_N) deprecated.
 
 models:
@@ -8,18 +8,6 @@ models:
     legacy_id: HYP_1
     display_name: Second-wave continuation
     class: SecondWaveContinuation
-    aliases: ["second wave", "continuation", "post event continuation"]
-    default_param_ranges:
-      signal_threshold: [0.08, 0.35]
-      stop_loss: [0.10, 0.50]
-      take_profit: [0.10, 0.80]
-      holding_bars: [5, 60]
-    recommended_horizon_bars: [15, 60]
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM"]
-    volatility_regime: any
-    risk_metrics:
-      primary: sharpe
-      guardrails: ["max_drawdown", "trade_count"]
 
   STOP_RUN_EXHAUSTION_FADE:
     kind: hypothesis
@@ -27,18 +15,6 @@ models:
     legacy_id: HYP_2
     display_name: Stop-run exhaustion fade
     class: StopRunExhaustionFade
-    aliases: ["stop run fade", "stop-run fade", "exhaustion fade"]
-    default_param_ranges:
-      signal_threshold: [0.05, 0.25]
-      stop_loss: [0.05, 0.35]
-      take_profit: [0.05, 0.45]
-      holding_bars: [3, 30]
-    recommended_horizon_bars: [5, 30]
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM"]
-    volatility_regime: high_volatility
-    risk_metrics:
-      primary: max_drawdown
-      guardrails: ["sharpe", "trade_count"]
 
   LIQUIDITY_VACUUM_CONTINUATION:
     kind: hypothesis
@@ -46,18 +22,6 @@ models:
     legacy_id: HYP_3
     display_name: Liquidity vacuum continuation
     class: LiquidityVacuumContinuation
-    aliases: ["liquidity vacuum", "thin book continuation"]
-    default_param_ranges:
-      signal_threshold: [0.12, 0.45]
-      stop_loss: [0.10, 0.60]
-      take_profit: [0.15, 0.90]
-      holding_bars: [5, 45]
-    recommended_horizon_bars: [10, 45]
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "CL", "MCL", "GC", "MGC"]
-    volatility_regime: high_volatility
-    risk_metrics:
-      primary: sortino
-      guardrails: ["max_drawdown", "trade_count"]
 
   DEPTH_REFILL_IMBALANCE:
     kind: hypothesis
@@ -65,18 +29,6 @@ models:
     legacy_id: HYP_4
     display_name: Depth-refill imbalance
     class: DepthRefillImbalance
-    aliases: ["depth refill", "refill imbalance", "queue refill"]
-    default_param_ranges:
-      signal_threshold: [0.03, 0.20]
-      stop_loss: [0.05, 0.25]
-      take_profit: [0.05, 0.35]
-      holding_bars: [1, 20]
-    recommended_horizon_bars: [1, 20]
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "ZN", "ZB"]
-    volatility_regime: any
-    risk_metrics:
-      primary: sharpe
-      guardrails: ["max_drawdown", "trade_count"]
 
   SPREAD_BLOWOUT_RECOMPRESSION:
     kind: hypothesis
@@ -84,18 +36,6 @@ models:
     legacy_id: HYP_5
     display_name: Spread blowout/recompression
     class: SpreadBlowoutRecompression
-    aliases: ["spread blowout", "blowout fade", "squeeze fade", "spread recompression"]
-    default_param_ranges:
-      signal_threshold: [0.02, 0.15]
-      stop_loss: [0.05, 0.30]
-      take_profit: [0.05, 0.30]
-      holding_bars: [1, 10]
-    recommended_horizon_bars: [1, 10]
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM"]
-    volatility_regime: high_volatility
-    risk_metrics:
-      primary: sharpe
-      guardrails: ["max_drawdown", "trade_count"]
 
   AGGRESSOR_DECELERATION_FADE:
     kind: hypothesis
@@ -103,7 +43,6 @@ models:
     legacy_id: HYP_6
     display_name: Aggressor deceleration fade
     class: AggressorDecelerationFade
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   FORCED_LIQUIDATION_CASCADE:
     kind: hypothesis
@@ -111,7 +50,6 @@ models:
     legacy_id: HYP_7
     display_name: Forced liquidation cascade
     class: ForcedLiquidationCascade
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   FALSE_BREAKOUT_TRAP:
     kind: hypothesis
@@ -119,18 +57,6 @@ models:
     legacy_id: HYP_8
     display_name: False breakout trap
     class: FalseBreakoutTrap
-    aliases: ["false breakout", "breakout trap", "trap breakout"]
-    default_param_ranges:
-      signal_threshold: [0.05, 0.30]
-      stop_loss: [0.08, 0.35]
-      take_profit: [0.08, 0.50]
-      holding_bars: [3, 30]
-    recommended_horizon_bars: [5, 30]
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "RTY", "M2K"]
-    volatility_regime: any
-    risk_metrics:
-      primary: sharpe
-      guardrails: ["max_drawdown", "trade_count"]
 
   CANCEL_STORM_BEFORE_MOVE:
     kind: hypothesis
@@ -138,7 +64,6 @@ models:
     legacy_id: HYP_9
     display_name: Cancel storm before move
     class: CancelStormBeforeMove
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   QUEUE_DEPLETION_TRIGGER:
     kind: hypothesis
@@ -146,18 +71,6 @@ models:
     legacy_id: HYP_10
     display_name: Queue depletion trigger
     class: QueueDepletionTrigger
-    aliases: ["queue depletion", "queue imbalance", "queue pull"]
-    default_param_ranges:
-      signal_threshold: [0.03, 0.18]
-      stop_loss: [0.05, 0.25]
-      take_profit: [0.05, 0.35]
-      holding_bars: [1, 15]
-    recommended_horizon_bars: [1, 15]
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "ZN", "ZB"]
-    volatility_regime: any
-    risk_metrics:
-      primary: sharpe
-      guardrails: ["max_drawdown", "trade_count"]
 
   BOOK_SLOPE_COLLAPSE:
     kind: hypothesis
@@ -165,7 +78,6 @@ models:
     legacy_id: HYP_11
     display_name: Book slope collapse
     class: BookSlopeCollapse
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   ABSORPTION_FADE:
     kind: hypothesis
@@ -173,7 +85,6 @@ models:
     legacy_id: HYP_12
     display_name: Absorption fade
     class: AbsorptionFade
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   ICEBERG_RELOAD_DETECTION:
     kind: hypothesis
@@ -181,7 +92,6 @@ models:
     legacy_id: HYP_13
     display_name: Iceberg/reload detection
     class: IcebergReloadDetection
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   LIQUIDITY_DEFENSE_BREAK:
     kind: hypothesis
@@ -189,7 +99,6 @@ models:
     legacy_id: HYP_14
     display_name: Liquidity defense break
     class: LiquidityDefenseBreak
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   ONE_SIDED_ADD_CANCEL_IMBALANCE:
     kind: hypothesis
@@ -197,7 +106,6 @@ models:
     legacy_id: HYP_15
     display_name: One-sided add/cancel imbalance
     class: OneSidedAddCancelImbalance
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   ES_MES_LEAD_LAG:
     kind: hypothesis
@@ -205,8 +113,6 @@ models:
     legacy_id: HYP_16
     display_name: ES -> MES lead-lag
     class: EsToMesLeadLag
-    valid_instrument_universe: ["ES", "MES"]
-    target_instrument_universe: ["MES"]
 
   NQ_MNQ_LEAD_LAG:
     kind: hypothesis
@@ -214,8 +120,6 @@ models:
     legacy_id: HYP_17
     display_name: NQ -> MNQ lead-lag
     class: NqToMnqLeadLag
-    valid_instrument_universe: ["NQ", "MNQ"]
-    target_instrument_universe: ["MNQ"]
 
   ES_NQ_DIVERGENCE_SNAPBACK:
     kind: hypothesis
@@ -223,7 +127,6 @@ models:
     legacy_id: HYP_18
     display_name: ES/NQ divergence snapback
     class: EsNqDivergenceSnapback
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ"]
 
   ZN_ZB_ES_NQ_MACRO_IMPULSE:
     kind: hypothesis
@@ -231,8 +134,6 @@ models:
     legacy_id: HYP_19
     display_name: ZN/ZB -> ES/NQ macro impulse
     class: ZnZbToEsNqMacroImpulse
-    valid_instrument_universe: ["ZN", "ZB", "ES", "MES", "NQ", "MNQ"]
-    target_instrument_universe: ["ES", "MES", "NQ", "MNQ"]
 
   MICRO_CONTRACT_RETAIL_LAG:
     kind: hypothesis
@@ -240,8 +141,6 @@ models:
     legacy_id: HYP_20
     display_name: Micro contract retail lag
     class: MicroContractRetailLag
-    valid_instrument_universe: ["ES", "MES"]
-    target_instrument_universe: ["MES"]
 
   ROUND_NUMBER_STOP_SWEEP:
     kind: hypothesis
@@ -249,7 +148,6 @@ models:
     legacy_id: HYP_21
     display_name: Round-number stop sweep
     class: RoundNumberStopSweep
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   PRIOR_HIGH_LOW_BREAKOUT_TRAP:
     kind: hypothesis
@@ -257,7 +155,6 @@ models:
     legacy_id: HYP_22
     display_name: Prior high/low breakout trap
     class: PriorHighLowBreakoutTrap
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   OPENING_CANDLE_CHASE:
     kind: hypothesis
@@ -265,7 +162,6 @@ models:
     legacy_id: HYP_23
     display_name: Opening candle chase
     class: OpeningCandleChase
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   VWAP_DEFENSE_BREAK:
     kind: hypothesis
@@ -273,7 +169,6 @@ models:
     legacy_id: HYP_24
     display_name: VWAP defense/break
     class: VWAPDefenseBreak
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   DOM_ILLUSION_TRAP:
     kind: hypothesis
@@ -281,7 +176,6 @@ models:
     legacy_id: HYP_25
     display_name: DOM illusion trap
     class: DOMIllusionTrap
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   LATE_CANDLE_ENTRY_FADE:
     kind: hypothesis
@@ -289,7 +183,6 @@ models:
     legacy_id: HYP_26
     display_name: Late candle entry fade
     class: LateCandleEntryFade
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   STOP_LOSS_CASCADE_CONTINUATION:
     kind: hypothesis
@@ -297,7 +190,6 @@ models:
     legacy_id: HYP_27
     display_name: Stop-loss cascade continuation
     class: StopLossCascadeContinuation
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   PANIC_MARKET_ORDER_SPREAD_TAX:
     kind: hypothesis
@@ -305,7 +197,6 @@ models:
     legacy_id: HYP_28
     display_name: Panic market-order spread tax
     class: PanicMarketOrderSpreadTax
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   END_OF_DAY_FORCED_FLATTEN_FLOW:
     kind: hypothesis
@@ -313,7 +204,6 @@ models:
     legacy_id: HYP_29
     display_name: End-of-day forced flatten flow
     class: EndOfDayForcedFlatten
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   CUTOFF_PANIC_EXITS:
     kind: hypothesis
@@ -321,7 +211,6 @@ models:
     legacy_id: HYP_30
     display_name: Cutoff panic exits
     class: CutoffPanicExits
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   NO_OVERNIGHT_INVENTORY_SQUEEZE:
     kind: hypothesis
@@ -329,7 +218,6 @@ models:
     legacy_id: HYP_31
     display_name: No-overnight inventory squeeze
     class: NoOvernightInventorySqueeze
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   DAILY_LOSS_LIMIT_DEFENSE:
     kind: hypothesis
@@ -337,7 +225,6 @@ models:
     legacy_id: HYP_32
     display_name: Daily loss-limit defense
     class: DailyLossLimitDefense
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   TRAILING_DRAWDOWN_PRESSURE:
     kind: hypothesis
@@ -345,7 +232,6 @@ models:
     legacy_id: HYP_33
     display_name: Trailing drawdown pressure
     class: TrailingDrawdownPressure
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   PROFIT_LOCK_BEHAVIOR:
     kind: hypothesis
@@ -353,7 +239,6 @@ models:
     legacy_id: HYP_34
     display_name: Profit-lock behavior
     class: ProfitLockBehavior
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   MAX_CONTRACT_CROWDING_IN_MICROS:
     kind: hypothesis
@@ -361,7 +246,6 @@ models:
     legacy_id: HYP_35
     display_name: Max-contract crowding in micros
     class: MaxContractCrowding
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   PROP_RESET_REOPEN_WINDOW:
     kind: hypothesis
@@ -369,7 +253,6 @@ models:
     legacy_id: HYP_36
     display_name: Prop reset/reopen window
     class: PropResetReopenWindow
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   FRIDAY_WEEKEND_DERISKING:
     kind: hypothesis
@@ -377,7 +260,6 @@ models:
     legacy_id: HYP_37
     display_name: Friday/weekend de-risking
     class: FridayWeekendDerisking
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   ECONOMIC_EVENT_RESTRICTION_FLATTENING:
     kind: hypothesis
@@ -385,7 +267,6 @@ models:
     legacy_id: HYP_38
     display_name: Economic-event restriction flattening
     class: EconomicEventRestrictionFlattening
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   QUOTE_PULL_BEFORE_VOLATILITY:
     kind: hypothesis
@@ -393,7 +274,6 @@ models:
     legacy_id: HYP_39
     display_name: Quote pull before volatility
     class: QuotePullBeforeVolatility
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   REQUOTE_RACE_AFTER_SHOCK:
     kind: hypothesis
@@ -401,7 +281,6 @@ models:
     legacy_id: HYP_40
     display_name: Re-quote race after shock
     class: RequoteRaceAfterShock
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   THIN_BOOK_CONTINUATION:
     kind: hypothesis
@@ -409,7 +288,6 @@ models:
     legacy_id: HYP_41
     display_name: Thin-book continuation
     class: ThinBookContinuation
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   PASSIVE_TRAP_FILL:
     kind: hypothesis
@@ -417,7 +295,6 @@ models:
     legacy_id: HYP_42
     display_name: Passive trap fill
     class: PassiveTrapFill
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   REBATE_TRAP_AVOIDANCE:
     kind: hypothesis
@@ -425,7 +302,6 @@ models:
     legacy_id: HYP_43
     display_name: Rebate trap avoidance
     class: RebateTrapAvoidance
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   SPREAD_REGIME_CHANGE:
     kind: hypothesis
@@ -433,7 +309,6 @@ models:
     legacy_id: HYP_44
     display_name: Spread regime change
     class: SpreadRegimeChange
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   GHOST_ROUTE:
     kind: hypothesis
@@ -441,7 +316,6 @@ models:
     legacy_id: HYP_45
     display_name: Ghost Route MBO queue-decay
     class: GhostRoute
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_SPIKE_EVENT_FADE:
     kind: hypothesis
@@ -449,7 +323,6 @@ models:
     legacy_id: HYP_46
     display_name: VIX spike event fade
     class: VixSpikeEventFade
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_QUOTE_PULL_LIQUIDITY_VACUUM:
     kind: hypothesis
@@ -457,7 +330,6 @@ models:
     legacy_id: HYP_47
     display_name: VIX quote-pull liquidity vacuum
     class: VixQuotePullLiquidityVacuum
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_IMPLIED_REALIZED_GAP:
     kind: hypothesis
@@ -465,7 +337,6 @@ models:
     legacy_id: HYP_48
     display_name: VIX implied-realized vol gap
     class: VixImpliedRealizedGap
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_DEPTH_IMBALANCE_DIRECTION:
     kind: hypothesis
@@ -473,7 +344,6 @@ models:
     legacy_id: HYP_49
     display_name: VIX depth imbalance direction
     class: VixDepthImbalanceDirection
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_LEVEL_CONDITIONED_CONTINUATION:
     kind: hypothesis
@@ -481,92 +351,236 @@ models:
     legacy_id: HYP_50
     display_name: VIX level-conditioned continuation
     class: VixLevelConditionedContinuation
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   BOOK_PRESSURE:
     kind: pdf_structural
     legacy_id: PDF_MODEL_1
     display_name: Limit Order Book Pressure
     class: BookPressureModel
-    aliases: ["book pressure", "order book pressure", "ofi", "mlofi"]
-    default_param_ranges:
-      signal_threshold: [0.03, 0.25]
-      stop_loss: [0.05, 0.30]
-      take_profit: [0.05, 0.45]
-      holding_bars: [1, 20]
-    recommended_horizon_bars: [1, 20]
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "ZN", "ZB", "CL", "GC"]
-    volatility_regime: any
-    risk_metrics:
-      primary: sharpe
-      guardrails: ["max_drawdown", "trade_count"]
 
   CROSS_ASSET_LEAD_LAG:
     kind: pdf_structural
     legacy_id: PDF_MODEL_2
     display_name: Cross-Asset Lead-Lag
     class: CrossAssetLeadLagModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   VPIN_TOXICITY:
     kind: pdf_structural
     legacy_id: PDF_MODEL_3
     display_name: VPIN Flow Toxicity
     class: VPINToxicityModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   HYBRID_EXECUTION:
     kind: pdf_structural
     legacy_id: PDF_MODEL_4
     display_name: Hybrid Defensive Execution
     class: HybridExecutionModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   DEALER_HEDGING:
     kind: pdf_structural
     legacy_id: PDF_MODEL_5
     display_name: Dealer Options Hedging
     class: DealerHedgingModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K"]
 
   DOW_YM_INDEX:
     kind: pdf_structural
     legacy_id: PDF_MODEL_6
     display_name: Dow/YM Price-Weighted Index
     class: DowYMIndexModel
-    valid_instrument_universe: ["YM", "MYM"]
 
   TREASURY_CTD:
     kind: pdf_structural
     legacy_id: PDF_MODEL_7
     display_name: Treasury CTD / Implied Repo
     class: TreasuryCTDModel
-    valid_instrument_universe: ["ZN", "ZB", "ZF", "ZT"]
 
   TRANSFER_ENTROPY:
     kind: pdf_structural
     legacy_id: PDF_MODEL_8
     display_name: Transfer Entropy Lead-Lag
     class: TransferEntropyModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   QUANTUM_SPREAD_DEFENSE:
     kind: pdf_structural
     legacy_id: PDF_MODEL_9
     display_name: Quantum Spread Defense
     class: QuantumSpreadDefenseModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   STOCHASTIC_THERMO:
     kind: pdf_structural
     legacy_id: PDF_MODEL_10
     display_name: Stochastic Thermodynamics
     class: StochasticThermoModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   HAWKES_TOXIC_FLOW:
     kind: pdf_structural
     legacy_id: PDF_MODEL_11
     display_name: Hawkes Toxic Flow Detection
     class: HawkesToxicFlowModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+
+  MICRO_STANDARD_FLOW_TRANSFER:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Micro-standard flow transfer
+    model_family: cross_market_lead_lag
+    requires_relationship_graph: true
+    required_data: [rithmic_continuous, relationship_graph]
+    valid_relationship_types: [micro_standard]
+    default_param_ranges:
+      lag_window_sessions: [1, 5]
+      min_lead_lag_stability: [0.4, 0.9]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  CROSS_MARKET_OFI_IMPACT:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Cross-market OFI impact
+    model_family: cross_asset_flow
+    requires_relationship_graph: true
+    required_data: [rithmic_continuous, relationship_graph]
+    valid_relationship_types: [metals_complex, energy_complex, rates_curve]
+    default_param_ranges:
+      ofi_beta_lag: [1, 10]
+      impact_decay_halflife_ms: [50, 500]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  BOOK_RESILIENCY_CONTINUATION:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Book resiliency continuation
+    model_family: liquidity_resiliency
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: [micro_standard]
+    default_param_ranges:
+      resiliency_threshold: [0.2, 0.8]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  QUEUE_DEPLETION_REPLENISHMENT:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Queue depletion replenishment
+    model_family: queue_dynamics
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: [micro_standard]
+    default_param_ranges:
+      depletion_ratio: [0.3, 0.9]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  HIDDEN_LIQUIDITY_RELOAD:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Hidden liquidity reload
+    model_family: hidden_liquidity
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: [micro_standard]
+    default_param_ranges:
+      reload_sensitivity: [0.1, 0.6]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  TOXIC_FLOW_ADVERSE_SELECTION:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Toxic flow adverse selection
+    model_family: order_flow_toxicity
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: [micro_standard]
+    default_param_ranges:
+      toxicity_zscore: [1.0, 3.0]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  CALENDAR_CURVE_MICRO_IMPULSE:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Calendar curve micro impulse
+    model_family: term_structure
+    requires_relationship_graph: true
+    required_data: [rithmic_continuous, relationship_graph]
+    valid_relationship_types: [rates_curve, calendar_front_second]
+    default_param_ranges:
+      curve_zscore: [0.5, 2.5]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  STRUCTURAL_SPREAD_MICRO_DISLOCATION:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Structural spread micro dislocation
+    model_family: relative_value_spreads
+    requires_relationship_graph: true
+    required_data: [rithmic_continuous, relationship_graph]
+    valid_relationship_types: [micro_standard, rates_curve]
+    default_param_ranges:
+      spread_zscore: [1.0, 3.0]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  SEASONAL_STATE_CONDITIONED_MICRO_ALPHA:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Seasonal state conditioned micro alpha
+    model_family: seasonality_conditioning
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: [seasonal_state]
+    default_param_ranges:
+      seasonal_state_weight: [0.1, 0.5]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  SELF_EXCITING_FLOW_BURST:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Self-exciting flow burst
+    model_family: hawkes_point_process
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: [micro_standard]
+    default_param_ranges:
+      burst_intensity: [0.05, 0.4]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  RL_EXECUTION_OVERLAY:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: RL execution overlay
+    model_family: execution_overlay
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: []
+    default_param_ranges:
+      reward_scale: [0.5, 2.0]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]

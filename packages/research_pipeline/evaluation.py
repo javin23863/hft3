@@ -524,8 +524,22 @@ def evaluate_model(
     instrument_labels: Optional[Sequence[str]] = None,
     validation_summary: Optional[Mapping[str, Any]] = None,
 ) -> EvaluationResult:
-    """Evaluate candidate via HftBacktest (WorkbenchEngine)."""
+    """Evaluate candidate via HftBacktest (WorkbenchEngine) or continuous evaluation (Phase 6)."""
     gates = gates or GateThresholds(min_trades=0)
+
+    from research_pipeline.continuous_evaluation import (
+        evaluate_continuous_from_candidate,
+        is_continuous_candidate,
+    )
+
+    if is_continuous_candidate(candidate):
+        return evaluate_continuous_from_candidate(
+            candidate,
+            event_id,
+            repo_root,
+            gates=gates,
+            seed=seed,
+        )
 
     try:
         model_id = resolve_model_id(candidate.model_id)

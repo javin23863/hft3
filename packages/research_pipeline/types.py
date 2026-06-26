@@ -178,6 +178,12 @@ class EvaluationResult:
     def passes_all_gates(self) -> bool:
         if self.error:
             return False
+        cont = (self.workbench_out or {}).get("continuous_evaluation")
+        if isinstance(cont, dict) and cont.get("lane") == "continuous_microstructure":
+            if cont.get("status") != "evaluated":
+                return False
+            gate = cont.get("gates") or {}
+            return bool(gate.get("all_pass"))
         if self.gates.requires_gateable_risk_metrics() and not self.risk_metrics_gateable:
             return False
         return self.gates.passes(
