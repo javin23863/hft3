@@ -149,7 +149,7 @@ def test_pilot_profile_filters_contract_roots(tmp_path: Path) -> None:
     from research_pipeline.continuous_data_manifest import build_coverage_manifest
 
     week_root = tmp_path / "data" / "raw" / "rithmic_weekly" / "2026-W27"
-    for day in ("2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04"):
+    for day in ("2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02", "2026-07-03"):
         _write_events(week_root / "ESM6" / day / "events.ndjson", 3000)
     _write_events(week_root / "ZCZ6" / "events.ndjson", 12_000)
 
@@ -305,3 +305,38 @@ def test_typed_only_flat_capture_uses_none_missing_ratio(tmp_path: Path) -> None
     assert row["row_count"] == 50
     assert row["missing_ratio"] is None
     assert row["eligible"] is False
+
+
+def test_out_of_week_date_dirs_do_not_count_toward_coverage(tmp_path: Path) -> None:
+    from research_pipeline.continuous_data_manifest import build_coverage_manifest
+
+    week_root = tmp_path / "data" / "raw" / "rithmic_continuous" / "2026-W27" / "ESM6"
+    _write_events(week_root / "2026-07-06" / "events.ndjson", 100)
+    _write_events(week_root / "2026-07-03" / "events.ndjson", 50)
+
+    manifest = build_coverage_manifest(
+        repo_root=tmp_path,
+        rithmic_week="2026-W27",
+        universe_profile="full_cme_research",
+    )
+    row = manifest["contract_rows"][0]
+    assert row["row_count"] == 150
+    assert row["missing_ratio"] == pytest.approx(0.8)
+
+
+def test_typed_ndjson_under_date_partitions_counts_days(tmp_path: Path) -> None:
+    from research_pipeline.continuous_data_manifest import build_coverage_manifest
+
+    week_root = tmp_path / "data" / "raw" / "rithmic_continuous" / "2026-W27" / "ESM6"
+    _write_events(week_root / "2026-07-01" / "mbo.ndjson", 2)
+    _write_events(week_root / "2026-07-02" / "trades.ndjson", 3)
+    _write_events(week_root / "2026-07-03" / "mbo.ndjson", 5)
+
+    manifest = build_coverage_manifest(
+        repo_root=tmp_path,
+        rithmic_week="2026-W27",
+        universe_profile="full_cme_research",
+    )
+    row = manifest["contract_rows"][0]
+    assert row["row_count"] == 10
+    assert row["missing_ratio"] == pytest.approx(0.4)

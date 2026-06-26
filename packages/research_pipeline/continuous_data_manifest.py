@@ -58,10 +58,15 @@ def _parse_rithmic_week(rithmic_week: str) -> tuple[int, int]:
 
 
 def _iso_week_trading_days(rithmic_week: str) -> int:
+    return len(_iso_week_trading_day_names(rithmic_week))
+
+
+def _iso_week_trading_day_names(rithmic_week: str) -> frozenset[str]:
+    """ISO-week Mon–Fri calendar dates for *rithmic_week* (YYYY-MM-DD strings)."""
     year, week = _parse_rithmic_week(rithmic_week)
     monday = date.fromisocalendar(year, week, 1)
-    return sum(
-        1
+    return frozenset(
+        (monday + timedelta(days=offset)).isoformat()
         for offset in range(7)
         if (monday + timedelta(days=offset)).weekday() < 5
     )
@@ -101,35 +106,36 @@ def _is_date_dir_name(name: str) -> bool:
     return True
 
 
-def _has_flat_typed_capture(contract_dir: Path) -> bool:
-    """True when typed ndjson exists at contract root without date partitions."""
-    for data_type in _DEFAULT_DATA_TYPES:
-        typed_path = contract_dir / f"{data_type}.ndjson"
-        if not typed_path.is_file() or _count_ndjson_rows(typed_path) <= 0:
-            continue
-        if not any(_is_date_dir_name(parent.name) for parent in typed_path.parents):
-            return True
-    return False
-
-
-def _contract_days_with_data(contract_dirs: list[Path]) -> int | None:
+def _contract_days_with_data(
+    contract_dirs: list[Path],
+    *,
+    week_trading_days: frozenset[str],
+) -> int | None:
     days: set[str] = set()
     has_flat_data = False
     for contract_dir in contract_dirs:
-        found_date_partition = False
-        for path in contract_dir.rglob(_EVENTS_FILENAME):
-            row_count = _count_ndjson_rows(path) if path.is_file() else 0
+        seen_paths: set[str] = set()
+        for path in contract_dir.rglob("*.ndjson"):
+            if not path.is_file():
+                continue
+            key = str(path.resolve())
+            if key in seen_paths:
+                continue
+            seen_paths.add(key)
+            row_count = _count_ndjson_rows(path)
+            if row_count <= 0:
+                continue
+            date_name: str | None = None
             for parent in path.parents:
                 name = parent.name
                 if _is_date_dir_name(name):
-                    if row_count > 0:
-                        days.add(name)
-                    found_date_partition = True
+                    date_name = name
                     break
-            if not found_date_partition and path.is_file() and row_count > 0:
+            if date_name is not None:
+                if date_name in week_trading_days:
+                    days.add(date_name)
+            elif not any(_is_date_dir_name(parent.name) for parent in path.parents):
                 has_flat_data = True
-        if not has_flat_data and _has_flat_typed_capture(contract_dir):
-            has_flat_data = True
     if days:
         return len(days)
     if has_flat_data:
@@ -222,10 +228,13 @@ def _build_contract_row(
     contract_dirs: list[Path],
     *,
     expected_trading_days: int,
+    week_trading_days: frozenset[str],
     universe_profile: str,
 ) -> dict[str, Any]:
     row_count = _contract_row_count(contract_dirs)
-    days_with_data = _contract_days_with_data(contract_dirs)
+    days_with_data = _contract_days_with_data(
+        contract_dirs, week_trading_days=week_trading_days
+    )
     if expected_trading_days <= 0:
         missing_ratio = None
     elif row_count <= 0:
@@ -260,6 +269,7 @@ def build_coverage_manifest(
         repo_root, rithmic_week, extra_roots=extra_roots
     )
     expected_trading_days = _iso_week_trading_days(rithmic_week)
+    week_trading_days = _iso_week_trading_day_names(rithmic_week)
     contract_dirs: dict[str, list[Path]] = {}
     for root in roots:
         if not root["exists"]:
@@ -274,6 +284,7 @@ def build_coverage_manifest(
             contract,
             contract_dirs[contract],
             expected_trading_days=expected_trading_days,
+            week_trading_days=week_trading_days,
             universe_profile=universe_profile,
         )
         for contract in contracts

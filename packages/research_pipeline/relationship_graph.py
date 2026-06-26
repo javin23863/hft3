@@ -8,6 +8,11 @@ from typing import Any
 
 import yaml
 
+from research_pipeline.continuous_universe import (
+    is_root_active_for_profile,
+    validate_universe_profile,
+)
+
 GRAPH_SCHEMA_VERSION = "1"
 _DEFAULT_GRAPH_CONFIG = Path("packages/features_engine/config/cme_relationship_graph.yaml")
 _DEFAULT_UNIVERSE_CONFIG = Path("packages/features_engine/config/cme_universe.yaml")
@@ -22,6 +27,12 @@ EDGE_FEATURE_KEYS = (
     "queue_pressure_divergence",
     "impact_decay_half_life",
     "cost_feasibility",
+)
+
+CAUSAL_BOUNDS_KEYS = (
+    "pit_window_end",
+    "as_of_event_time",
+    "max_lag_sessions",
 )
 
 
@@ -67,6 +78,49 @@ def _empty_edge_features() -> dict[str, None]:
     return {key: None for key in EDGE_FEATURE_KEYS}
 
 
+def _empty_causal_bounds() -> dict[str, None]:
+    return {key: None for key in CAUSAL_BOUNDS_KEYS}
+
+
+def _universe_root_symbols(universe_config: dict[str, Any]) -> set[str]:
+    roots = universe_config.get("roots")
+    if not isinstance(roots, dict):
+        return set()
+    return {str(symbol).upper() for symbol in roots}
+
+
+def validate_edge_roots(
+    edges: list[dict[str, Any]], universe_config: dict[str, Any]
+) -> None:
+    """Fail closed when graph pairs reference roots absent from cme_universe.yaml."""
+    known = _universe_root_symbols(universe_config)
+    missing = sorted(
+        {
+            str(edge[key]).upper()
+            for edge in edges
+            for key in ("source_root", "target_root")
+            if str(edge.get(key) or "").upper() not in known
+        }
+    )
+    if missing:
+        raise ValueError(
+            f"edge roots missing from cme_universe.yaml: {', '.join(missing)}"
+        )
+
+
+def filter_edges_for_profile(
+    edges: list[dict[str, Any]], universe_profile: str
+) -> list[dict[str, Any]]:
+    """Keep edges whose endpoints are active for *universe_profile*."""
+    validate_universe_profile(universe_profile)
+    return [
+        edge
+        for edge in edges
+        if is_root_active_for_profile(str(edge["source_root"]), universe_profile)
+        and is_root_active_for_profile(str(edge["target_root"]), universe_profile)
+    ]
+
+
 def enumerate_edges(config: dict[str, Any]) -> list[dict[str, Any]]:
     """Enumerate stub edges from configured relationship families."""
     edges: list[dict[str, Any]] = []
@@ -93,6 +147,7 @@ def enumerate_edges(config: dict[str, Any]) -> list[dict[str, Any]]:
                     "source_root": source,
                     "target_root": target,
                     "features": _empty_edge_features(),
+                    "causal_bounds": _empty_causal_bounds(),
                     "score": None,
                 }
             )
@@ -105,10 +160,15 @@ def build_relationship_graph_stub(
     rithmic_week: str,
     universe_profile: str,
     config_path: Path | None = None,
+    universe_config_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build Phase 2 relationship graph shell (no scoring yet)."""
+    validate_universe_profile(universe_profile)
     config = load_relationship_graph_config(repo_root, config_path=config_path)
+    universe = load_cme_universe_config(repo_root, config_path=universe_config_path)
     edges = enumerate_edges(config)
+    validate_edge_roots(edges, universe)
+    edges = filter_edges_for_profile(edges, universe_profile)
     families = sorted(
         {
             str(edge["family_id"])

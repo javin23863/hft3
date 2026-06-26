@@ -53,12 +53,17 @@ def contract_root_symbol(contract: str) -> str:
     return token
 
 
-def is_active_for_profile(contract: str, profile: str) -> bool:
-    """Return whether *contract* belongs in the universe profile."""
+def is_root_active_for_profile(root: str, profile: str) -> bool:
+    """Return whether a CME root symbol belongs in the universe profile."""
     validate_universe_profile(profile)
     if profile == "full_cme_research":
         return True
-    return contract_root_symbol(contract) in PILOT_LIQUIDITY_ROOTS
+    return root.strip().upper() in PILOT_LIQUIDITY_ROOTS
+
+
+def is_active_for_profile(contract: str, profile: str) -> bool:
+    """Return whether *contract* belongs in the universe profile."""
+    return is_root_active_for_profile(contract_root_symbol(contract), profile)
 
 
 def filter_contracts_for_profile(contracts: list[str], profile: str) -> list[str]:

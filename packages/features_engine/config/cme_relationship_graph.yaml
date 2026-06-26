@@ -29,7 +29,6 @@ families:
       - [CL, RB]
       - [CL, HO]
       - [CL, NG]
-      - [MCL, CL]
       - [RB, HO]
 
   rates_curve:
