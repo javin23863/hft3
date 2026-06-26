@@ -327,6 +327,44 @@ def test_fast_progress_audit_flags_zero_promo_bar_stub_sample(tmp_path: Path) ->
     assert "npz_bar_fallback_in_artifact_sample:n=10" in audit["validation_errors"]
 
 
+def test_progress_audit_handles_single_artifact_canary(tmp_path: Path) -> None:
+    from scripts.audit_vbt_run_progress import _scan_run_dir
+
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_canary"
+    art_dir = run_dir / "units" / "u1"
+    art_dir.mkdir(parents=True)
+    (art_dir / "screening_artifact.json").write_text(
+        json.dumps(
+            {
+                "promoted_ids": [],
+                "feature_set_id": "fs_v1",
+                "feature_plane_status": "scheduled_event_only",
+                "bar_construction_id": "fs_v1_row_loop_from_feature_store",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "paid_screen_run_manifest.json").write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "expected_work_units": 1,
+                "completed_work_units": 1,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "workers": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    audit = _scan_run_dir(run_dir)
+
+    assert audit["artifact_files_on_disk"] == 1
+    assert audit["completed_work_units"] == 1
+    assert "zero_promoted_ids_in_artifacts:n=1" not in audit["validation_errors"]
+
+
 def test_all_active_models_generates_multiple_hypotheses(tmp_path: Path) -> None:
     """Full-scope generator expands active registry (not single model or Stage A)."""
     from features_engine.src.hypotheses.registry import get_active_hypotheses

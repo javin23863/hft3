@@ -257,6 +257,7 @@ def _scan_run_dir(run_dir: Path) -> dict[str, Any]:
         except Exception as exc:  # noqa: BLE001 — audit aggregates failures
             validation_errors.append(f"{art.relative_to(run_dir)}:{exc}")
 
+    artifact_count = len(artifacts)
     fs_counts = Counter(feature_set_ids)
     unique_fs = len(fs_counts)
     duplicate_fs = {k: v for k, v in fs_counts.items() if v > 1}
@@ -286,7 +287,6 @@ def _scan_run_dir(run_dir: Path) -> dict[str, Any]:
         _first_present(manifest_payload, "collected_batches", "batches_collected")
     )
     expected_batches = _as_int(manifest_payload.get("expected_batches"))
-    artifact_count = len(artifacts)
     accounted = _accounted_units(completed, failed, skipped)
     done_units = accounted if accounted is not None else artifact_count
 
