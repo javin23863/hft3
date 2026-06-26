@@ -379,8 +379,6 @@ def _build_family_payload(
     params = sorted({row.parameter_hash for row in family_rows})
     if len(events) < min_events:
         return None, f"insufficient_events:{len(events)}<{min_events}"
-    if len(params) < min_parameter_combinations:
-        return None, f"insufficient_parameter_combinations:{len(params)}<{min_parameter_combinations}"
     rows_by_pair: dict[tuple[date, str], MeasuredRow] = {}
     for row in family_rows:
         pair = (row.event_date, row.parameter_hash)
@@ -391,14 +389,21 @@ def _build_family_payload(
     completeness = len(rows_by_pair) / expected if expected else 0.0
     if completeness + 1e-12 < min_completeness:
         return None, f"incomplete_event_parameter_surface:{completeness:.6f}<{min_completeness:.6f}"
-    missing = [
-        (event.isoformat(), parameter_hash)
-        for event in events
+    complete_params = [
+        parameter_hash
         for parameter_hash in params
-        if (event, parameter_hash) not in rows_by_pair
+        if all((event, parameter_hash) in rows_by_pair for event in events)
     ]
-    if missing:
-        return None, f"missing_event_parameter_cells:{len(missing)}"
+    if len(complete_params) < min_parameter_combinations:
+        return (
+            None,
+            "insufficient_complete_parameter_combinations:"
+            f"{len(complete_params)}<{min_parameter_combinations}",
+        )
+    missing_count = expected - len(rows_by_pair)
+    if missing_count and min_completeness >= 1.0:
+        return None, f"missing_event_parameter_cells:{missing_count}"
+    params = complete_params
     folds = _build_folds(events, folds_requested)
     if len(folds) < folds_requested:
         return None, f"insufficient_walk_forward_folds:{len(folds)}<{folds_requested}"

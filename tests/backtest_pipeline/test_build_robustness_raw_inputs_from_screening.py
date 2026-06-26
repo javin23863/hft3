@@ -321,6 +321,30 @@ def test_incomplete_surface_fails_closed_without_output(tmp_path: Path) -> None:
     assert not (tmp_path / "raw_robustness_inputs.json").exists()
 
 
+def test_min_completeness_packages_complete_parameter_subset(tmp_path: Path) -> None:
+    artifact = _complete_surface_artifact(omit_last_cell=True)
+    result = _run_script(
+        tmp_path,
+        artifact,
+        "--fee-per-rt",
+        "0.001",
+        "--tick-value",
+        "0.01",
+        "--min-completeness",
+        "0.9",
+        "--min-parameter-combinations",
+        "3",
+    )
+
+    assert result.returncode == 0, result.stderr
+    receipt = json.loads(result.stdout)
+    assert receipt["status"] == "ok"
+    assert receipt["packaged_count"] == 1
+    payload = json.loads((tmp_path / "raw_robustness_inputs.json").read_text(encoding="utf-8"))
+    candidate_id = receipt["packaged_candidate_ids"][0]
+    assert payload["candidates"][candidate_id]["robustness_input"]["n_trials"] == 3
+
+
 def test_unknown_symbol_fails_closed_without_output(tmp_path: Path) -> None:
     artifact = _complete_surface_artifact()
     for row in [*artifact["promoted"], *artifact["rejected"]]:
