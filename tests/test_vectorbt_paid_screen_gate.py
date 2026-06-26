@@ -818,6 +818,22 @@ def test_runnable_npz_row_check_rejects_invalid_dtype_grammar(tmp_path: Path) ->
     assert not generator._npz_has_rows(bad_descr)
 
 
+def test_runnable_npz_row_check_warns_on_unexpected_zip_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unexpected inspection errors warn and still fail closed."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    def raise_zip_error(*_args: object, **_kwargs: object) -> object:
+        raise OSError("zip open failed")
+
+    monkeypatch.setattr(generator.zipfile, "ZipFile", raise_zip_error)
+
+    with pytest.warns(RuntimeWarning, match="zip open failed"):
+        assert not generator._npz_has_rows(tmp_path / "broken.npz")
+
+
 def test_require_runnable_npz_manifest_authority_blocks_glob_fallback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

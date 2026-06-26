@@ -10,6 +10,7 @@ import os
 import re
 import struct
 import sys
+import warnings
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -58,6 +59,7 @@ RESEARCH_SPLIT_CHOICES: Dict[str, Optional[List[str]]] = {
     "all": None,
 }
 DEFAULT_ALL_ACTIVE_RESEARCH_SPLIT = "discovery_confirmation"
+_CURRENT_LAKE_NPZ_ROW_MEMBERS = ("data.npy", "quotes.npy")
 
 
 def _display_name_for_slug(slug: str) -> str:
@@ -843,10 +845,15 @@ def _npy_payload_bytes_required(shape: Tuple[int, ...], itemsize: int) -> int:
 
 
 def _npz_has_rows(path: Path) -> bool:
+    """Return True when a current lake-schema NPZ member declares rows.
+
+    Only `data.npy` and `quotes.npy` are accepted by design; future lake schema
+    member changes must update this constant and its focused tests explicitly.
+    """
     try:
         with zipfile.ZipFile(path) as archive:
             infos = {info.filename: info for info in archive.infolist()}
-            ordered = [name for name in ("data.npy", "quotes.npy") if name in infos]
+            ordered = [name for name in _CURRENT_LAKE_NPZ_ROW_MEMBERS if name in infos]
             for npy_name in ordered:
                 info = infos[npy_name]
                 with archive.open(info) as handle:
@@ -860,7 +867,12 @@ def _npz_has_rows(path: Path) -> bool:
                 if required_payload > 0 and (info.file_size - header_bytes) >= required_payload:
                     return True
         return False
-    except Exception:
+    except Exception as exc:
+        warnings.warn(
+            f"failed to inspect NPZ row count for {path}: {exc!r}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         return False
 
 
