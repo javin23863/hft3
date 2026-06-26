@@ -1086,15 +1086,28 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 1
 
     data_quality_skipped_unit_ids: List[str] = []
-    if args.skip_bad_units_file:
+    inline_skip_ids: List[str] = []
+    default_cfg_path = repo_root / "config" / "autoresearch" / "default.yaml"
+    if default_cfg_path.is_file():
+        import yaml
+
+        raw_cfg = yaml.safe_load(default_cfg_path.read_text(encoding="utf-8")) or {}
+        inline_skip_ids = [str(x) for x in (raw_cfg.get("skipped_unit_ids") or [])]
+
+    if args.skip_bad_units_file or inline_skip_ids:
         from research_pipeline.data_quality import skipped_unit_id_set, unit_matches_skip
 
-        skip_path = (
-            args.skip_bad_units_file
-            if args.skip_bad_units_file.is_absolute()
-            else repo_root / args.skip_bad_units_file
+        skip_path = None
+        if args.skip_bad_units_file:
+            skip_path = (
+                args.skip_bad_units_file
+                if args.skip_bad_units_file.is_absolute()
+                else repo_root / args.skip_bad_units_file
+            )
+        skip_ids = skipped_unit_id_set(
+            skip_bad_units_file=skip_path if skip_path is not None and skip_path.is_file() else None,
+            skipped_unit_ids=inline_skip_ids,
         )
-        skip_ids = skipped_unit_id_set(skip_bad_units_file=skip_path if skip_path.is_file() else None)
         if skip_ids:
             kept_units: List[PaidScreenUnit] = []
             for unit in units:
@@ -1109,7 +1122,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                     kept_units.append(unit)
             units = kept_units
             print(
-                f"[data_quality] skipping {len(data_quality_skipped_unit_ids)} bad units from {skip_path}",
+                f"[data_quality] skipping {len(data_quality_skipped_unit_ids)} bad units "
+                f"(file={skip_path if skip_path else 'none'}, inline={len(inline_skip_ids)})",
                 flush=True,
             )
 

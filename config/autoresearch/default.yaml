@@ -19,7 +19,8 @@ family_search_fraction: 0.4
 
 # Phase 0: bad NPZ / empty OHLCV remediation (continuous CME blueprint §3)
 skip_bad_units_file: null
-skipped_unit_ids: []
+skipped_unit_ids:
+  - ZN.v.0_EIA_NATGAS_2019_11_28_TIGHT
 abort_on_failed_units_by_scope:
   pilot: true
   screen: true
