@@ -29,6 +29,20 @@ class ParsedHypothesis:
 
 
 @dataclass
+class ContinuousLaneProfile:
+    """Continuous microstructure lane parse result (Phase 4)."""
+
+    thesis: str
+    lane: str
+    primary_model_id: str
+    model_family: str
+    universe_profile: str
+    relationship_family: Optional[str]
+    param_ranges: Dict[str, List[float]]
+    source: str = "heuristic"
+
+
+@dataclass
 class CandidateModel:
     candidate_id: str
     model_id: str
