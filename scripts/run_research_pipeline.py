@@ -59,7 +59,7 @@ FORBIDDEN_BAR_CONSTRUCTION_IDS = {
     "ohlcv_1m_from_npz_or_supplied_array",
 }
 FAILED_STATUS_VALUES = {"failed", "blocked", "error", "aborted", "stalled"}
-TRADE_COUNT_KEYS = ("num_trades", "total_trades", "Total Trades")
+OFFICIAL_TRADE_COUNT_KEY = "Total Trades"
 
 
 class PipelineBlocked(RuntimeError):
@@ -177,15 +177,16 @@ def promoted_count(payload: Mapping[str, Any]) -> int:
 
 
 def has_positive_trade_count(row: Mapping[str, Any]) -> bool:
-    for key in TRADE_COUNT_KEYS:
-        value = numeric(row.get(key))
-        if value is not None and value > 0:
-            return True
-    for key in ("metric_values", "vbt_stats", "vectorbt_results"):
-        nested = row.get(key)
-        if isinstance(nested, Mapping) and has_positive_trade_count(nested):
-            return True
-    return False
+    metric_values = row.get("metric_values")
+    stats: Any = {}
+    if isinstance(metric_values, Mapping):
+        stats = metric_values.get("vbt_stats") or {}
+    if not isinstance(stats, Mapping) or not stats:
+        stats = row.get("vectorbt_results") or {}
+    if not isinstance(stats, Mapping):
+        return False
+    value = numeric(stats.get(OFFICIAL_TRADE_COUNT_KEY))
+    return value is not None and value > 0
 
 
 def positive_trade_rows(obj: Any) -> int:

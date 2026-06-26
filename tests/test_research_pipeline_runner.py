@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from scripts.run_research_pipeline import run_pipeline
+from scripts.run_research_pipeline import positive_trade_rows, run_pipeline
 
 
 def _write_json(path: Path, payload: dict) -> Path:
@@ -33,6 +33,17 @@ def _base_spec(tmp_path: Path, *, target_stage: str = "stage_1_vectorbt_screen")
         },
         "stages": {},
     }
+
+
+def test_positive_trade_rows_requires_official_total_trades() -> None:
+    assert positive_trade_rows({"promoted": [{"vectorbt_results": {"num_trades": 5}}]}) == 0
+    assert positive_trade_rows({"promoted": [{"vectorbt_results": {"Total Trades": 5}}]}) == 1
+    assert (
+        positive_trade_rows(
+            {"promoted": [{"metric_values": {"vbt_stats": {"Total Trades": 5}}}]}
+        )
+        == 1
+    )
 
 
 def test_pipeline_blocks_vectorbt_artifact_with_stub_and_zero_promotions(tmp_path: Path) -> None:
@@ -78,7 +89,7 @@ def test_runner_blocks_unknown_feature_set_even_when_feature_plane_allowed(tmp_p
         tmp_path / "unknown_feature_set_artifact.json",
         {
             "promoted_ids": ["cand_1"],
-            "promoted": [{"candidate_id": "cand_1", "vectorbt_results": {"num_trades": 4}}],
+            "promoted": [{"candidate_id": "cand_1", "vectorbt_results": {"Total Trades": 4}}],
             "feature_plane_status": "scheduled_event_only",
             "feature_set_id": "fs_v1_pilot_unknown",
             "bar_construction_id": "fs_v1_row_loop_from_feature_store",
@@ -110,7 +121,7 @@ def test_pipeline_advances_to_promoted_bundle_with_real_evidence(tmp_path: Path)
                 {
                     "candidate_id": "cand_1",
                     "vectorbt_results": {
-                        "num_trades": 12,
+                        "Total Trades": 12,
                         "gate_metric_authority": "official_vectorbt_portfolio_stats",
                     },
                     "metric_values": {
@@ -163,7 +174,7 @@ def test_robustness_bridge_blocks_zero_replay_eligible_rows(tmp_path: Path) -> N
         tmp_path / "screening_artifact.json",
         {
             "promoted_ids": ["cand_1"],
-            "promoted": [{"candidate_id": "cand_1", "vectorbt_results": {"num_trades": 8}}],
+            "promoted": [{"candidate_id": "cand_1", "vectorbt_results": {"Total Trades": 8}}],
             "feature_plane_status": "scheduled_event_only",
             "bar_construction_id": "fs_v1_row_loop_from_feature_store",
         },
@@ -215,7 +226,7 @@ def test_resume_uses_existing_passed_receipt_without_rerunning_command(tmp_path:
     payload = json.dumps(
         {
             "promoted_ids": ["cand"],
-            "promoted": [{"vectorbt_results": {"num_trades": 1}}],
+            "promoted": [{"vectorbt_results": {"Total Trades": 1}}],
             "feature_plane_status": "scheduled_event_only",
             "bar_construction_id": "fs_v1_row_loop_from_feature_store",
         }
@@ -255,7 +266,7 @@ def test_resume_with_malformed_passed_receipt_reruns_stage(tmp_path: Path) -> No
     payload = json.dumps(
         {
             "promoted_ids": ["cand"],
-            "promoted": [{"vectorbt_results": {"num_trades": 1}}],
+            "promoted": [{"vectorbt_results": {"Total Trades": 1}}],
             "feature_plane_status": "scheduled_event_only",
             "bar_construction_id": "fs_v1_row_loop_from_feature_store",
         }
@@ -302,7 +313,7 @@ def test_string_command_does_not_pass_with_preexisting_output(tmp_path: Path) ->
         tmp_path / "screening_artifact.json",
         {
             "promoted_ids": ["cand"],
-            "promoted": [{"vectorbt_results": {"num_trades": 1}}],
+            "promoted": [{"vectorbt_results": {"Total Trades": 1}}],
             "feature_plane_status": "scheduled_event_only",
             "bar_construction_id": "fs_v1_row_loop_from_feature_store",
         },
