@@ -2089,6 +2089,9 @@ def test_vast_full_script_requires_declaration_before_workers() -> None:
     assert "got '$BATCH_TIMEOUT_SECONDS'" in script
     assert '"stall_minutes": int(stall_minutes)' in script
     assert '"batch_timeout_seconds": int(batch_timeout_seconds)' in script
+    assert 'DECL_ABORT_ON_FAILED_UNITS="${VBT_DECL_ABORT_ON_FAILED_UNITS:-true}"' in script
+    assert 'payload.get("abort_on_failed_units") is not True' in script
+    assert "abort_on_failed_units must be true;" in script
     assert 'expect_int("stall_minutes", int(stall_minutes))' in script
     assert 'expect_int("batch_timeout_seconds", int(batch_timeout_seconds))' in script
     assert 'expect_int("stall_minutes", 30)' not in script

@@ -143,7 +143,7 @@ fi
 GIT_HEAD="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 
 if [[ "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "1" || "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "true" ]]; then
-  DECL_ABORT_ON_FAILED_UNITS="${VBT_DECL_ABORT_ON_FAILED_UNITS:-false}"
+  DECL_ABORT_ON_FAILED_UNITS="${VBT_DECL_ABORT_ON_FAILED_UNITS:-true}"
   if [[ "$DECL_ABORT_ON_FAILED_UNITS" == "1" || "${DECL_ABORT_ON_FAILED_UNITS,,}" == "true" || "${DECL_ABORT_ON_FAILED_UNITS,,}" == "yes" || "${DECL_ABORT_ON_FAILED_UNITS,,}" == "on" ]]; then
     DECL_ABORT_ON_FAILED_UNITS="true"
   else
@@ -233,10 +233,8 @@ expect_str("units_source", units_source)
 expect_str("git_head", git_head)
 expect_str("events_csv_hash", events_hash)
 expect_str("lake_manifest_hash", lake_hash)
-if payload.get("abort_on_failed_units") not in (True, False):
-    errors.append(
-        "abort_on_failed_units must be true/false; run with VBT_WRITE_DECLARATION_TEMPLATE=1 to regenerate the declaration template"
-    )
+if payload.get("abort_on_failed_units") is not True:
+    errors.append("abort_on_failed_units must be true; run with VBT_WRITE_DECLARATION_TEMPLATE=1 to regenerate the declaration template")
 if errors:
     for err in errors:
         print(f"ERROR: Declaration mismatch: {err}", file=sys.stderr)

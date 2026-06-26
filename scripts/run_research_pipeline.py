@@ -278,7 +278,10 @@ def existing_passed_receipt(bundle_dir: Path, stage_id: str) -> Mapping[str, Any
     receipt_path = bundle_dir / "receipts" / f"{stage_id}.json"
     if not receipt_path.exists():
         return None
-    receipt = read_json(receipt_path)
+    try:
+        receipt = read_json(receipt_path)
+    except json.JSONDecodeError:
+        return None
     if isinstance(receipt, Mapping) and receipt.get("status") == "passed":
         return receipt
     return None
