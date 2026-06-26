@@ -307,7 +307,7 @@ def cscv_pbo(
         return {"pbo": 0.5, "num_blocks": num_blocks, "folds": 0, "lambda": 0.5}
     panel = np.array([s[:min_len] for s in pseudo_strategies])
     num_strategies = panel.shape[0]
-    ranks_out_of_sample = np.zeros(num_strategies)
+    processed_ranks: list[float] = []
     count_worst = 0
     folds = 0
     for holdout in range(num_strategies):
@@ -322,16 +322,17 @@ def cscv_pbo(
             continue
         ranks = np.argsort(np.argsort(all_out_sharpes))
         percentile = ranks[best_strategy_global_idx] / max(num_strategies - 1, 1)
-        ranks_out_of_sample[holdout] = percentile
+        processed_ranks.append(float(percentile))
         if percentile <= 0.5:
             count_worst += 1
         folds += 1
     if folds == 0:
         return {"pbo": 0.5, "num_blocks": num_blocks, "folds": 0, "lambda": 0.5}
     pbo = count_worst / folds
-    # Include zero percentiles (worst-rank out-of-sample) — excluding them would
-    # bias lambda upward and mask the worst overfitting cases.
-    lam = float(np.mean(ranks_out_of_sample)) if ranks_out_of_sample.size > 0 else 0.5
+    # Mean only over holdouts actually processed — skipped holdouts (zero-variance
+    # out-of-sample) must not contribute a synthetic 0.0 that would bias lambda.
+    arr_ranks = np.asarray(processed_ranks, dtype=np.float64)
+    lam = float(np.mean(arr_ranks)) if arr_ranks.size > 0 else 0.5
     return {"pbo": float(pbo), "num_blocks": int(num_blocks), "folds": int(folds), "lambda": float(lam)}
 
 
