@@ -19,7 +19,7 @@ python3 scripts/run_paid_screen.py \
   --out "$OUT_DIR" \
   --vectorbt-scope paid-compute \
   --workers 4 \
-  --ready-gate-file runtime/reports/paid_screen_ready_gate.json \
+  --owner-waiver "phase_b_smoke_before_ready_gate" \
   --max-wall-clock-seconds 3600 \
   --no-llm
 

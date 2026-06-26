@@ -150,10 +150,13 @@ evidence.
 ## Resume Contract
 
 `--resume` reads `receipts/<stage_id>.json`. Stages with `status="passed"` are
-not rerun. The next stage begins from the first missing or non-passed receipt.
+not rerun. Missing receipts can run. Receipts with `status="failed"`,
+`"blocked"`, `"error"`, `"aborted"`, or `"stalled"` stop the resume immediately
+unless the operator passes `--force-rerun-failed` after fixing the root cause.
 
 This is the only allowed recovery behavior for a partially completed pipeline:
 continue from the last valid receipt, never restart the whole run by default.
+Do not repeatedly rerun a deterministic failed stage against unchanged inputs.
 
 ## Current Boundary
 

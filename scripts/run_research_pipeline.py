@@ -275,7 +275,7 @@ def build_context(spec_path: Path, spec: Mapping[str, Any]) -> tuple[Path, Path,
     return repo_root, bundle_dir, run_id, target_stage
 
 
-def existing_passed_receipt(bundle_dir: Path, stage_id: str) -> Mapping[str, Any] | None:
+def existing_stage_receipt(bundle_dir: Path, stage_id: str) -> Mapping[str, Any] | None:
     receipt_path = bundle_dir / "receipts" / f"{stage_id}.json"
     if not receipt_path.exists():
         return None
@@ -283,7 +283,14 @@ def existing_passed_receipt(bundle_dir: Path, stage_id: str) -> Mapping[str, Any
         receipt = read_json(receipt_path)
     except json.JSONDecodeError:
         return None
-    if isinstance(receipt, Mapping) and receipt.get("status") == "passed":
+    if isinstance(receipt, Mapping):
+        return receipt
+    return None
+
+
+def existing_passed_receipt(bundle_dir: Path, stage_id: str) -> Mapping[str, Any] | None:
+    receipt = existing_stage_receipt(bundle_dir, stage_id)
+    if receipt is not None and receipt.get("status") == "passed":
         return receipt
     return None
 
@@ -758,7 +765,13 @@ def run_stage(
     return receipt
 
 
-def run_pipeline(spec_path: Path, *, resume: bool = False, dry_run: bool = False) -> Mapping[str, Any]:
+def run_pipeline(
+    spec_path: Path,
+    *,
+    resume: bool = False,
+    dry_run: bool = False,
+    force_rerun_failed: bool = False,
+) -> Mapping[str, Any]:
     spec_path = spec_path.resolve()
     spec = read_json(spec_path)
     if not isinstance(spec, Mapping):
@@ -773,10 +786,24 @@ def run_pipeline(spec_path: Path, *, resume: bool = False, dry_run: bool = False
     try:
         for stage_id in stage_ids_through(target_stage):
             if resume:
-                passed = existing_passed_receipt(bundle_dir, stage_id)
-                if passed is not None:
-                    stage_receipts.append(passed)
+                existing = existing_stage_receipt(bundle_dir, stage_id)
+                if existing is not None and existing.get("status") == "passed":
+                    stage_receipts.append(existing)
                     continue
+                if (
+                    existing is not None
+                    and existing.get("status") in FAILED_STATUS_VALUES
+                    and not force_rerun_failed
+                ):
+                    stage_receipts.append(existing)
+                    status = str(existing.get("status") or "unknown")
+                    errors = [
+                        f"resume_refuses_existing_{status}_receipt:use_--force-rerun-failed_after_fix"
+                    ]
+                    receipt_errors = existing.get("validation_errors")
+                    if isinstance(receipt_errors, list):
+                        errors.extend(str(error) for error in receipt_errors)
+                    raise PipelineBlocked(stage_id, errors)
             stage_spec = stages_spec.get(stage_id) or {}
             if not isinstance(stage_spec, Mapping):
                 raise ValueError(f"stage spec must be an object: {stage_id}")
@@ -830,6 +857,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--spec", required=True, help="Path to ResearchRunSpec JSON")
     parser.add_argument("--resume", action="store_true", help="Continue from passed stage receipts")
+    parser.add_argument(
+        "--force-rerun-failed",
+        action="store_true",
+        help="With --resume, rerun a failed/blocked/error stage after its root cause was fixed",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Write the first planned receipt only")
     parser.add_argument("--status", action="store_true", help="Print current bundle status and exit")
     args = parser.parse_args(argv)
@@ -839,7 +871,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.status:
             print(json.dumps(load_status(spec_path), indent=2, sort_keys=True))
             return 0
-        bundle = run_pipeline(spec_path, resume=args.resume, dry_run=args.dry_run)
+        bundle = run_pipeline(
+            spec_path,
+            resume=args.resume,
+            dry_run=args.dry_run,
+            force_rerun_failed=args.force_rerun_failed,
+        )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

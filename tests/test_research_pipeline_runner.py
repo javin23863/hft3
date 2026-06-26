@@ -308,6 +308,109 @@ def test_resume_with_malformed_passed_receipt_reruns_stage(tmp_path: Path) -> No
     assert marker.read_text(encoding="utf-8") == "reran"
 
 
+def test_resume_refuses_existing_failed_receipt_without_force(tmp_path: Path) -> None:
+    marker = tmp_path / "ran.txt"
+    artifact = tmp_path / "screening_artifact.json"
+    command = [
+        sys.executable,
+        "-c",
+        (
+            "from pathlib import Path; "
+            f"Path(r'{marker}').write_text('reran', encoding='utf-8'); "
+            f"Path(r'{artifact}').write_text('{{}}', encoding='utf-8')"
+        ),
+    ]
+    spec = _base_spec(tmp_path)
+    spec["stages"] = {
+        "stage_1_vectorbt_screen": {
+            "command": command,
+            "outputs": {"screening_artifact": str(artifact)},
+        }
+    }
+    spec_path = _write_json(tmp_path / "spec.json", spec)
+    receipt_path = (
+        tmp_path
+        / "research_cards"
+        / "pipeline_runs"
+        / "unit_pipeline"
+        / "receipts"
+        / "stage_1_vectorbt_screen.json"
+    )
+    _write_json(
+        receipt_path,
+        {
+            "version": 1,
+            "run_id": "unit_pipeline",
+            "stage_id": "stage_1_vectorbt_screen",
+            "status": "failed",
+            "validation_errors": ["command_failed:index=0:returncode=2"],
+        },
+    )
+
+    bundle = run_pipeline(spec_path, resume=True)
+
+    assert bundle["status"] == "blocked"
+    assert not marker.exists()
+    assert (
+        "stage_1_vectorbt_screen:resume_refuses_existing_failed_receipt:"
+        "use_--force-rerun-failed_after_fix"
+    ) in bundle["failures"]
+    assert "stage_1_vectorbt_screen:command_failed:index=0:returncode=2" in bundle["failures"]
+
+
+def test_resume_force_reruns_existing_failed_receipt(tmp_path: Path) -> None:
+    marker = tmp_path / "ran.txt"
+    artifact = tmp_path / "screening_artifact.json"
+    payload = json.dumps(
+        {
+            "promoted_ids": ["cand"],
+            "promoted": [{"vectorbt_results": {"Total Trades": 1}}],
+            "feature_plane_status": "scheduled_event_only",
+            "bar_construction_id": "fs_v1_row_loop_from_feature_store",
+        }
+    )
+    command = [
+        sys.executable,
+        "-c",
+        (
+            "from pathlib import Path; "
+            f"Path(r'{marker}').write_text('reran', encoding='utf-8'); "
+            f"Path(r'{artifact}').write_text({payload!r}, encoding='utf-8')"
+        ),
+    ]
+    spec = _base_spec(tmp_path)
+    spec["stages"] = {
+        "stage_1_vectorbt_screen": {
+            "command": command,
+            "outputs": {"screening_artifact": str(artifact)},
+        }
+    }
+    spec_path = _write_json(tmp_path / "spec.json", spec)
+    receipt_path = (
+        tmp_path
+        / "research_cards"
+        / "pipeline_runs"
+        / "unit_pipeline"
+        / "receipts"
+        / "stage_1_vectorbt_screen.json"
+    )
+    _write_json(
+        receipt_path,
+        {
+            "version": 1,
+            "run_id": "unit_pipeline",
+            "stage_id": "stage_1_vectorbt_screen",
+            "status": "failed",
+            "validation_errors": ["command_failed:index=0:returncode=2"],
+        },
+    )
+
+    bundle = run_pipeline(spec_path, resume=True, force_rerun_failed=True)
+
+    assert bundle["status"] == "ready"
+    assert marker.read_text(encoding="utf-8") == "reran"
+
+
 def test_string_command_does_not_pass_with_preexisting_output(tmp_path: Path) -> None:
     artifact = _write_json(
         tmp_path / "screening_artifact.json",

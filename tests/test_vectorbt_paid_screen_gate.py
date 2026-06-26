@@ -505,6 +505,13 @@ def test_vast_launchers_do_not_auto_prefer_forensic_ready_gate() -> None:
     assert "VBT_READY_GATE_FILE=$VBT_READY_GATE_FILE bash scripts/run_vbt_paid_screen_vast_full.sh" in ssh_script
 
 
+def test_phase_b_smoke_does_not_depend_on_full_run_ready_gate() -> None:
+    smoke_script = (REPO / "scripts" / "run_vbt_paid_screen_smoke.sh").read_text(encoding="utf-8")
+
+    assert "--owner-waiver \"phase_b_smoke_before_ready_gate\"" in smoke_script
+    assert "--ready-gate-file runtime/reports/paid_screen_ready_gate.json" not in smoke_script
+
+
 def test_stage_a_survivors_expansion_not_capped_at_fifty(tmp_path: Path) -> None:
     """Full scope uses all TIGHT events per cell — not [:50] and not CPI+NFP-only smoke."""
     survivors = tmp_path / "stage_a_survivors.json"
