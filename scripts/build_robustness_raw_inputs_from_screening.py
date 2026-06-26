@@ -227,6 +227,13 @@ def _extract_measured_row(row: Mapping[str, Any]) -> tuple[MeasuredRow | None, s
     if trade_count is None:
         if isinstance(vbt_stats, Mapping):
             trade_count = _integer(vbt_stats.get("Total Trades"))
+    if trade_count == 0 and net_return == 0.0 and isinstance(vbt_stats, Mapping):
+        if expectancy is None:
+            expectancy = 0.0
+        if sharpe is None:
+            sharpe = 0.0
+        if max_drawdown is None:
+            max_drawdown = 0.0
     if None in (net_return, expectancy, sharpe, max_drawdown) or trade_count is None:
         return None, "measured_metrics_missing"
     profit_factor = _first_number(metrics, "profit_factor", "Profit Factor")

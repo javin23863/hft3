@@ -12,6 +12,7 @@ from backtest_pipeline.src.vectorbt_adapter import (
     compute_screening_artifact_hash,
     validate_screening_artifact,
 )
+from scripts.build_robustness_raw_inputs_from_screening import _extract_measured_row
 from test_apply_robustness_evidence_to_screening import _screening_artifact, _write_json
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -294,6 +295,52 @@ def test_accepts_surface_rows_from_official_vbt_stats(tmp_path: Path) -> None:
     receipt = json.loads(result.stdout)
     assert receipt["status"] == "ok"
     assert receipt["packaged_count"] == 1
+
+
+def test_extracts_zero_trade_official_vbt_stats_as_measured_cell() -> None:
+    template = _screening_artifact("placeholder_promoted")["promoted"][0]
+    row = _metric_row(
+        template,
+        event_id=_event_ids()[0],
+        params=_param_values()[0],
+        index=0,
+        promoted=False,
+    )
+    not_run_reason = "candidate_rejected_before_replay:vectorbt_stats_missing_gate_fields"
+    not_run_metric = {"status": "not_run", "reason": not_run_reason}
+    row["net_return"] = not_run_metric
+    row["net_pnl"] = not_run_metric
+    row["expectancy_per_trade"] = not_run_metric
+    row["profit_factor"] = not_run_metric
+    row["sharpe"] = not_run_metric
+    row["max_drawdown"] = not_run_metric
+    row["trade_count"] = not_run_metric
+    row["metric_values"] = {
+        "base_candidate_id": row["base_candidate_id"],
+        "base_candidate_metadata": row["base_candidate_metadata"],
+        "parameter_values": row["parameter_values"],
+        "param_values": row["param_values"],
+        "feature_recipe_hash": row["feature_recipe_hash"],
+        "vbt_stats": {
+            "Total Trades": 0,
+            "Expectancy": None,
+            "Total Return [%]": 0.0,
+            "Max Drawdown [%]": None,
+            "Sharpe Ratio": "inf",
+            "Profit Factor": None,
+        },
+        "gate_metric_authority": "official_vectorbt_portfolio_stats",
+    }
+
+    measured, reason = _extract_measured_row(row)
+
+    assert reason is None
+    assert measured is not None
+    assert measured.trade_count == 0
+    assert measured.net_return == 0.0
+    assert measured.expectancy == 0.0
+    assert measured.sharpe == 0.0
+    assert measured.max_drawdown == 0.0
 
 
 def test_missing_stress_args_fails_closed_without_output(tmp_path: Path) -> None:
