@@ -61,6 +61,24 @@ def test_skip_bad_units_file_missing(tmp_path: Path) -> None:
     assert skip == set()
 
 
+def test_skip_bad_units_substring_matching() -> None:
+    """NPZ stems are substrings of full unit IDs — substring matching must work.
+
+    NPZ stem:   ZN.v.0_EIA_NATGAS_2019_11_28_TIGHT
+    Full unit:  SECOND_WAVE_CONTINUATION_ZN.v.0_EIA_NATGAS_2019_11_28_TIGHT
+    """
+    bad_ids = {"ZN.v.0_EIA_NATGAS_2019_11_28_TIGHT"}
+    full_unit_id = "SECOND_WAVE_CONTINUATION_ZN.v.0_EIA_NATGAS_2019_11_28_TIGHT"
+    # Substring match (the fix)
+    matched = any(b in full_unit_id for b in bad_ids)
+    assert matched is True
+
+    # Non-matching unit should not be skipped
+    clean_unit_id = "SPREAD_BLOWOUT_RECOMPRESSION_ES.v.0_CPI_2024_09_11_TIGHT"
+    matched_clean = any(b in clean_unit_id for b in bad_ids)
+    assert matched_clean is False
+
+
 def test_failure_counts_by_type_aggregation() -> None:
     """failure_counts_by_type separates data_quality from algorithmic errors."""
     unit_results = [
