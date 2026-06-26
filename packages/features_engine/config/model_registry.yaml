@@ -518,7 +518,7 @@ models:
     model_family: term_structure
     requires_relationship_graph: true
     required_data: [rithmic_continuous, relationship_graph]
-    valid_relationship_types: [calendar_front_second]
+    valid_relationship_types: [rates_curve, calendar_front_second]
     default_param_ranges:
       curve_zscore: [0.5, 2.5]
     risk_metrics:

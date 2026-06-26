@@ -52,6 +52,8 @@ def _run_id() -> str:
 
 
 _PIPELINE_RESULT_MARKER = "HFT3_PIPELINE_RESULT="
+_DEFAULT_MAX_CANDIDATES = 5
+_CONTINUOUS_SCAN_DEFAULT_MAX_CANDIDATES = 5000
 
 
 def _emit_pipeline_payload(payload: dict, *, orchestrator_result: bool) -> None:
@@ -179,6 +181,29 @@ def _run_continuous_lane(args: argparse.Namespace) -> int:
         elif payload["status"] == "continuous_manifest_and_graph":
             payload["status"] = "continuous_manifest_graph_and_feature_store"
 
+    if args.scan_continuous_candidates:
+        from research_pipeline.continuous_model_generation import scan_continuous_candidates
+
+        scan_max = args.continuous_scan_max
+        try:
+            scan = scan_continuous_candidates(
+                repo_root=repo_root,
+                rithmic_week=args.rithmic_week,
+                universe_profile=profile,
+                relationship_graph_path=graph_path,
+                max_candidates=scan_max,
+                build_graph_if_missing=args.build_relationship_graph,
+            )
+        except FileNotFoundError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        payload["candidates_path"] = scan.get("candidates_path")
+        payload["candidates_summary"] = scan.get("summary")
+        if payload["status"].startswith("continuous_manifest"):
+            payload["status"] = payload["status"] + "_and_candidates"
+        else:
+            payload["status"] = "continuous_candidates"
+
     _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
     return 0
 
@@ -219,11 +244,22 @@ def main() -> int:
         help="Continuous lane: also write PIT-validated feature store stub for --rithmic-week",
     )
     parser.add_argument(
+        "--scan-continuous-candidates",
+        action="store_true",
+        help="Continuous lane: scan graph edges + registry param ranges for candidates",
+    )
+    parser.add_argument(
+        "--continuous-scan-max",
+        type=int,
+        default=_CONTINUOUS_SCAN_DEFAULT_MAX_CANDIDATES,
+        help="Max candidates for --scan-continuous-candidates (default 5000)",
+    )
+    parser.add_argument(
         "--symbol",
         default="MES",
         help="Target symbol for feature-store fs_v1 VectorBT path (default MES)",
     )
-    parser.add_argument("--max-candidates", type=int, default=5)
+    parser.add_argument("--max-candidates", type=int, default=_DEFAULT_MAX_CANDIDATES)
     parser.add_argument("--chi404-summary", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true", help="Parse and generate only")
     parser.add_argument("--no-llm", action="store_true", help="Heuristic hypothesis parse only")
@@ -307,6 +343,12 @@ def main() -> int:
     if args.lane == "event" and args.build_feature_store:
         print(
             "Error: --build-feature-store requires --lane continuous.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.lane == "event" and args.scan_continuous_candidates:
+        print(
+            "Error: --scan-continuous-candidates requires --lane continuous.",
             file=sys.stderr,
         )
         return 2
