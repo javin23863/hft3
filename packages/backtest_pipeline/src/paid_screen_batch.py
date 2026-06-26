@@ -89,6 +89,30 @@ def _should_skip_matrix_screening(
     return ohlcv_from_cache and isinstance(data_cache, dict)
 
 
+def _is_paid_scope(scope: str) -> bool:
+    return str(scope or "").strip().lower() in {
+        "paid",
+        "paid-compute",
+        "paid_compute",
+        "broad",
+        "broad-screen",
+        "broad_screen",
+        "all-models",
+        "all_model",
+        "all_models",
+    }
+
+
+def _ohlcv_row_count(ohlcv) -> int:
+    try:
+        return int(ohlcv.shape[0])
+    except (AttributeError, IndexError, TypeError, ValueError):
+        try:
+            return len(ohlcv)
+        except TypeError:
+            return 0
+
+
 def _resolve_models_without_screening(
     units: list[PaidScreenUnit],
     context: WorkerContext,
@@ -764,6 +788,25 @@ def screen_paid_batch(
                 error_category="data_quality",
             ))
         return results
+
+    if run_screening and _is_paid_scope(context.screening_scope):
+        ohlcv_rows = _ohlcv_row_count(ohlcv)
+        if ohlcv_rows < 2:
+            error = f"insufficient_ohlcv_bars_for_paid_screen:min=2 got={ohlcv_rows}"
+            for unit in units:
+                profiler.record_failure(
+                    "npz_load",
+                    RuntimeError(error),
+                    unit.unit_id,
+                    cache_state={"hit": ohlcv_from_cache},
+                )
+                results.append(UnitScreeningResult(
+                    unit_id=unit.unit_id,
+                    status="ERROR",
+                    error=error,
+                    error_category="data_quality",
+                ))
+            return results
 
     # Cache-wiring / disabled-screening path: resolve models per unit group,
     # return SKIPPED for successes and ERROR for per-unit resolution failures.

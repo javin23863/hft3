@@ -14,6 +14,7 @@ from backtest_pipeline.src.paid_screen_batch import (
     build_structured_parsed_hypothesis, _resolve_signal_implementation_hash,
     _signal_implementation_hash_paths, resolve_batching_hashes, ohlcv_data_cache_key,
     _worker_scratch_artifact_dir, _write_screening_artifact, resolve_resume_provenance,
+    _is_paid_scope,
 )
 from backtest_pipeline.src.paid_screen_profiling import RunProfiler, artifact_matches_resume_unit, DEFAULT_RESEARCH_SPLIT
 from backtest_pipeline.src.vectorbt_adapter import FilterResult, validate_screening_artifact
@@ -97,6 +98,38 @@ class TestScreenPaidBatch:
         for r in results:
             assert r.status == "ERROR"
             assert "no_ohlcv_data" in r.error
+
+    def test_paid_scope_rejects_one_bar_ohlcv_before_vectorbt(self, monkeypatch):
+        """A one-row paid OHLCV batch cannot trade after the no-lookahead shift."""
+        from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+
+        ctx = make_context(screening_scope="paid_compute")
+        unit = make_unit()
+        cache = BoundedLRUCache(max_entries=4, max_memory_mb=64)
+        cache.put(_batch_cache_key(ctx, unit), np.array([[1, 2, 3, 4, 5]]))
+        called = {"matrix": False}
+
+        def _unexpected_matrix(**_kwargs):
+            called["matrix"] = True
+            raise AssertionError("matrix should not run for one-bar paid OHLCV")
+
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            _unexpected_matrix,
+        )
+
+        results = screen_paid_batch([unit], ctx, data_cache=cache, run_screening=True)
+
+        assert called["matrix"] is False
+        assert len(results) == 1
+        assert results[0].status == "ERROR"
+        assert results[0].error_category == "data_quality"
+        assert "insufficient_ohlcv_bars_for_paid_screen" in str(results[0].error)
+
+    def test_all_models_scope_is_paid_scope_alias(self):
+        assert _is_paid_scope("all-models")
+        assert _is_paid_scope("all_model")
+        assert _is_paid_scope("all_models")
 
     def test_per_unit_result_returned(self):
         """Each unit gets its own UnitScreeningResult."""

@@ -271,6 +271,62 @@ def test_aggregate_promoted_ids(tmp_path: Path) -> None:
     assert set(payload["promoted_ids"]) == {"cand_a", "cand_b"}
 
 
+def test_fast_progress_audit_flags_zero_promo_bar_stub_sample(tmp_path: Path) -> None:
+    from scripts.audit_vbt_run_progress import _scan_run_dir_fast
+
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_full_bad"
+    units_dir = run_dir / "units"
+    for idx in range(10):
+        art_dir = units_dir / f"u{idx}"
+        art_dir.mkdir(parents=True)
+        (art_dir / "screening_artifact.json").write_text(
+            json.dumps(
+                {
+                    "promoted_ids": [],
+                    "rejected": [
+                        {
+                            "metric_values": {
+                                "vbt_stats": {
+                                    "Total Trades": 0,
+                                    "Expectancy": None,
+                                    "Max Drawdown [%]": None,
+                                }
+                            }
+                        }
+                    ],
+                    "feature_plane_status": "bar_stub_research_only",
+                    "bar_construction_id": "ohlcv_1m_from_npz_or_supplied_array",
+                }
+            ),
+            encoding="utf-8",
+        )
+    (run_dir / "paid_screen_run_manifest.json").write_text(
+        json.dumps(
+            {
+                "status": "running",
+                "expected_work_units": 100,
+                "completed_work_units": 10,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "workers": 4,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    audit = _scan_run_dir_fast(run_dir)
+
+    assert audit["sample_artifact_count"] == 10
+    assert audit["artifact_audit_mode"] == "sampled"
+    assert audit["artifact_audit_skipped"] is False
+    assert audit["sample_promoted_ids"] == 0
+    assert audit["sample_positive_trade_rows"] == 0
+    assert "zero_promoted_ids_in_artifact_sample:n=10" in audit["validation_errors"]
+    assert "zero_positive_trade_rows_in_artifact_sample:n=10" in audit["validation_errors"]
+    assert "bar_stub_research_only_in_artifact_sample:n=10" in audit["validation_errors"]
+    assert "npz_bar_fallback_in_artifact_sample:n=10" in audit["validation_errors"]
+
+
 def test_all_active_models_generates_multiple_hypotheses(tmp_path: Path) -> None:
     """Full-scope generator expands active registry (not single model or Stage A)."""
     from features_engine.src.hypotheses.registry import get_active_hypotheses

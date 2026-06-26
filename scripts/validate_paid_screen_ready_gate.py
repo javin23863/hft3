@@ -19,6 +19,19 @@ from hft3_bootstrap import setup_repo_paths
 
 setup_repo_paths()
 
+_PAID_SCOPES = {
+    "paid-compute",
+    "paid",
+    "broad-screen",
+    "broad",
+    "all-models",
+    "paid_compute",
+    "broad_screen",
+    "all_model",
+    "all_models",
+}
+_MIN_POSITIVE_TRADE_ROWS = 1
+
 
 def _validate_screening_artifact(payload: Dict[str, Any]) -> None:
     from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
@@ -58,6 +71,41 @@ def _hash_fields(payload: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
+def _positive_trade_rows(payload: Dict[str, Any]) -> int:
+    total = 0
+    for section in ("promoted", "rejected"):
+        rows = payload.get(section) or []
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            metric_values = row.get("metric_values") or {}
+            stats = metric_values.get("vbt_stats") or row.get("vectorbt_results") or {}
+            if not isinstance(stats, dict):
+                continue
+            try:
+                trades = float(stats.get("Total Trades"))
+            except (TypeError, ValueError):
+                continue
+            if trades > 0:
+                total += 1
+    return total
+
+
+def _promoted_id_count(payload: Dict[str, Any]) -> int:
+    promoted_ids = payload.get("promoted_ids") or []
+    if isinstance(promoted_ids, list) and promoted_ids:
+        return len(promoted_ids)
+    promoted = payload.get("promoted") or []
+    if isinstance(promoted, list) and promoted:
+        return len(promoted)
+    try:
+        return int(payload.get("promoted_count") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _validate_smoke_manifest(manifest_path: Path, errors: List[str]) -> Dict[str, Any]:
     if not manifest_path.is_file():
         errors.append(f"smoke_manifest:missing:{manifest_path}")
@@ -81,6 +129,11 @@ def _validate_smoke_manifest(manifest_path: Path, errors: List[str]) -> Dict[str
     if not unit_results:
         errors.append("smoke_manifest:empty_unit_results")
     validated = 0
+    paid_scope_artifacts = 0
+    paid_scope_positive_promotions = 0
+    paid_scope_positive_trade_rows = 0
+    feature_plane_status_counts: Dict[str, int] = {}
+    bar_construction_id_counts: Dict[str, int] = {}
     for row in unit_results:
         if row.get("status") != "OK":
             continue
@@ -93,21 +146,55 @@ def _validate_smoke_manifest(manifest_path: Path, errors: List[str]) -> Dict[str
         if payload:
             validated += 1
             scope = str(payload.get("screening_scope") or manifest.get("vectorbt_scope") or "")
+            feature_plane_status = str(payload.get("feature_plane_status") or "")
+            bar_construction_id = str(payload.get("bar_construction_id") or "")
+            feature_set_id = str(payload.get("feature_set_id") or "")
+            if feature_plane_status:
+                feature_plane_status_counts[feature_plane_status] = (
+                    feature_plane_status_counts.get(feature_plane_status, 0) + 1
+                )
+            if bar_construction_id:
+                bar_construction_id_counts[bar_construction_id] = (
+                    bar_construction_id_counts.get(bar_construction_id, 0) + 1
+                )
             # Per Codex review finding 10: include the underscore-variant scope
             # names alongside the hyphen-variant names so the rust-engine
             # requirement is enforced for all canonical spellings.
-            if scope in {
-                "paid-compute", "paid", "broad-screen", "broad", "all-models",
-                "paid_compute", "broad_screen", "all_model",
-            }:
+            if scope in _PAID_SCOPES:
+                paid_scope_artifacts += 1
                 engine = str(payload.get("vectorbt_engine") or "").lower()
                 if engine != "rust":
                     errors.append(
                         f"smoke_unit:{row.get('unit_id')}:paid_scope_requires_rust_engine:got={engine}"
                     )
+                if feature_plane_status == "bar_stub_research_only":
+                    errors.append(
+                        f"smoke_unit:{row.get('unit_id')}:paid_scope_bar_stub_research_only"
+                    )
+                if feature_set_id == "fs_v1_pilot_unknown":
+                    errors.append(
+                        f"smoke_unit:{row.get('unit_id')}:paid_scope_unknown_feature_set"
+                    )
+                if bar_construction_id == "ohlcv_1m_from_npz_or_supplied_array":
+                    errors.append(
+                        f"smoke_unit:{row.get('unit_id')}:paid_scope_npz_bar_fallback"
+                    )
+                paid_scope_positive_promotions += _promoted_id_count(payload)
+                paid_scope_positive_trade_rows += _positive_trade_rows(payload)
     if validated == 0:
         errors.append("smoke_manifest:no_validated_unit_artifacts")
+    if paid_scope_artifacts == 0:
+        errors.append("smoke_manifest:no_paid_scope_unit_artifacts")
+    elif paid_scope_positive_promotions <= 0:
+        errors.append("smoke_manifest:no_paid_scope_positive_promotions")
+    if paid_scope_artifacts > 0 and paid_scope_positive_trade_rows < _MIN_POSITIVE_TRADE_ROWS:
+        errors.append("smoke_manifest:no_paid_scope_positive_trade_rows")
     manifest["validated_unit_artifacts"] = validated
+    manifest["paid_scope_unit_artifacts"] = paid_scope_artifacts
+    manifest["paid_scope_positive_promotions"] = paid_scope_positive_promotions
+    manifest["paid_scope_positive_trade_rows"] = paid_scope_positive_trade_rows
+    manifest["feature_plane_status_counts"] = feature_plane_status_counts
+    manifest["bar_construction_id_counts"] = bar_construction_id_counts
     manifest["out_dir"] = str(out_dir)
     return manifest
 
@@ -198,6 +285,12 @@ def evaluate_gate(
             "completed_work_units": smoke.get("completed_work_units"),
             "failed_work_units": smoke.get("failed_work_units"),
             "units_per_hour": smoke.get("units_per_hour"),
+            "validated_unit_artifacts": smoke.get("validated_unit_artifacts"),
+            "paid_scope_unit_artifacts": smoke.get("paid_scope_unit_artifacts"),
+            "paid_scope_positive_promotions": smoke.get("paid_scope_positive_promotions"),
+            "paid_scope_positive_trade_rows": smoke.get("paid_scope_positive_trade_rows"),
+            "feature_plane_status_counts": smoke.get("feature_plane_status_counts"),
+            "bar_construction_id_counts": smoke.get("bar_construction_id_counts"),
         },
         "errors": errors,
         "lookahead_pytest_tail": pytest_tail,
