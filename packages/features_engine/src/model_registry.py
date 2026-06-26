@@ -24,12 +24,20 @@ def _models() -> dict:
 
 @lru_cache(maxsize=1)
 def slug_to_legacy() -> Dict[str, str]:
-    return {slug: entry["legacy_id"] for slug, entry in _models().items()}
+    return {
+        slug: entry["legacy_id"]
+        for slug, entry in _models().items()
+        if "legacy_id" in entry
+    }
 
 
 @lru_cache(maxsize=1)
 def legacy_to_slug() -> Dict[str, str]:
-    return {entry["legacy_id"]: slug for slug, entry in _models().items()}
+    return {
+        entry["legacy_id"]: slug
+        for slug, entry in _models().items()
+        if "legacy_id" in entry
+    }
 
 
 def all_slugs() -> List[str]:
