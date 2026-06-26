@@ -80,6 +80,71 @@ def test_discover_rithmic_weekly_roots_from_fixture(tmp_path: Path) -> None:
     assert manifest["summary"]["eligible_contracts"] == 0
 
 
+def test_date_first_layout_aggregates_multi_day(tmp_path: Path) -> None:
+    from research_pipeline.continuous_data_manifest import build_coverage_manifest
+
+    week_root = tmp_path / "data" / "raw" / "rithmic_continuous" / "2026-W27"
+    _write_events(week_root / "2026-07-01" / "ESM6" / "events.ndjson", 2)
+    _write_events(week_root / "2026-07-02" / "ESM6" / "events.ndjson", 3)
+    _write_events(week_root / "2026-07-03" / "MESU6" / "events.ndjson", 10)
+
+    manifest = build_coverage_manifest(
+        repo_root=tmp_path,
+        rithmic_week="2026-W27",
+        universe_profile="full_cme_research",
+    )
+    assert manifest["contracts"] == ["ESM6", "MESU6"]
+    es_row = next(row for row in manifest["contract_rows"] if row["contract"] == "ESM6")
+    assert es_row["row_count"] == 5
+    assert es_row["missing_ratio"] == pytest.approx(0.6)
+    assert manifest["summary"]["total_rows"] == 15
+
+
+def test_flat_contract_events_without_date_dirs_uses_none_missing_ratio(
+    tmp_path: Path,
+) -> None:
+    from research_pipeline.continuous_data_manifest import build_coverage_manifest
+
+    week_root = tmp_path / "data" / "raw" / "rithmic_continuous" / "2026-W27" / "MESU6"
+    _write_events(week_root / "events.ndjson", 100)
+
+    manifest = build_coverage_manifest(
+        repo_root=tmp_path,
+        rithmic_week="2026-W27",
+        universe_profile="full_cme_research",
+    )
+    row = manifest["contract_rows"][0]
+    assert row["row_count"] == 100
+    assert row["missing_ratio"] is None
+    assert row["eligible"] is False
+
+
+def test_data_types_derived_from_present_files(tmp_path: Path) -> None:
+    from research_pipeline.continuous_data_manifest import build_coverage_manifest
+
+    week_root = tmp_path / "data" / "raw" / "rithmic_continuous" / "2026-W27" / "ESM6"
+    _write_events(week_root / "2026-07-01" / "mbo.ndjson", 1)
+    _write_events(week_root / "2026-07-01" / "trades.ndjson", 1)
+
+    manifest = build_coverage_manifest(
+        repo_root=tmp_path,
+        rithmic_week="2026-W27",
+        universe_profile="full_cme_research",
+    )
+    assert manifest["data_types"] == ["mbo", "trades"]
+
+
+def test_invalid_rithmic_week_fails_closed(tmp_path: Path) -> None:
+    from research_pipeline.continuous_data_manifest import build_coverage_manifest
+
+    with pytest.raises(ValueError, match="invalid rithmic_week"):
+        build_coverage_manifest(
+            repo_root=tmp_path,
+            rithmic_week="not-a-week",
+            universe_profile="full_cme_research",
+        )
+
+
 def test_pilot_profile_filters_contract_roots(tmp_path: Path) -> None:
     from research_pipeline.continuous_data_manifest import build_coverage_manifest
 
@@ -123,7 +188,7 @@ def test_continuous_universe_filters() -> None:
         missing_ratio=0.1,
         liquidity_score=0.5,
         universe_profile="pilot_liquidity_top",
-    )
+    ) is True
 
 
 def test_write_coverage_manifest(tmp_path: Path) -> None:
@@ -181,6 +246,8 @@ def test_run_pipeline_continuous_lane_writes_manifest(tmp_path: Path) -> None:
     loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert loaded["contracts"] == ["MESU6"]
     assert loaded["summary"]["total_rows"] == 100
+    assert loaded["contract_rows"][0]["missing_ratio"] is None
+    assert loaded["contract_rows"][0]["eligible"] is False
 
 
 def test_run_pipeline_event_lane_requires_thesis_and_event_id() -> None:

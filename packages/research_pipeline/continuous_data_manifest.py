@@ -19,6 +19,7 @@ MANIFEST_SCHEMA_VERSION = "1"
 _DEFAULT_DATA_TYPES = ("mbo", "quotes", "trades")
 _WEEK_LABEL_RE = re.compile(r"^(\d{4})-W(\d{2})$")
 _EVENTS_FILENAME = "events.ndjson"
+_DATE_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def coverage_manifest_path(repo_root: Path, rithmic_week: str) -> Path:
@@ -41,11 +42,23 @@ def _week_label_variants(rithmic_week: str) -> tuple[str, ...]:
     return (rithmic_week, rithmic_week.replace("-", "_"))
 
 
-def _iso_week_trading_days(rithmic_week: str) -> int:
+def _parse_rithmic_week(rithmic_week: str) -> tuple[int, int]:
+    """Validate ISO week label; fail closed on malformed input."""
     match = _WEEK_LABEL_RE.match(rithmic_week.strip())
     if not match:
-        return 5
+        raise ValueError(f"invalid rithmic_week label: {rithmic_week!r}")
     year, week = int(match.group(1)), int(match.group(2))
+    if week < 1 or week > 53:
+        raise ValueError(f"invalid ISO week number in rithmic_week: {rithmic_week!r}")
+    try:
+        date.fromisocalendar(year, week, 1)
+    except ValueError as exc:
+        raise ValueError(f"invalid rithmic_week label: {rithmic_week!r}") from exc
+    return year, week
+
+
+def _iso_week_trading_days(rithmic_week: str) -> int:
+    year, week = _parse_rithmic_week(rithmic_week)
     monday = date.fromisocalendar(year, week, 1)
     return sum(
         1
@@ -63,7 +76,7 @@ def _count_ndjson_rows(path: Path) -> int:
     return count
 
 
-def _contract_row_count(contract_dir: Path) -> int:
+def _contract_row_count_single(contract_dir: Path) -> int:
     events_path = contract_dir / _EVENTS_FILENAME
     if events_path.is_file():
         return _count_ndjson_rows(events_path)
@@ -74,41 +87,79 @@ def _contract_row_count(contract_dir: Path) -> int:
     return total
 
 
-def _contract_days_with_data(contract_dir: Path) -> int:
+def _contract_row_count(contract_dirs: list[Path]) -> int:
+    return sum(_contract_row_count_single(contract_dir) for contract_dir in contract_dirs)
+
+
+def _is_date_dir_name(name: str) -> bool:
+    if not _DATE_DIR_RE.match(name):
+        return False
+    try:
+        datetime.strptime(name, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
+
+
+def _contract_days_with_data(contract_dirs: list[Path]) -> int | None:
     days: set[str] = set()
-    for path in contract_dir.rglob(_EVENTS_FILENAME):
-        for parent in path.parents:
-            name = parent.name
-            if len(name) == 10 and name[4] == "-" and name[7] == "-":
-                try:
-                    datetime.strptime(name, "%Y-%m-%d")
-                except ValueError:
-                    continue
-                else:
+    has_flat_data = False
+    for contract_dir in contract_dirs:
+        found_date_partition = False
+        for path in contract_dir.rglob(_EVENTS_FILENAME):
+            for parent in path.parents:
+                name = parent.name
+                if _is_date_dir_name(name):
                     days.add(name)
+                    found_date_partition = True
                     break
+            if not found_date_partition and path.is_file() and _count_ndjson_rows(path) > 0:
+                has_flat_data = True
     if days:
         return len(days)
-    return 1 if _contract_row_count(contract_dir) > 0 else 0
+    if has_flat_data:
+        return None
+    return 0
 
 
-def _discover_contract_dirs(week_root: Path) -> dict[str, Path]:
-    contracts: dict[str, Path] = {}
+def _discover_contract_dirs(week_root: Path) -> dict[str, list[Path]]:
+    contracts: dict[str, list[Path]] = {}
     if not week_root.is_dir():
         return contracts
     for child in sorted(week_root.iterdir()):
-        if not child.is_dir():
+        if not child.is_dir() or child.name.startswith("."):
             continue
         name = child.name
-        if name.startswith("."):
-            continue
-        if len(name) == 10 and name[4] == "-" and name[7] == "-":
+        if _is_date_dir_name(name):
             for sym_dir in sorted(child.iterdir()):
                 if sym_dir.is_dir() and not sym_dir.name.startswith("."):
-                    contracts.setdefault(sym_dir.name, sym_dir)
+                    contracts.setdefault(sym_dir.name, []).append(sym_dir)
             continue
-        contracts.setdefault(name, child)
+        contracts.setdefault(name, []).append(child)
     return contracts
+
+
+def _discover_data_types(contract_dirs: dict[str, list[Path]]) -> list[str]:
+    """Derive present capture types from filesystem (mbo/quotes/trades)."""
+    found: set[str] = set()
+    for dirs in contract_dirs.values():
+        for contract_dir in dirs:
+            for data_type in _DEFAULT_DATA_TYPES:
+                typed_file = contract_dir / f"{data_type}.ndjson"
+                if typed_file.is_file() and _count_ndjson_rows(typed_file) > 0:
+                    found.add(data_type)
+                    continue
+                typed_dir = contract_dir / data_type
+                if typed_dir.is_dir() and any(typed_dir.rglob("*.ndjson")):
+                    found.add(data_type)
+            for path in contract_dir.rglob("*.ndjson"):
+                stem = path.stem.lower()
+                for data_type in _DEFAULT_DATA_TYPES:
+                    if stem == data_type or stem.endswith(f"_{data_type}"):
+                        found.add(data_type)
+    if found:
+        return [data_type for data_type in _DEFAULT_DATA_TYPES if data_type in found]
+    return list(_DEFAULT_DATA_TYPES)
 
 
 def discover_rithmic_weekly_roots(
@@ -118,6 +169,7 @@ def discover_rithmic_weekly_roots(
     extra_roots: Iterable[Path] | None = None,
 ) -> list[dict[str, Any]]:
     """Locate weekly Rithmic filesystem roots for *rithmic_week*."""
+    _parse_rithmic_week(rithmic_week)
     candidates: list[Path] = []
     env_root = os.environ.get("RITHMIC_CONTINUOUS_WEEK_ROOT")
     if env_root:
@@ -152,17 +204,19 @@ def discover_rithmic_weekly_roots(
 
 def _build_contract_row(
     contract: str,
-    contract_dir: Path,
+    contract_dirs: list[Path],
     *,
     expected_trading_days: int,
     universe_profile: str,
 ) -> dict[str, Any]:
-    row_count = _contract_row_count(contract_dir)
-    days_with_data = _contract_days_with_data(contract_dir)
+    row_count = _contract_row_count(contract_dirs)
+    days_with_data = _contract_days_with_data(contract_dirs)
     if expected_trading_days <= 0:
         missing_ratio = None
     elif row_count <= 0:
         missing_ratio = 1.0
+    elif days_with_data is None:
+        missing_ratio = None
     else:
         missing_ratio = max(
             0.0,
@@ -191,11 +245,13 @@ def build_coverage_manifest(
         repo_root, rithmic_week, extra_roots=extra_roots
     )
     expected_trading_days = _iso_week_trading_days(rithmic_week)
-    contract_dirs: dict[str, Path] = {}
+    contract_dirs: dict[str, list[Path]] = {}
     for root in roots:
         if not root["exists"]:
             continue
-        contract_dirs.update(_discover_contract_dirs(Path(root["path"])))
+        discovered = _discover_contract_dirs(Path(root["path"]))
+        for contract, dirs in discovered.items():
+            contract_dirs.setdefault(contract, []).extend(dirs)
 
     contracts = filter_contracts_for_profile(sorted(contract_dirs), universe_profile)
     contract_rows = [
@@ -225,7 +281,7 @@ def build_coverage_manifest(
         "universe_profile": universe_profile,
         "roots": roots,
         "contracts": contracts,
-        "data_types": list(_DEFAULT_DATA_TYPES),
+        "data_types": _discover_data_types(contract_dirs),
         "contract_rows": contract_rows,
         "summary": {
             "total_contracts": len(contracts),
