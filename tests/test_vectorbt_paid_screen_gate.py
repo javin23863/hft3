@@ -1879,13 +1879,22 @@ def test_vast_full_script_requires_declaration_before_workers() -> None:
     assert "ERROR: Declaration expected_work_units=" in script
     assert "ERROR: Declaration mismatch:" in script
     assert 'STALL_MINUTES="${VBT_STALL_MINUTES:-30}"' in script
+    assert 'BATCH_TIMEOUT_SECONDS="${VBT_BATCH_TIMEOUT_SECONDS:-1800}"' in script
+    assert '[[ ! "$BATCH_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]]' in script
+    assert "(( BATCH_TIMEOUT_SECONDS < 1 ))" in script
+    assert "ERROR: VBT_BATCH_TIMEOUT_SECONDS must be a positive integer" in script
+    assert "got '$BATCH_TIMEOUT_SECONDS'" in script
     assert '"stall_minutes": int(stall_minutes)' in script
+    assert '"batch_timeout_seconds": int(batch_timeout_seconds)' in script
     assert 'expect_int("stall_minutes", int(stall_minutes))' in script
+    assert 'expect_int("batch_timeout_seconds", int(batch_timeout_seconds))' in script
     assert 'expect_int("stall_minutes", 30)' not in script
+    assert 'expect_int("batch_timeout_seconds", 1800)' not in script
     assert "VBT_WRITE_DECLARATION_TEMPLATE" in script
     assert "Wrote declaration template:" in script
     assert "to regenerate the declaration template" in script
     assert "Declaration verified:" in script
+    assert "--batch-timeout-seconds $BATCH_TIMEOUT_SECONDS" in script
     assert "--abort-on-failed-units" in script
     assert "--research-split" in script
 
