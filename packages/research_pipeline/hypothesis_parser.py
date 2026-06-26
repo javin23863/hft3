@@ -60,28 +60,50 @@ _CONTINUOUS_KEYWORD_MODEL: List[tuple[str, str]] = [
     (r"lead.?lag", "MICRO_STANDARD_FLOW_TRANSFER"),
 ]
 
-_RELATIONSHIP_FAMILY_BY_MODEL: Dict[str, str] = {
-    "MICRO_STANDARD_FLOW_TRANSFER": "micro_standard",
-    "CROSS_MARKET_OFI_IMPACT": "cross_asset_flow",
-    "BOOK_RESILIENCY_CONTINUATION": "micro_standard",
-    "QUEUE_DEPLETION_REPLENISHMENT": "micro_standard",
-    "HIDDEN_LIQUIDITY_RELOAD": "micro_standard",
-    "TOXIC_FLOW_ADVERSE_SELECTION": "micro_standard",
-    "CALENDAR_CURVE_MICRO_IMPULSE": "calendar_front_second",
-    "STRUCTURAL_SPREAD_MICRO_DISLOCATION": "rates_curve",
-    "SEASONAL_STATE_CONDITIONED_MICRO_ALPHA": "seasonal_state",
-    "SELF_EXCITING_FLOW_BURST": "micro_standard",
-    "RL_EXECUTION_OVERLAY": "execution_overlay",
-}
-
 
 def _continuous_slugs() -> List[str]:
     return continuous_eligible_slugs()
 
 
+def _continuous_slug_set() -> set[str]:
+    return set(_continuous_slugs())
+
+
+def _event_lane_slug_set() -> set[str]:
+    """Event-lane slugs: registry entries excluding continuous_microstructure."""
+    return {slug for slug in all_slugs() if slug not in _continuous_slug_set()}
+
+
+def _relationship_family_from_entry(entry: dict) -> Optional[str]:
+    """First graph relationship type from registry; None when unset or empty."""
+    types = entry.get("valid_relationship_types") or []
+    if not types:
+        return None
+    return str(types[0])
+
+
+def _slug_from_parentheses(thesis: str) -> Optional[str]:
+    """Extract canonical slug from thesis template '(SLUG)' suffix."""
+    models = load_model_registry().get("models", {})
+    for match in re.finditer(r"\(([A-Z][A-Z0-9_]+)\)", thesis):
+        slug = match.group(1)
+        if slug in models:
+            return slug
+    return None
+
+
+def _continuous_slug_from_parentheses(thesis: str) -> Optional[str]:
+    slug = _slug_from_parentheses(thesis)
+    if slug is None:
+        return None
+    if slug not in _continuous_slug_set():
+        raise ValueError(f"{slug} is not continuous-eligible")
+    return slug
+
+
 def _match_continuous_model(thesis: str) -> str:
-    slug_paren = _slug_from_parentheses(thesis)
-    if slug_paren is not None and slug_paren in _continuous_slugs():
+    slug_paren = _continuous_slug_from_parentheses(thesis)
+    if slug_paren is not None:
         return slug_paren
     lower = thesis.lower()
     for pattern, slug in _CONTINUOUS_KEYWORD_MODEL:
@@ -92,7 +114,9 @@ def _match_continuous_model(thesis: str) -> str:
         display = str(entry.get("display_name") or "").lower()
         if display and display in lower:
             return slug
-    return "MICRO_STANDARD_FLOW_TRANSFER"
+    raise ValueError(
+        "cannot infer continuous model from thesis; include (CONTINUOUS_SLUG) or recognizable keywords"
+    )
 
 
 def _normalize_param_ranges(raw: Any) -> Dict[str, List[float]]:
@@ -130,7 +154,7 @@ def parse_continuous_lane_profile(
         primary_model_id=model_id,
         model_family=str(entry.get("model_family") or "unknown"),
         universe_profile=universe_profile,
-        relationship_family=_RELATIONSHIP_FAMILY_BY_MODEL.get(model_id),
+        relationship_family=_relationship_family_from_entry(entry),
         param_ranges=param_ranges,
         source="heuristic",
     )
@@ -139,16 +163,6 @@ def parse_continuous_lane_profile(
 def _hypothesis_slugs() -> List[str]:
     reg = load_model_registry().get("models", {})
     return sorted(k for k, v in reg.items() if v.get("kind") == "hypothesis")
-
-
-def _slug_from_parentheses(thesis: str) -> Optional[str]:
-    """Extract canonical slug from thesis template '(SLUG)' suffix."""
-    models = load_model_registry().get("models", {})
-    for match in re.finditer(r"\(([A-Z][A-Z0-9_]+)\)", thesis):
-        slug = match.group(1)
-        if slug in models:
-            return slug
-    return None
 
 
 def _legacy_slug_from_thesis(thesis: str) -> Optional[str]:
@@ -161,7 +175,7 @@ def _legacy_slug_from_thesis(thesis: str) -> Optional[str]:
 
 def _match_model(thesis: str) -> str:
     slug_paren = _slug_from_parentheses(thesis)
-    if slug_paren is not None:
+    if slug_paren is not None and slug_paren not in _continuous_slug_set():
         return slug_paren
     legacy_slug = _legacy_slug_from_thesis(thesis)
     if legacy_slug is not None:
@@ -200,7 +214,7 @@ def _heuristic_parse(thesis: str) -> ParsedHypothesis:
 
 
 def _parse_dict_common(thesis: str, data: Dict[str, Any], source: str) -> ParsedHypothesis:
-    slugs = set(_hypothesis_slugs()) | set(all_slugs())
+    slugs = _event_lane_slug_set()
     model_id = str(data.get("primary_model_id", ""))
     if model_id not in slugs:
         model_id = _match_model(thesis)
