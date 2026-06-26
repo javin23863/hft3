@@ -1488,11 +1488,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         bad_ids = _load_skip_bad_units_file(args.skip_bad_units_file)
         if bad_ids:
             before = len(units)
-            kept = [u for u in units if u.unit_id not in bad_ids]
-            dropped = before - len(kept)
+            # NPZ stems (e.g. "ZN.v.0_EIA_NATGAS_2019_11_28_TIGHT") are
+            # substrings of full unit IDs (e.g. "MODEL_ZN.v.0_..._TIGHT").
+            # Match by substring, not exact equality.
+            kept = []
+            dropped_ids: List[str] = []
+            for u in units:
+                if any(b in u.unit_id for b in bad_ids):
+                    dropped_ids.append(u.unit_id)
+                else:
+                    kept.append(u)
             units = kept
-            skipped_unit_ids.extend(bad_ids)
-            print(f"[skip-bad-units] skipped {dropped} units from {args.skip_bad_units_file}",
+            skipped_unit_ids.extend(dropped_ids)
+            print(f"[skip-bad-units] skipped {len(dropped_ids)} units from {args.skip_bad_units_file}",
                   flush=True)
 
     if args.dry_run:

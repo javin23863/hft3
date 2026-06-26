@@ -2460,7 +2460,9 @@ def _main_impl(
     skip_set = _load_skipped_unit_ids(args.config, args.skip_bad_units_file)
     if skip_set:
         before = len(candidates)
-        candidates = [c for c in candidates if c.metadata.get("unit_id", "") not in skip_set]
+        # NPZ stems are substrings of full unit IDs — match by substring.
+        candidates = [c for c in candidates
+                      if not any(b in c.metadata.get("unit_id", "") for b in skip_set)]
         dropped = before - len(candidates)
         if dropped:
             print(f"[skip-bad-units] removed {dropped} candidates from data-quality skip list "
