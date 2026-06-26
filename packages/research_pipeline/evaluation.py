@@ -8,6 +8,10 @@ from typing import Any, Dict, List, Optional
 
 from features_engine.src.model_registry import resolve_model_id
 
+from research_pipeline.continuous_evaluation import (
+    evaluate_continuous_from_candidate,
+    is_continuous_candidate,
+)
 from research_pipeline.data_quality import NoOHLCVDataError, classify_evaluation_error
 from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
 
@@ -21,8 +25,17 @@ def evaluate_model(
     seed: int = 42,
     gates: Optional[GateThresholds] = None,
 ) -> EvaluationResult:
-    """Evaluate candidate via HftBacktest (WorkbenchEngine)."""
+    """Evaluate candidate via workbench (event lane) or continuous evaluation (Phase 6)."""
     gates = gates or GateThresholds(min_trades=0)
+
+    if is_continuous_candidate(candidate):
+        return evaluate_continuous_from_candidate(
+            candidate,
+            event_id,
+            repo_root,
+            gates=gates,
+            seed=seed,
+        )
 
     try:
         model_id = resolve_model_id(candidate.model_id)
