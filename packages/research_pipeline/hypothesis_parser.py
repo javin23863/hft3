@@ -90,7 +90,6 @@ _FAMILY_THESIS_PATTERNS: dict[str, list[str]] = {
         r"\bGC\b",
         r"\bSI\b",
         r"\bHG\b",
-        r"\bMGC\b",
         r"gold",
         r"silver",
         r"metal",
@@ -111,9 +110,10 @@ _FAMILY_THESIS_PATTERNS: dict[str, list[str]] = {
         r"\bZN\b",
         r"\bZB\b",
         r"\bUB\b",
-        r"rates",
-        r"treasury",
-        r"curve",
+        r"\brates\b",
+        r"\btreasury\b",
+        r"\byield\s+curve\b",
+        r"\btreasury\s+curve\b",
     ],
     "calendar_front_second": [
         r"calendar",
@@ -169,8 +169,8 @@ def disambiguate_relationship_family(
     candidates = [str(t) for t in valid_types]
     scores = {family_id: _score_relationship_family(thesis, family_id) for family_id in candidates}
     active = _graph_active_families(relationship_graph)
-    for family_id in candidates:
-        if family_id in active:
+    if active and all(family_id in active for family_id in candidates):
+        for family_id in candidates:
             scores[family_id] += 1
 
     best_score = max(scores.values())

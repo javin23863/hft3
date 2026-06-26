@@ -21,12 +21,24 @@ COMMODITY_STRUCTURE_FEATURE_NAMES: tuple[str, ...] = (
     "cost_feasibility",
 )
 
+_CROSS_MARKET_COMPLEX_IDS: frozenset[str] = frozenset({"metals_complex", "energy_complex"})
+_CALENDAR_CURVE_COMPLEX_IDS: frozenset[str] = frozenset({"rates_curve"})
+
+
+def group_id_for_commodity_complex(complex_id: str) -> str:
+    """Route metals/energy complexes to cross_market; rates only to calendar_curve."""
+    validate_commodity_complex_id(complex_id)
+    if complex_id in _CROSS_MARKET_COMPLEX_IDS:
+        return "cross_market"
+    if complex_id in _CALENDAR_CURVE_COMPLEX_IDS:
+        return "calendar_curve"
+    raise ValueError(f"unknown_commodity_complex:{complex_id}")
+
 
 def empty_commodity_structure_shell(*, complex_id: str) -> dict[str, Any]:
-    """Return Phase 5 calendar_curve shell for one commodity complex."""
-    validate_commodity_complex_id(complex_id)
+    """Return Phase 5 commodity-structure shell for one commodity complex."""
     return {
-        "group_id": "calendar_curve",
+        "group_id": group_id_for_commodity_complex(complex_id),
         "complex_id": complex_id,
         "feature_names": list(COMMODITY_STRUCTURE_FEATURE_NAMES),
         "row_count": 0,

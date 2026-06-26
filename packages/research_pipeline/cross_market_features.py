@@ -11,7 +11,7 @@ from typing import Any, Mapping, Sequence
 CROSS_MARKET_FEATURE_NAMES: tuple[str, ...] = (
     "lagged_ofi_beta",
     "lead_lag_stability",
-    "impact_decay_halflife",
+    "impact_decay_half_life",
     "lagged_correlation",
     "volume_leadership",
     "queue_pressure_divergence",

@@ -292,9 +292,15 @@ def test_commodity_structure_shell_validation() -> None:
     )
 
     assert "rates_curve" in COMMODITY_COMPLEX_FAMILY_IDS
-    shell = empty_commodity_structure_shell(complex_id="energy_complex")
-    assert shell["group_id"] == "calendar_curve"
-    assert shell["complex_id"] == "energy_complex"
+    metals = empty_commodity_structure_shell(complex_id="metals_complex")
+    assert metals["group_id"] == "cross_market"
+    assert metals["complex_id"] == "metals_complex"
+    energy = empty_commodity_structure_shell(complex_id="energy_complex")
+    assert energy["group_id"] == "cross_market"
+    assert energy["complex_id"] == "energy_complex"
+    rates = empty_commodity_structure_shell(complex_id="rates_curve")
+    assert rates["group_id"] == "calendar_curve"
+    assert rates["complex_id"] == "rates_curve"
     with pytest.raises(ValueError, match="unknown_commodity_complex"):
         validate_commodity_complex_id("micro_standard")
 
@@ -341,11 +347,38 @@ def test_disambiguate_relationship_family_uses_graph_context() -> None:
         "families": ["metals_complex"],
     }
     result = disambiguate_relationship_family(
-        "Cross-market OFI impact",
+        "Cross-market OFI impact on GC to SI",
         ["metals_complex", "energy_complex", "rates_curve"],
         relationship_graph=graph,
     )
     assert result == "metals_complex"
+
+
+def test_disambiguate_relationship_family_tie_with_multi_active_graph() -> None:
+    from research_pipeline.hypothesis_parser import disambiguate_relationship_family
+
+    graph = {
+        "edges": [
+            {"family_id": "metals_complex", "source_root": "GC", "target_root": "SI"},
+            {"family_id": "energy_complex", "source_root": "CL", "target_root": "RB"},
+        ],
+        "families": ["metals_complex", "energy_complex"],
+    }
+    result = disambiguate_relationship_family(
+        "Cross-market OFI impact",
+        ["metals_complex", "energy_complex"],
+        relationship_graph=graph,
+    )
+    assert result is None
+
+
+def test_disambiguate_mgc_routes_micro_standard_not_metals() -> None:
+    from research_pipeline.hypothesis_parser import disambiguate_relationship_family
+
+    assert disambiguate_relationship_family(
+        "MGC GC micro flow transfer",
+        ["micro_standard", "metals_complex"],
+    ) == "micro_standard"
 
 
 def test_parse_continuous_lane_profile_disambiguates_with_graph() -> None:
