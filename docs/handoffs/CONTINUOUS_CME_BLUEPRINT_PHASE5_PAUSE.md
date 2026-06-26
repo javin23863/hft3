@@ -124,13 +124,28 @@ The worktree contains **untracked** Phase 6 scaffold files. These are **not** pa
 
 ## Verify (Phase 0–5 + lake gate tests)
 
-```text
-python -m pytest tests/test_continuous_cme_phase1.py tests/test_continuous_cme_phase2.py tests/test_continuous_cme_phase3.py tests/test_continuous_cme_phase4.py tests/test_continuous_cme_phase5.py tests/test_check_lake_data.py -q
-→ exit 0
-82 passed in 20.05s
+**Continuous lane scope (includes Phase 0 DQ tests):**
+
+```powershell
+python -m pytest tests/test_research_pipeline_data_quality.py tests/test_check_lake_data.py tests/test_continuous_cme_phase1.py tests/test_continuous_cme_phase2.py tests/test_continuous_cme_phase3.py tests/test_continuous_cme_phase4.py tests/test_continuous_cme_phase5.py -q
 ```
 
-Note: full `tests/test_research_pipeline.py` has 3 unrelated failures (LLM connector skip, vendor submodule paths) — not in continuous-lane scope.
+| Run | Result |
+|-----|--------|
+| Owner session at `6bf89ddc` | **94 passed** (continuous scope) |
+| Handoff re-verify (2026-06-26) | exit **1** — **96 passed, 1 failed** (`test_evaluation_classifies_no_ohlcv`; 97 collected) |
+| Phase 1–5 + lake only (excludes DQ) | exit **0** — **82 passed** |
+
+**Scope-green command** (`docs/VALIDATION_HONESTY.md`): `python -m pytest tests/test_research_pipeline.py -q` → exit **1** — 27 passed, 3 failed, 1 skipped (not scope-green).
+
+## Review status
+
+| Item | Status |
+|------|--------|
+| Phase 5 `6bf89ddc` | Owner-reported **0 🔴 0 🟡** after inline review |
+| Formal `cavecrew-reviewer` on `6bf89ddc` | **May be pending** — quota exhausted on one pass; inline review used |
+| Commit `683ad80d` | **Not on branch** |
+| Owner policy | **Zero tolerance** for all 🔴/🟡 before merge-ready |
 
 ## Next steps (owner order — do not skip)
 
@@ -149,19 +164,33 @@ Note: full `tests/test_research_pipeline.py` has 3 unrelated failures (LLM conne
 
 Phases 7–8 (RL overlay, dashboard/reporting) remain **after** Phase 6 PR passes plan review + Greptile.
 
+## Resume commands (next agent)
+
+```powershell
+cd C:\Users\MSI\Documents\hft3-continuous-cme-blueprint
+git checkout plan/continuous-cme-microstructure-blueprint
+git log -1 --oneline   # expect handoff commit on top of ca47cf50
+
+.\scripts\vault_gate.ps1 -Query "continuous CME Phase 6 evaluation statistics CSCV cost model"
+.\scripts\vault_pre_edit.ps1
+
+# Read plan §10 before any Phase 6 edit:
+# docs/plans/CONTINUOUS_CME_MICROSTRUCTURE_BLUEPRINT.md
+
+# Discard or stash untracked Phase 6 WIP before clean Phase 6 start from 6bf89ddc baseline
+```
+
 ## Vault cross-reference
 
-Vault session note: `sessions/2026-06-26 Continuous CME blueprint Phase 5 pause.md` in Obsidian vault `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3\`.
-
-VaultGate query: `Phase 5 pause continuous CME blueprint handoff` (stamp `runtime/vault-gate/.last-vault-gate.json` in canonical repo).
+Vault session note: `sessions/2026-06-26 Continuous CME Blueprint Phase 5 pause handoff.md` in Obsidian vault `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3\`.
 
 ## Validation honesty
 
 ```
 merge-ready:     no
-scope-green:     yes
-scope:           plan/continuous-cme-microstructure-blueprint phases 0–5 + lake gate tests
-verify-run:      python -m pytest tests/test_continuous_cme_phase1.py tests/test_continuous_cme_phase2.py tests/test_continuous_cme_phase3.py tests/test_continuous_cme_phase4.py tests/test_continuous_cme_phase5.py tests/test_check_lake_data.py -q → exit 0; 82 passed in 20.05s
+scope-green:     no (tests/test_research_pipeline.py: 3 failed on handoff re-verify)
+scope:           plan/continuous-cme-microstructure-blueprint phases 0–5 + lake gate
+verify-run:      python -m pytest tests/test_research_pipeline_data_quality.py tests/test_check_lake_data.py tests/test_continuous_cme_phase1.py tests/test_continuous_cme_phase2.py tests/test_continuous_cme_phase3.py tests/test_continuous_cme_phase4.py tests/test_continuous_cme_phase5.py -q → exit 1; 96 passed, 1 failed (test_evaluation_classifies_no_ohlcv)
 data-mode:       fixture + offline lake JSONL (vbt_full_units.jsonl)
-known-gaps:      Phase 6–8 not committed; plan review agent not run; Greptile not run; docs/research/CONTINUOUS_CME_MICROSTRUCTURE.md runbook not written; untracked Phase 6 WIP in worktree; full test_research_pipeline.py has 3 unrelated failures outside continuous scope
+known-gaps:      Phase 6–8 not committed; plan review agent not run; Greptile not run; docs/research/CONTINUOUS_CME_MICROSTRUCTURE.md runbook not written; untracked Phase 6 WIP in worktree; full test_research_pipeline.py not scope-green; formal cavecrew-reviewer on 6bf89ddc unconfirmed
 ```
