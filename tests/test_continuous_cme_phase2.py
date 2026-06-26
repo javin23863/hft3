@@ -136,6 +136,47 @@ def test_build_graph_includes_causal_bounds_and_validates_roots() -> None:
         require_edges_scorable(graph["edges"])
 
 
+def test_assert_causal_bounds_ready_rejects_porous_values() -> None:
+    from research_pipeline.relationship_graph import assert_causal_bounds_ready
+
+    with pytest.raises(ValueError, match="not set for scoring"):
+        assert_causal_bounds_ready(
+            {
+                "pit_window_end": "",
+                "as_of_event_time": "2026-07-03T15:00:00",
+                "max_lag_sessions": 3,
+            }
+        )
+    with pytest.raises(ValueError, match="must be ISO event-time"):
+        assert_causal_bounds_ready(
+            {
+                "pit_window_end": "not-a-timestamp",
+                "as_of_event_time": "2026-07-03T15:00:00",
+                "max_lag_sessions": 3,
+            }
+        )
+    with pytest.raises(ValueError, match="positive int"):
+        assert_causal_bounds_ready(
+            {
+                "pit_window_end": "2026-07-03T21:00:00",
+                "as_of_event_time": "2026-07-03T15:00:00",
+                "max_lag_sessions": 0,
+            }
+        )
+
+
+def test_assert_causal_bounds_ready_accepts_valid_bounds() -> None:
+    from research_pipeline.relationship_graph import assert_causal_bounds_ready
+
+    assert_causal_bounds_ready(
+        {
+            "pit_window_end": "2026-07-03T21:00:00",
+            "as_of_event_time": "2026-07-03T15:00:00",
+            "max_lag_sessions": 5,
+        }
+    )
+
+
 def test_build_graph_filters_edges_for_pilot_profile() -> None:
     from research_pipeline.relationship_graph import build_relationship_graph_stub
 

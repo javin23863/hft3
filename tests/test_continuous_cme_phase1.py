@@ -361,23 +361,3 @@ def test_hybrid_root_and_partition_ndjson_align_row_count_and_coverage(
     row = manifest["contract_rows"][0]
     assert row["row_count"] == 22
     assert row["missing_ratio"] == pytest.approx(0.6)
-
-
-def test_hybrid_root_and_partition_ndjson_align_row_count_and_coverage(
-    tmp_path: Path,
-) -> None:
-    from research_pipeline.continuous_data_manifest import build_coverage_manifest
-
-    week_root = tmp_path / "data" / "raw" / "rithmic_continuous" / "2026-W27" / "ESM6"
-    _write_events(week_root / "events.ndjson", 10)
-    _write_events(week_root / "2026-07-01" / "mbo.ndjson", 5)
-    _write_events(week_root / "2026-07-02" / "trades.ndjson", 7)
-
-    manifest = build_coverage_manifest(
-        repo_root=tmp_path,
-        rithmic_week="2026-W27",
-        universe_profile="full_cme_research",
-    )
-    row = manifest["contract_rows"][0]
-    assert row["row_count"] == 22
-    assert row["missing_ratio"] == pytest.approx(0.6)

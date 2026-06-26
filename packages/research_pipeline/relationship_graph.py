@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,9 @@ CAUSAL_BOUNDS_KEYS = (
     "max_lag_sessions",
 )
 CAUSAL_BOUND_UNSET = "unset"
+_EVENT_TIME_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)?$"
+)
 
 
 def relationship_graph_dir(repo_root: Path, rithmic_week: str) -> Path:
@@ -85,10 +89,15 @@ def _empty_causal_bounds() -> dict[str, str]:
 
 def assert_causal_bounds_ready(causal_bounds: dict[str, Any]) -> None:
     """Fail closed before edge scoring when PIT causal bounds are unset."""
-    for key in CAUSAL_BOUNDS_KEYS:
+    for key in ("pit_window_end", "as_of_event_time"):
         value = causal_bounds.get(key)
-        if value is None or value == CAUSAL_BOUND_UNSET:
+        if not isinstance(value, str) or not value.strip() or value == CAUSAL_BOUND_UNSET:
             raise ValueError(f"causal bound {key!r} not set for scoring")
+        if not _EVENT_TIME_RE.match(value.strip()):
+            raise ValueError(f"causal bound {key!r} must be ISO event-time string")
+    max_lag = causal_bounds.get("max_lag_sessions")
+    if not isinstance(max_lag, int) or max_lag <= 0:
+        raise ValueError("causal bound 'max_lag_sessions' must be a positive int")
 
 
 def _universe_root_symbols(universe_config: dict[str, Any]) -> set[str]:
