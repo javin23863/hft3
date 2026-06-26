@@ -479,6 +479,16 @@ def test_vast_full_script_defaults_to_stage_a_survivor_scope() -> None:
     assert "--all-active-models" in script
 
 
+def test_vast_full_script_pins_vectorbt_compatible_pandas() -> None:
+    install_script = (REPO / "scripts" / "install_vbt_hbt_handoff_verify_deps.sh").read_text(encoding="utf-8")
+    launch_script = (REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh").read_text(encoding="utf-8")
+
+    assert '"pandas>=2.0.0,<3.0.0"' in install_script
+    assert "pip3 install 'vectorbt[rust]==1.0.0' 'pandas>=2.0.0,<3.0.0' -q" in launch_script
+    assert "VectorBT dependency check:" in launch_script
+    assert "expected pandas<3.0" in launch_script
+
+
 def test_stage_a_survivors_expansion_not_capped_at_fifty(tmp_path: Path) -> None:
     """Full scope uses all TIGHT events per cell — not [:50] and not CPI+NFP-only smoke."""
     survivors = tmp_path / "stage_a_survivors.json"

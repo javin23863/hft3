@@ -73,7 +73,17 @@ echo "repo=$REPO_ROOT nproc=$NPROC workers=$WORKERS npz_root=$HFT3_NPZ_ROOT"
 echo "events_csv=$EVENTS_CSV symbols=$SYMBOLS unit_source=$UNIT_SOURCE model_scope=$MODEL_SCOPE units_out=$UNITS_JSONL"
 
 bash scripts/install_vbt_hbt_handoff_verify_deps.sh
-pip3 install 'vectorbt[rust]==1.0.0' -q
+pip3 install 'vectorbt[rust]==1.0.0' 'pandas>=2.0.0,<3.0.0' -q
+python3 - <<'PY'
+import pandas as pd
+import vectorbt as vbt
+
+if int(pd.__version__.split(".", 1)[0]) >= 3:
+    raise SystemExit(
+        f"ERROR: pandas {pd.__version__} is incompatible with vectorbt; expected pandas<3.0"
+    )
+print(f"VectorBT dependency check: vectorbt={getattr(vbt, '__version__', 'unknown')} pandas={pd.__version__}")
+PY
 
 # --- Unit generation (Stage-A survivors by default + require-runnable-npz) ---
 GEN_ARGS=(
