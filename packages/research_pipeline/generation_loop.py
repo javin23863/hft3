@@ -1276,13 +1276,15 @@ def run_autoresearch_loop(
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(final_report, indent=2) + "\n", encoding="utf-8")
     stop_reason = manifest.get("stop_reason")
-    if not summaries:
+    if stop_reason in terminal_stop_reasons:
+        status = 0
+    elif not summaries:
         status = 1
     elif manifest.get("generation_status") == GENERATION_STATUS_FAILED:
         status = 1
     elif stop_reason in failure_stop_reasons:
         status = 1
-    elif stop_reason in terminal_stop_reasons or stop_reason is None:
+    elif stop_reason is None:
         status = 0
     else:
         status = 1

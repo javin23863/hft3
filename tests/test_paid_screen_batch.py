@@ -97,6 +97,7 @@ class TestScreenPaidBatch:
         for r in results:
             assert r.status == "ERROR"
             assert "no_ohlcv_data" in r.error
+            assert r.failure_class == "data_quality"
 
     def test_per_unit_result_returned(self):
         """Each unit gets its own UnitScreeningResult."""
