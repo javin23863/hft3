@@ -281,7 +281,8 @@ export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
   --cache-max-entries \${VBT_CACHE_MAX_ENTRIES:-20000} \\
   --no-llm \\
   --resume \\
-  --abort-on-failed-units \\
+  \${VBT_FAIL_FAST:+--fail-fast --abort-on-failed-units} \\
+  \${VBT_SKIP_BAD_UNITS_FILE:+--skip-bad-units-file \"\$VBT_SKIP_BAD_UNITS_FILE\"} \\
   --events-csv '$EVENTS_CSV' \\
   --events-csv-hash '$EVENTS_CSV_HASH' \\
   --lake-manifest-hash '$LAKE_MANIFEST_HASH' \\
