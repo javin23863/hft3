@@ -163,6 +163,14 @@ def test_assert_causal_bounds_ready_rejects_porous_values() -> None:
                 "max_lag_sessions": 0,
             }
         )
+    with pytest.raises(ValueError, match="positive int"):
+        assert_causal_bounds_ready(
+            {
+                "pit_window_end": "2026-07-03T21:00:00",
+                "as_of_event_time": "2026-07-03T15:00:00",
+                "max_lag_sessions": True,
+            }
+        )
 
 
 def test_assert_causal_bounds_ready_accepts_valid_bounds() -> None:

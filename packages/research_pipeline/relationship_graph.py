@@ -96,7 +96,7 @@ def assert_causal_bounds_ready(causal_bounds: dict[str, Any]) -> None:
         if not _EVENT_TIME_RE.match(value.strip()):
             raise ValueError(f"causal bound {key!r} must be ISO event-time string")
     max_lag = causal_bounds.get("max_lag_sessions")
-    if not isinstance(max_lag, int) or max_lag <= 0:
+    if type(max_lag) is not int or max_lag <= 0:
         raise ValueError("causal bound 'max_lag_sessions' must be a positive int")
 
 
