@@ -90,6 +90,8 @@ class AutoresearchConfig:
     stop_file: Path | None = None
     family_search_enabled: bool = True
     family_search_fraction: float = 0.4
+    skip_bad_units_file: Path | None = None
+    skipped_unit_ids: tuple[str, ...] = ()
 
 
 def load_autoresearch_config(path: Path, *, overrides: dict[str, Any] | None = None) -> AutoresearchConfig:
@@ -120,6 +122,8 @@ def load_autoresearch_config(path: Path, *, overrides: dict[str, Any] | None = N
         stop_file=Path(raw["stop_file"]) if raw.get("stop_file") else None,
         family_search_enabled=bool(raw.get("family_search_enabled", True)),
         family_search_fraction=min(1.0, max(0.0, float(raw.get("family_search_fraction", 0.4)))),
+        skip_bad_units_file=Path(raw["skip_bad_units_file"]) if raw.get("skip_bad_units_file") else None,
+        skipped_unit_ids=tuple(str(x) for x in (raw.get("skipped_unit_ids") or [])),
     )
 
 

@@ -67,6 +67,7 @@ class EvaluationResult:
     gates: GateThresholds
     workbench_out: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    failure_class: Optional[str] = None  # data_quality | model
 
     def passes_all_gates(self) -> bool:
         if self.error:
@@ -113,6 +114,7 @@ class PipelineReport:
                     "num_trades": r.num_trades,
                     "passes": r.passes_all_gates(),
                     "error": r.error,
+                    "failure_class": r.failure_class,
                 }
                 for r in self.results
             ],

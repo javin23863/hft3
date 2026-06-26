@@ -1037,6 +1037,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         action="store_true",
         help="Stop dispatch after first batch with ERROR units (declaration abort_on_failed_units)",
     )
+    parser.add_argument(
+        "--skip-bad-units-file",
+        type=Path,
+        default=None,
+        help="JSON from scripts/check_lake_data.py; invalid_unit_ids skipped as data_quality",
+    )
 
     args = parser.parse_args(argv)
 
@@ -1079,6 +1085,34 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"ERROR: malformed unit row missing field {exc}: {row}", file=sys.stderr)
             return 1
 
+    data_quality_skipped_unit_ids: List[str] = []
+    if args.skip_bad_units_file:
+        from research_pipeline.data_quality import skipped_unit_id_set, unit_matches_skip
+
+        skip_path = (
+            args.skip_bad_units_file
+            if args.skip_bad_units_file.is_absolute()
+            else repo_root / args.skip_bad_units_file
+        )
+        skip_ids = skipped_unit_id_set(skip_bad_units_file=skip_path if skip_path.is_file() else None)
+        if skip_ids:
+            kept_units: List[PaidScreenUnit] = []
+            for unit in units:
+                if unit_matches_skip(
+                    unit.unit_id,
+                    symbol=unit.symbol,
+                    event_id=unit.event_id,
+                    skip_ids=skip_ids,
+                ):
+                    data_quality_skipped_unit_ids.append(unit.unit_id)
+                else:
+                    kept_units.append(unit)
+            units = kept_units
+            print(
+                f"[data_quality] skipping {len(data_quality_skipped_unit_ids)} bad units from {skip_path}",
+                flush=True,
+            )
+
     # Hashes and research split must be resolved before resume (BLUEPRINT §8).
     try:
         events_csv_hash, lake_manifest_hash = _resolve_run_hashes(args, repo_root)
@@ -1107,7 +1141,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     # Resume: filter out units whose artifact validates and matches run context
-    skipped_unit_ids: List[str] = []
+    skipped_unit_ids: List[str] = list(data_quality_skipped_unit_ids)
     if args.resume:
         kept: List[PaidScreenUnit] = []
         for unit in units:

@@ -17,8 +17,19 @@ vectorbt_min_trades: 3
 family_search_enabled: true
 family_search_fraction: 0.4
 
-# Required when run_hft_campaign: true
-hft_source_npz: null
+# Phase 0: bad NPZ / empty OHLCV remediation (continuous CME blueprint §3)
+skip_bad_units_file: null
+skipped_unit_ids: []
+abort_on_failed_units_by_scope:
+  pilot: true
+  screen: true
+  refine: true
+  paid: false
+  paid-compute: false
+  broad: false
+  broad-screen: false
+  full_lake: false
+  continuous_full_cme: false
 hft_latency_model: null
 hft_fill_queue_model: null
 native_hot_path_evidence: []

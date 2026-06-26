@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from features_engine.src.model_registry import resolve_model_id
 
+from research_pipeline.data_quality import NoOHLCVDataError, classify_evaluation_error
 from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
 
 
@@ -50,8 +51,12 @@ def evaluate_model(
             skip_history_gate=True,
             strategy_params=dict(candidate.strategy_params),
         )
-    except Exception as exc:
-        print(f"evaluate_model failed for {candidate.candidate_id} ({candidate.model_id}): {exc}", file=sys.stderr)
+    except NoOHLCVDataError as exc:
+        failure_class, message = classify_evaluation_error(exc)
+        print(
+            f"evaluate_model data_quality skip for {candidate.candidate_id} ({candidate.model_id}): {message}",
+            file=sys.stderr,
+        )
         return EvaluationResult(
             candidate=candidate,
             event_id=event_id,
@@ -61,7 +66,23 @@ def evaluate_model(
             expectancy=0.0,
             tail_loss=0.0,
             gates=gates,
-            error=str(exc),
+            error=message,
+            failure_class=failure_class,
+        )
+    except Exception as exc:
+        failure_class, message = classify_evaluation_error(exc)
+        print(f"evaluate_model failed for {candidate.candidate_id} ({candidate.model_id}): {message}", file=sys.stderr)
+        return EvaluationResult(
+            candidate=candidate,
+            event_id=event_id,
+            net_pnl=0.0,
+            num_trades=0,
+            win_rate=0.0,
+            expectancy=0.0,
+            tail_loss=0.0,
+            gates=gates,
+            error=message,
+            failure_class=failure_class,
         )
 
     report = out.get("report") or {}

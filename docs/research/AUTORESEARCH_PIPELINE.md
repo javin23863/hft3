@@ -88,3 +88,28 @@ World-event backend details: [WORLD_EVENT_DATA_BACKEND.md](WORLD_EVENT_DATA_BACK
 - `research_cards/kg/nodes.jsonl` / `edges.jsonl` — document-derived graph slices
 
 See [RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md) for canonical research order.
+
+## Phase 0 — NPZ / OHLCV data quality (continuous CME blueprint §3)
+
+Bad or empty NPZ files must **not** masquerade as model failures. Use the data-quality lane before broad paid-screen relaunch.
+
+| Tool | Purpose |
+|------|---------|
+| `packages/research_pipeline/data_quality.py` | `check_npz_ohlcv(path)`, `NoOHLCVDataError`, skip-file helpers |
+| `scripts/check_lake_data.py` | Scan units JSONL or lake manifest → `valid_unit_ids` / `invalid_unit_ids` report |
+| `config/autoresearch/default.yaml` | `skip_bad_units_file`, `skipped_unit_ids`, `abort_on_failed_units_by_scope` |
+
+```bash
+# Scan paid-screen units; write skip report
+python scripts/check_lake_data.py \
+  --units-jsonl runtime/reports/vbt_full_units.jsonl \
+  --out runtime/reports/lake_data_quality.json
+
+# Resume paid screen past known-bad units (abort_on_failed_units=false for paid/full_lake)
+python scripts/run_vectorbt_paid_screen_v2.py \
+  --resume \
+  --skip-bad-units-file runtime/reports/lake_data_quality.json \
+  ...
+```
+
+`evaluation.py` tags `failure_class=data_quality` for `NoOHLCVDataError` / `no_ohlcv_data` — distinct from model gate failures.

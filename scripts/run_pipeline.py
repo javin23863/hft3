@@ -189,6 +189,12 @@ def main() -> int:
     parser.add_argument("--campaign-id", default=None, help="Autoresearch campaign id (required with --resume)")
     parser.add_argument("--max-generations", type=int, default=None, help="Override config max_generations")
     parser.add_argument("--stop-file", type=Path, default=None, help="Stop autoresearch loop when this file exists")
+    parser.add_argument(
+        "--skip-bad-units-file",
+        type=Path,
+        default=None,
+        help="JSON report from scripts/check_lake_data.py; invalid_unit_ids are skipped",
+    )
     args = parser.parse_args()
 
     if args.autoresearch:
@@ -204,6 +210,20 @@ def main() -> int:
             "stop_file": str(args.stop_file) if args.stop_file else None,
         }
         cfg = load_autoresearch_config(args.config, overrides=overrides)
+        skip_file = args.skip_bad_units_file
+        if skip_file is None and cfg.skip_bad_units_file is not None:
+            skip_file = cfg.skip_bad_units_file
+        if skip_file is not None:
+            from research_pipeline.data_quality import load_skip_bad_units_payload
+
+            skip_path = skip_file if skip_file.is_absolute() else repo_root / skip_file
+            if skip_path.is_file():
+                payload = load_skip_bad_units_payload(skip_path)
+                invalid = payload.get("invalid_unit_ids") or {}
+                n_invalid = len(invalid) if isinstance(invalid, dict) else 0
+                print(f"[autoresearch] skip_bad_units_file={skip_path} invalid_units={n_invalid}", flush=True)
+            else:
+                print(f"Warning: skip_bad_units_file not found: {skip_path}", file=sys.stderr)
         chi404 = args.chi404_summary
         if chi404 is None:
             default_lat = repo_root / "runtime" / "latency_reports" / "latency_summary.json"
