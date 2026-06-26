@@ -95,8 +95,11 @@ def _check_unit_row(row: dict[str, Any], repo_root: Path, symbols: tuple[str, ..
 def _check_manifest_row(row: dict[str, Any], repo_root: Path) -> tuple[str, str, str | None]:
     symbol = str(row.get("symbol") or "")
     event_id = str(row.get("event_id") or "")
-    unit_id = f"{symbol}_{event_id}" if symbol and event_id else str(row.get("npz_path") or "unknown")
-    npz_path = resolve_npz_path(repo_root, str(row["npz_path"]))
+    npz_path_raw = str(row.get("npz_path") or "")
+    unit_id = f"{symbol}_{event_id}" if symbol and event_id else (npz_path_raw or "unknown")
+    if not npz_path_raw:
+        return unit_id, "missing_npz_path", None
+    npz_path = resolve_npz_path(repo_root, npz_path_raw)
     result = check_npz_ohlcv(npz_path)
     if result.valid:
         return unit_id, "ok", str(npz_path)
@@ -426,8 +429,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     if summary_path is not None:
         print(f"summary={summary_path}")
-    # Signal invalid units to CI: non-zero exit when any invalid units were found.
-    return 1 if report.get("invalid_count", 0) > 0 else 0
+    # Signal invalid units to CI only once the scan is complete — a partial
+    # (resumable) batch that found invalid units must exit 0 so &&-chained
+    # incremental workflows can continue to the next batch.
+    scan_complete = bool(progress.get("complete"))
+    if scan_complete and report.get("invalid_count", 0) > 0:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

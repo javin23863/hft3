@@ -416,10 +416,11 @@ def summary_metrics(returns: Iterable[float], *, num_trials: int = 1, periods: i
     if n == 0:
         return {
             "n": 0, "sharpe": 0.0, "sortino": 0.0, "psr": 0.0, "dsr": 0.0,
-            "min_trl": float("inf"), "max_drawdown": 0.0, "cvar_95": 0.0,
+            "min_trl": None, "max_drawdown": 0.0, "cvar_95": 0.0,
             "cvar_99": 0.0, "tail_ratio": 0.0, "skew": 0.0, "kurtosis": 0.0,
             "mean_return": 0.0, "std_return": 0.0,
         }
+    trl = min_trl(arr)
     return {
         "n": n,
         "mean_return": float(arr.mean()),
@@ -428,7 +429,9 @@ def summary_metrics(returns: Iterable[float], *, num_trials: int = 1, periods: i
         "sortino": stream_sortino(arr, periods=periods),
         "psr": psr(arr, periods=periods),
         "dsr": dsr(arr, num_trials=num_trials, periods=periods),
-        "min_trl": min_trl(arr),
+        # min_trl is None (JSON null) when infinite — json.dumps cannot
+        # serialise float('inf') and downstream payloads must be JSON-safe.
+        "min_trl": None if math.isinf(trl) else float(trl),
         "max_drawdown": max_drawdown(arr),
         "cvar_95": cvar(arr, alpha=0.05),
         "cvar_99": cvar(arr, alpha=0.01),
