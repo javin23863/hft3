@@ -126,6 +126,85 @@ class TestScreenPaidBatch:
         assert results[0].error_category == "data_quality"
         assert "insufficient_ohlcv_bars_for_paid_screen" in str(results[0].error)
 
+    def test_paid_scope_rejects_missing_fs_v1_context_before_matrix(self, monkeypatch):
+        """Paid scope must fail closed when fs/v1 context is unavailable."""
+        import numpy as np
+        from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+
+        ctx = make_context(screening_scope="paid-compute")
+        unit = make_unit()
+        cache = BoundedLRUCache(max_entries=4, max_memory_mb=64)
+        cache.put(_batch_cache_key(ctx, unit), np.array([[1, 2, 3, 4, 5, 1_700_000_000_000.0]] * 2))
+        called = {"matrix": False}
+
+        def _unexpected_matrix(**_kwargs):
+            called["matrix"] = True
+            raise AssertionError("matrix should not run when fs_v1 context is missing")
+
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._get_or_load_fs_v1_context",
+            lambda *_, **__: None,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            _unexpected_matrix,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.apply_promotion_gates",
+            lambda result, **kwargs: result,
+        )
+
+        results = screen_paid_batch([unit], ctx, data_cache=cache, run_screening=True)
+
+        assert called["matrix"] is False
+        assert len(results) == 1
+        assert results[0].status == "ERROR"
+        assert results[0].error_category == "data_quality"
+        assert "paid_scope_requires_fs_v1_context" in str(results[0].error)
+
+    def test_paid_scope_rejects_ohlcv_store_mismatch_before_matrix(self, monkeypatch):
+        """Paid scope must fail closed when fs/v1 store length doesn't match OHLCV."""
+        import numpy as np
+        from types import SimpleNamespace
+        from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+
+        ctx = make_context(screening_scope="paid_compute")
+        unit = make_unit()
+        cache = BoundedLRUCache(max_entries=4, max_memory_mb=64)
+        # 3 bars -> will not match mocked fs_v1 context of 2 bars.
+        cache.put(_batch_cache_key(ctx, unit), np.array([[1, 2, 3, 4, 5, 1_700_000_000_000.0]] * 3))
+        called = {"matrix": False}
+
+        def _fake_fs_ctx(*_args, **_kwargs):
+            return SimpleNamespace(store={"ts": [1, 2]})
+
+        def _unexpected_matrix(**_kwargs):
+            called["matrix"] = True
+            raise AssertionError("matrix should not run when fs/v1 lengths mismatch")
+
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._get_or_load_fs_v1_context",
+            _fake_fs_ctx,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            _unexpected_matrix,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.apply_promotion_gates",
+            lambda result, **kwargs: result,
+        )
+
+        results = screen_paid_batch([unit], ctx, data_cache=cache, run_screening=True)
+
+        assert called["matrix"] is False
+        assert len(results) == 1
+        assert results[0].status == "ERROR"
+        assert results[0].error_category == "data_quality"
+        assert "paid_scope_fs_v1_ohlcv_misaligned" in str(results[0].error)
+        assert "ohlcv_rows=3" in str(results[0].error)
+        assert "store_rows=2" in str(results[0].error)
+
     def test_all_models_scope_is_paid_scope_alias(self):
         assert _is_paid_scope("all-models")
         assert _is_paid_scope("all_model")
@@ -1239,6 +1318,22 @@ class TestPromotionGateWiringPlantedPass:
         monkeypatch.setattr(
             "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
             lambda **_kwargs: gated,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._get_or_load_fs_v1_context",
+            lambda *_, **__: type(
+                "FSV1",
+                (),
+                {
+                    "store": {"ts": [0] * 40},
+                    "leader_legs": [],
+                    "symbol": unit.symbol,
+                    "feature_latency_ms": 0.0,
+                    "manifest_hash": "fs_v1_store",
+                    "content_hash": "fs_v1_store",
+                    "has_vix": False,
+                },
+            )(),
         )
 
         results = screen_paid_batch([unit], ctx, data_cache=cache, run_screening=True)

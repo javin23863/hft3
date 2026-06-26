@@ -3,7 +3,13 @@
 set -euo pipefail
 cd /root/hft3/repo
 export HFT3_NPZ_ROOT="${HFT3_NPZ_ROOT:-/data/npz}"
-GATE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"
+if [[ -z "${VBT_READY_GATE_FILE:-}" && -f "/root/hft3/repo/runtime/reports/paid_screen_ready_gate_after_forensic_probe.json" ]]; then
+  GATE="/root/hft3/repo/runtime/reports/paid_screen_ready_gate_after_forensic_probe.json"
+elif [[ -z "${VBT_READY_GATE_FILE:-}" ]]; then
+  GATE="/root/hft3/repo/runtime/reports/paid_screen_ready_gate.json"
+else
+  GATE="/root/hft3/repo/${VBT_READY_GATE_FILE}"
+fi
 UNITS="${VBT_FULL_UNITS_JSONL:-runtime/reports/vbt_full_units.jsonl}"
 WORKERS="${VBT_WORKERS:-230}"
 STATUS_FILE="${VBT_STATUS_FILE:-runtime/reports/vbt_full_status.json}"
@@ -72,7 +78,7 @@ export PYTHONPATH="/root/hft3/repo:/root/hft3/repo/packages"
 tmux kill-session -t "$SESSION" 2>/dev/null || true
 LOG="research_cards/pipeline_runs/${RUN_ID}/orchestrator.log"
 mkdir -p "research_cards/pipeline_runs/${RUN_ID}"
-CMD="export HFT3_NPZ_ROOT=\"${HFT3_NPZ_ROOT}\" VBT_FULL_RUN_ID=\"${RUN_ID}\"; cd /root/hft3/repo; python3 scripts/run_vectorbt_paid_screen.py --units-jsonl \"${UNITS}\" --out \"research_cards/pipeline_runs/${RUN_ID}\" --vectorbt-scope paid-compute --workers \"${WORKERS}\" --ready-gate-file \"${GATE}\" --max-wall-clock-seconds 86400 --no-llm 2>&1 | tee -a \"${LOG}\""
+CMD="export HFT3_NPZ_ROOT=\"${HFT3_NPZ_ROOT}\" VBT_FULL_RUN_ID=\"${RUN_ID}\" VBT_READY_GATE_FILE=\"${GATE}\"; cd /root/hft3/repo; python3 scripts/run_paid_screen.py --units-jsonl \"${UNITS}\" --out \"research_cards/pipeline_runs/${RUN_ID}\" --vectorbt-scope paid-compute --workers \"${WORKERS}\" --ready-gate-file \"${GATE}\" --max-wall-clock-seconds 86400 --no-llm --resume 2>&1 | tee -a \"${LOG}\""
 tmux new-session -d -s "$SESSION" "bash -lc $(printf '%q' "$CMD")"
 echo "Started tmux $SESSION run_id=$RUN_ID workers=$WORKERS"
 tmux ls

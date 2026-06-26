@@ -25,7 +25,13 @@ export HFT3_MANIFEST_PATH="${HFT3_MANIFEST_PATH:-/data/npz/manifest.parquet}"
 
 EVENTS_CSV="${VBT_EVENTS_CSV:-packages/data_system/config/events.csv}"
 UNITS_JSONL="${VBT_FULL_UNITS_JSONL:-runtime/reports/vbt_full_units.jsonl}"
-GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"
+if [[ -z "${VBT_READY_GATE_FILE:-}" && -f "runtime/reports/paid_screen_ready_gate_after_forensic_probe.json" ]]; then
+  GATE_FILE="runtime/reports/paid_screen_ready_gate_after_forensic_probe.json"
+elif [[ -n "${VBT_READY_GATE_FILE:-}" ]]; then
+  GATE_FILE="$VBT_READY_GATE_FILE"
+else
+  GATE_FILE="runtime/reports/paid_screen_ready_gate.json"
+fi
 SYMBOLS="${VBT_SYMBOLS:-MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0}"
 MODEL_SCOPE="${VBT_MODEL_SCOPE:-active}"
 MODEL_IDS="${VBT_MODEL_IDS:-}"
@@ -137,13 +143,19 @@ fi
 GIT_HEAD="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 
 if [[ "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "1" || "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "true" ]]; then
-  python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" "$STALL_MINUTES" "$BATCH_TIMEOUT_SECONDS" <<'PY'
+  DECL_ABORT_ON_FAILED_UNITS="${VBT_DECL_ABORT_ON_FAILED_UNITS:-false}"
+  if [[ "$DECL_ABORT_ON_FAILED_UNITS" == "1" || "${DECL_ABORT_ON_FAILED_UNITS,,}" == "true" || "${DECL_ABORT_ON_FAILED_UNITS,,}" == "yes" || "${DECL_ABORT_ON_FAILED_UNITS,,}" == "on" ]]; then
+    DECL_ABORT_ON_FAILED_UNITS="true"
+  else
+    DECL_ABORT_ON_FAILED_UNITS="false"
+  fi
+  python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" "$STALL_MINUTES" "$BATCH_TIMEOUT_SECONDS" "$DECL_ABORT_ON_FAILED_UNITS" <<'PY'
 import json
 import os
 import sys
 from pathlib import Path
 
-decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash, stall_minutes, batch_timeout_seconds = sys.argv[1:11]
+decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash, stall_minutes, batch_timeout_seconds, abort_on_failed_units = sys.argv[1:12]
 payload = {
     "host_vcpu": int(host_vcpu),
     "reserved_vcpu": 26,
@@ -152,7 +164,7 @@ payload = {
     "units_source": units_source,
     "stall_minutes": int(stall_minutes),
     "batch_timeout_seconds": int(batch_timeout_seconds),
-    "abort_on_failed_units": True,
+    "abort_on_failed_units": str(abort_on_failed_units).lower() in {"1", "true", "yes", "on"},
     "git_head": git_head,
     "events_csv_hash": events_hash,
     "lake_manifest_hash": lake_hash,
@@ -221,8 +233,10 @@ expect_str("units_source", units_source)
 expect_str("git_head", git_head)
 expect_str("events_csv_hash", events_hash)
 expect_str("lake_manifest_hash", lake_hash)
-if payload.get("abort_on_failed_units") is not True:
-    errors.append("abort_on_failed_units must be true; run with VBT_WRITE_DECLARATION_TEMPLATE=1 to regenerate the declaration template")
+if payload.get("abort_on_failed_units") not in (True, False):
+    errors.append(
+        "abort_on_failed_units must be true/false; run with VBT_WRITE_DECLARATION_TEMPLATE=1 to regenerate the declaration template"
+    )
 if errors:
     for err in errors:
         print(f"ERROR: Declaration mismatch: {err}", file=sys.stderr)

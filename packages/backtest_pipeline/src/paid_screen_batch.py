@@ -430,6 +430,32 @@ def _try_resolve_fs_v1_context(
         return None
 
 
+def _paid_scope_fs_v1_gate_error(
+    units: list[PaidScreenUnit],
+    context: WorkerContext,
+    reason: str,
+    profiler: RunProfiler,
+    ohlcv_cache_state: bool,
+) -> list[UnitScreeningResult]:
+    """Fail all units when paid scope cannot guarantee fs_v1-consistent screening."""
+    reason_text = str(reason)
+    results: list[UnitScreeningResult] = []
+    for unit in units:
+        profiler.record_failure(
+            "paid_scope_fs_v1_gate",
+            RuntimeError(reason_text),
+            unit.unit_id,
+            cache_state={"hit": bool(ohlcv_cache_state)},
+        )
+        results.append(UnitScreeningResult(
+            unit_id=unit.unit_id,
+            status="ERROR",
+            error=reason_text,
+            error_category="data_quality",
+        ))
+    return results
+
+
 def _load_ohlcv_for_unit(unit: PaidScreenUnit, context: WorkerContext):
     """Load OHLCV for one unit via symbol-aware fs_v1 or NPZ paths."""
     fs_ctx = _try_resolve_fs_v1_context(unit, context)
@@ -817,6 +843,27 @@ def screen_paid_batch(
     fs_v1_ctx = _get_or_load_fs_v1_context(
         representative, context, data_cache, profiler
     )
+    if run_screening and _is_paid_scope(context.screening_scope):
+        if fs_v1_ctx is None:
+            return _paid_scope_fs_v1_gate_error(
+                units=units,
+                context=context,
+                reason="paid_scope_requires_fs_v1_context",
+                profiler=profiler,
+                ohlcv_cache_state=ohlcv_from_cache,
+            )
+        if not _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_v1_ctx):
+            return _paid_scope_fs_v1_gate_error(
+                units=units,
+                context=context,
+                reason=(
+                    "paid_scope_fs_v1_ohlcv_misaligned:"
+                    f"ohlcv_rows={_ohlcv_row_count(ohlcv)} "
+                    f"store_rows={len(fs_v1_ctx.store.get('ts', []))}"
+                ),
+                profiler=profiler,
+                ohlcv_cache_state=ohlcv_from_cache,
+            )
     signal_computer = None
     if fs_v1_ctx is not None and _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_v1_ctx):
         signal_computer = _resolve_fs_v1_signal_computer(
@@ -827,7 +874,6 @@ def screen_paid_batch(
         )
     else:
         fs_v1_ctx = None
-
     # Compute OHLCV hash for artifact provenance
     ohlcv_hash = hashlib.sha256(ohlcv.tobytes()).hexdigest()[:32]
 

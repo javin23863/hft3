@@ -528,6 +528,38 @@ class TestV2ManifestRelpaths:
         assert row["declared_context_sets"] == ["target_only", "target_plus_cross_asset"]
         assert row["feature_usage_manifest_hash"] == "feature_hash"
 
+    def test_persisted_artifact_path_survives_scratch_cleanup(self, tmp_path):
+        v2 = _load_v2_module()
+        scratch = tmp_path / "scratch" / "u42"
+        scratch.mkdir(parents=True)
+        source = scratch / "screening_artifact.json"
+        source.write_text(
+            json.dumps(
+                {
+                    "research_clock": "context_feature_uplift",
+                    "feature_plane_status": "scheduled_event_only",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        result = UnitScreeningResult(
+            unit_id="u42",
+            status="OK",
+            screening_artifact_path=str(source),
+        )
+        persisted = v2._persist_unit_artifact(
+            tmp_path / "run", result.unit_id, result.screening_artifact_path
+        )
+        assert persisted is not None
+        result.screening_artifact_path = str(persisted)
+
+        row = v2._result_to_dict(result)
+        assert Path(row["screening_artifact_path"]).is_file()
+        assert row["screening_artifact_relpath"] == "units/u42/screening_artifact.json"
+        assert row["research_clock"] == "context_feature_uplift"
+        assert not scratch.exists()
+
     def test_resume_cached_row_includes_screening_artifact_relpath(self, tmp_path):
         v2 = _load_v2_module()
         unit_dir = tmp_path / "units" / "u9"

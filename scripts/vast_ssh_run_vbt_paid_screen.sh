@@ -6,6 +6,12 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
+if [[ -z "${VBT_READY_GATE_FILE:-}" && -f "runtime/reports/paid_screen_ready_gate_after_forensic_probe.json" ]]; then
+  VBT_READY_GATE_FILE="runtime/reports/paid_screen_ready_gate_after_forensic_probe.json"
+elif [[ -z "${VBT_READY_GATE_FILE:-}" ]]; then
+  VBT_READY_GATE_FILE="runtime/reports/paid_screen_ready_gate.json"
+fi
+
 if [[ -n "${VAST_SSH_TARGET:-}" ]]; then
   VAST_SSH_HOST_ARG="$VAST_SSH_TARGET"
 elif [[ -n "${VAST_SSH_HOST:-}" ]]; then
@@ -42,8 +48,12 @@ ssh "${SSH_OPTS[@]}" "$VAST_SSH_HOST_ARG" "mkdir -p $(dirname "$REMOTE_REPO") &&
     git clone --branch $BRANCH https://github.com/javin23863/hft3.git $REMOTE_REPO; \
   fi"
 
-scp "${SCP_OPTS[@]}" runtime/reports/paid_screen_ready_gate.json \
-  "$VAST_SSH_HOST_ARG:$REMOTE_REPO/runtime/reports/paid_screen_ready_gate.json" 2>/dev/null || true
+scp "${SCP_OPTS[@]}" "$VBT_READY_GATE_FILE" \
+  "$VAST_SSH_HOST_ARG:$REMOTE_REPO/$VBT_READY_GATE_FILE" 2>/dev/null || true
+if [[ "$VBT_READY_GATE_FILE" != "runtime/reports/paid_screen_ready_gate.json" ]]; then
+  scp "${SCP_OPTS[@]}" "$VBT_READY_GATE_FILE" \
+    "$VAST_SSH_HOST_ARG:$REMOTE_REPO/runtime/reports/paid_screen_ready_gate.json" 2>/dev/null || true
+fi
 
 echo "Launching remote full screen (230 workers on 256 vCPU) in tmux..."
 ssh "${SSH_OPTS[@]}" "$VAST_SSH_HOST_ARG" "cd $REMOTE_REPO && \
