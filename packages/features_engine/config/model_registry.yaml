@@ -1,4 +1,4 @@
-# Unified model registry: 45 HYP + 11 PDF structural models.
+# Unified model registry: 50 HYP + 11 PDF structural + 11 continuous microstructure = 72 total.
 # Canonical id = slug; legacy_id (HYP_N / PDF_MODEL_N) deprecated.
 
 models:
@@ -8,12 +8,14 @@ models:
     legacy_id: HYP_1
     display_name: Second-wave continuation
     class: SecondWaveContinuation
+    aliases: ["second wave", "continuation", "post event continuation"]
 
   STOP_RUN_EXHAUSTION_FADE:
     kind: hypothesis
     hyp_id: 2
     legacy_id: HYP_2
     display_name: Stop-run exhaustion fade
+    aliases: ["stop run fade", "stop-run fade", "exhaustion fade"]
     class: StopRunExhaustionFade
 
   LIQUIDITY_VACUUM_CONTINUATION:
@@ -22,6 +24,7 @@ models:
     legacy_id: HYP_3
     display_name: Liquidity vacuum continuation
     class: LiquidityVacuumContinuation
+    aliases: ["liquidity vacuum", "thin book continuation"]
 
   DEPTH_REFILL_IMBALANCE:
     kind: hypothesis
@@ -29,6 +32,7 @@ models:
     legacy_id: HYP_4
     display_name: Depth-refill imbalance
     class: DepthRefillImbalance
+    aliases: ["depth refill", "refill imbalance", "queue refill"]
 
   SPREAD_BLOWOUT_RECOMPRESSION:
     kind: hypothesis
@@ -36,6 +40,7 @@ models:
     legacy_id: HYP_5
     display_name: Spread blowout/recompression
     class: SpreadBlowoutRecompression
+    aliases: ["spread blowout", "blowout fade", "squeeze fade", "spread recompression"]
 
   AGGRESSOR_DECELERATION_FADE:
     kind: hypothesis
@@ -57,6 +62,7 @@ models:
     legacy_id: HYP_8
     display_name: False breakout trap
     class: FalseBreakoutTrap
+    aliases: ["false breakout", "breakout trap", "trap breakout"]
 
   CANCEL_STORM_BEFORE_MOVE:
     kind: hypothesis
@@ -71,6 +77,7 @@ models:
     legacy_id: HYP_10
     display_name: Queue depletion trigger
     class: QueueDepletionTrigger
+    aliases: ["queue depletion", "queue imbalance", "queue pull"]
 
   BOOK_SLOPE_COLLAPSE:
     kind: hypothesis
@@ -357,6 +364,7 @@ models:
     legacy_id: PDF_MODEL_1
     display_name: Limit Order Book Pressure
     class: BookPressureModel
+    aliases: ["book pressure", "order book pressure", "ofi", "mlofi"]
 
   CROSS_ASSET_LEAD_LAG:
     kind: pdf_structural

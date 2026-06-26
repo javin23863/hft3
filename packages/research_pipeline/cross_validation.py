@@ -329,7 +329,9 @@ def cscv_pbo(
     if folds == 0:
         return {"pbo": 0.5, "num_blocks": num_blocks, "folds": 0, "lambda": 0.5}
     pbo = count_worst / folds
-    lam = float(np.mean(ranks_out_of_sample[ranks_out_of_sample > 0])) if np.any(ranks_out_of_sample > 0) else 0.5
+    # Include zero percentiles (worst-rank out-of-sample) — excluding them would
+    # bias lambda upward and mask the worst overfitting cases.
+    lam = float(np.mean(ranks_out_of_sample)) if ranks_out_of_sample.size > 0 else 0.5
     return {"pbo": float(pbo), "num_blocks": int(num_blocks), "folds": int(folds), "lambda": float(lam)}
 
 
@@ -372,7 +374,7 @@ def cscv_pbo_panel(
         return {"pbo": 0.5, "num_blocks": num_blocks, "folds": 0, "lambda": 0.5}
     pbo = count_worst / folds
     arr_ranks = np.array(ranks_out_of_sample)
-    lam = float(np.mean(arr_ranks[arr_ranks > 0])) if np.any(arr_ranks > 0) else 0.5
+    lam = float(np.mean(arr_ranks)) if arr_ranks.size > 0 else 0.5
     return {"pbo": float(pbo), "num_blocks": int(num_blocks), "folds": int(folds), "lambda": float(lam)}
 
 

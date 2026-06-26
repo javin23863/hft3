@@ -344,7 +344,11 @@ def tail_ratio(returns: Iterable[float], q: float = 0.95) -> float:
 
 
 def psr(returns: Iterable[float], sharpe_benchmark: float = 0.0, periods: int = 1) -> float:
-    """Stream PSR: probability true Sharpe exceeds ``sharpe_benchmark``."""
+    """Stream PSR: probability true Sharpe exceeds ``sharpe_benchmark``.
+
+    ``periods`` is intentionally ignored in the Sharpe computation — PSR is
+    defined on the per-period (non-annualised) Sharpe ratio per Bailey et al.
+    """
     arr = _as_returns(returns)
     n = arr.size
     if n < 3:
@@ -362,7 +366,12 @@ def psr(returns: Iterable[float], sharpe_benchmark: float = 0.0, periods: int = 
 
 
 def dsr(returns: Iterable[float], num_trials: int = 1, periods: int = 1) -> float:
-    """Stream DSR: PSR with a benchmark inflated by multiple-testing selection."""
+    """Stream DSR: PSR with a benchmark inflated by multiple-testing selection.
+
+    Uses the Bailey & Lopez de Prado (2014) expected-maximum-Sharpe formula:
+    the benchmark is inflated by ``stdev(SR) * E[max SR over N trials]`` where
+    ``E[max] = (1-gamma)*Phi^-1(1 - 1/N) + gamma*Phi^-1(1 - 1/(N*e))``.
+    """
     arr = _as_returns(returns)
     n = arr.size
     if n < 3 or num_trials < 1:
@@ -372,11 +381,7 @@ def dsr(returns: Iterable[float], num_trials: int = 1, periods: int = 1) -> floa
         return 0.0
     sharpe_variance = 1.0 / max(n - 1, 1)
     sharpe_stdev = math.sqrt(max(sharpe_variance, 1e-18))
-    p_false = 0.05
-    p_trial = min(1.0 - 1e-12, max(1e-12, p_false ** num_trials))
-    embias = (1.0 - 0.5772156649015329) * _normal_inv_cdf(1.0 - p_false) + 0.5772156649015329 * _normal_inv_cdf(
-        1.0 - p_trial
-    )
+    embias = expected_maximum_sharpe(num_trials)
     sr_benchmark = sharpe_stdev * embias
     return psr(arr, sharpe_benchmark=sr_benchmark, periods=periods)
 

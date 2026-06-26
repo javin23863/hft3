@@ -222,6 +222,30 @@ def evaluate_continuous_from_candidate(
     if trades is None:
         trades = meta.get("trades") or []
 
+    has_returns = bool(list(gross_returns) if not isinstance(gross_returns, (list, tuple)) else gross_returns)
+    if not has_returns and not trades:
+        return EvaluationResult(
+            candidate=candidate,
+            event_id=event_id,
+            net_pnl=0.0,
+            num_trades=0,
+            win_rate=0.0,
+            expectancy=0.0,
+            tail_loss=0.0,
+            gates=gates,
+            error="missing_backtest_data: continuous candidate has no gross_returns/trades",
+            failure_class="data_quality",
+            workbench_out={
+                "continuous_evaluation": {
+                    "lane": CONTINUOUS_LANE_TAG,
+                    "status": "missing_backtest_data",
+                    "candidate_id": candidate.candidate_id,
+                    "model_id": candidate.model_id,
+                    "gates": {"all_pass": False, "primary_metric": "DSR", "primary_pass": False},
+                }
+            },
+        )
+
     payload = evaluate_continuous(
         gross_returns=gross_returns,
         trades=trades,
