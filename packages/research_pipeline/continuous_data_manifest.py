@@ -16,6 +16,7 @@ from research_pipeline.continuous_universe import (
 )
 
 MANIFEST_SCHEMA_VERSION = "1"
+TRADING_DAY_BASIS = "iso_weekday"
 _DEFAULT_DATA_TYPES = ("mbo", "quotes", "trades")
 _WEEK_LABEL_RE = re.compile(r"^(\d{4})-W(\d{2})$")
 _EVENTS_FILENAME = "events.ndjson"
@@ -62,7 +63,10 @@ def _iso_week_trading_days(rithmic_week: str) -> int:
 
 
 def _iso_week_trading_day_names(rithmic_week: str) -> frozenset[str]:
-    """ISO-week Mon–Fri calendar dates for *rithmic_week* (YYYY-MM-DD strings)."""
+    """ISO-week Mon–Fri calendar dates for *rithmic_week* (YYYY-MM-DD strings).
+
+    ponytail: iso_weekday ceiling — upgrade via CME exchange holiday calendar.
+    """
     year, week = _parse_rithmic_week(rithmic_week)
     monday = date.fromisocalendar(year, week, 1)
     return frozenset(
@@ -81,15 +85,21 @@ def _count_ndjson_rows(path: Path) -> int:
     return count
 
 
-def _contract_row_count_single(contract_dir: Path) -> int:
-    events_path = contract_dir / _EVENTS_FILENAME
-    if events_path.is_file():
-        return _count_ndjson_rows(events_path)
-    total = 0
+def _iter_contract_ndjson_files(contract_dir: Path) -> Iterable[Path]:
+    """Yield unique ndjson capture files under *contract_dir* (deduped by resolve)."""
+    seen: set[str] = set()
     for path in contract_dir.rglob("*.ndjson"):
-        if path.is_file():
-            total += _count_ndjson_rows(path)
-    return total
+        if not path.is_file():
+            continue
+        key = str(path.resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        yield path
+
+
+def _contract_row_count_single(contract_dir: Path) -> int:
+    return sum(_count_ndjson_rows(path) for path in _iter_contract_ndjson_files(contract_dir))
 
 
 def _contract_row_count(contract_dirs: list[Path]) -> int:
@@ -114,14 +124,7 @@ def _contract_days_with_data(
     days: set[str] = set()
     has_flat_data = False
     for contract_dir in contract_dirs:
-        seen_paths: set[str] = set()
-        for path in contract_dir.rglob("*.ndjson"):
-            if not path.is_file():
-                continue
-            key = str(path.resolve())
-            if key in seen_paths:
-                continue
-            seen_paths.add(key)
+        for path in _iter_contract_ndjson_files(contract_dir):
             row_count = _count_ndjson_rows(path)
             if row_count <= 0:
                 continue
@@ -315,6 +318,7 @@ def build_coverage_manifest(
             "total_rows": total_rows,
             "mean_missing_ratio": mean_missing,
             "expected_trading_days": expected_trading_days,
+            "trading_day_basis": TRADING_DAY_BASIS,
         },
     }
 

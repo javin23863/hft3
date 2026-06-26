@@ -34,6 +34,7 @@ CAUSAL_BOUNDS_KEYS = (
     "as_of_event_time",
     "max_lag_sessions",
 )
+CAUSAL_BOUND_UNSET = "unset"
 
 
 def relationship_graph_dir(repo_root: Path, rithmic_week: str) -> Path:
@@ -78,8 +79,16 @@ def _empty_edge_features() -> dict[str, None]:
     return {key: None for key in EDGE_FEATURE_KEYS}
 
 
-def _empty_causal_bounds() -> dict[str, None]:
-    return {key: None for key in CAUSAL_BOUNDS_KEYS}
+def _empty_causal_bounds() -> dict[str, str]:
+    return {key: CAUSAL_BOUND_UNSET for key in CAUSAL_BOUNDS_KEYS}
+
+
+def assert_causal_bounds_ready(causal_bounds: dict[str, Any]) -> None:
+    """Fail closed before edge scoring when PIT causal bounds are unset."""
+    for key in CAUSAL_BOUNDS_KEYS:
+        value = causal_bounds.get(key)
+        if value is None or value == CAUSAL_BOUND_UNSET:
+            raise ValueError(f"causal bound {key!r} not set for scoring")
 
 
 def _universe_root_symbols(universe_config: dict[str, Any]) -> set[str]:
@@ -94,17 +103,15 @@ def validate_edge_roots(
 ) -> None:
     """Fail closed when graph pairs reference roots absent from cme_universe.yaml."""
     known = _universe_root_symbols(universe_config)
-    missing = sorted(
-        {
-            str(edge[key]).upper()
-            for edge in edges
-            for key in ("source_root", "target_root")
-            if str(edge.get(key) or "").upper() not in known
-        }
-    )
+    missing: set[str] = set()
+    for edge in edges:
+        for key in ("source_root", "target_root"):
+            root = str(edge.get(key) or "").upper()
+            if root and root not in known:
+                missing.add(root)
     if missing:
         raise ValueError(
-            f"edge roots missing from cme_universe.yaml: {', '.join(missing)}"
+            f"edge roots missing from cme_universe.yaml: {', '.join(sorted(missing))}"
         )
 
 
@@ -116,8 +123,8 @@ def filter_edges_for_profile(
     return [
         edge
         for edge in edges
-        if is_root_active_for_profile(str(edge["source_root"]), universe_profile)
-        and is_root_active_for_profile(str(edge["target_root"]), universe_profile)
+        if is_root_active_for_profile(str(edge.get("source_root") or ""), universe_profile)
+        and is_root_active_for_profile(str(edge.get("target_root") or ""), universe_profile)
     ]
 
 
@@ -187,8 +194,15 @@ def build_relationship_graph_stub(
         "summary": {
             "edge_count": len(edges),
             "family_count": len(families),
+            "scoring_ready": False,
         },
     }
+
+
+def require_edges_scorable(edges: list[dict[str, Any]]) -> None:
+    """Block edge scoring until every edge has populated PIT causal bounds."""
+    for edge in edges:
+        assert_causal_bounds_ready(dict(edge.get("causal_bounds") or {}))
 
 
 def write_relationship_graph(repo_root: Path, graph: dict[str, Any]) -> Path:

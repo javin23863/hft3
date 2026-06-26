@@ -65,6 +65,7 @@ def test_enumerate_edges_stub() -> None:
     assert set(sample["features"]) == set(EDGE_FEATURE_KEYS)
     assert all(value is None for value in sample["features"].values())
     assert "causal_bounds" in sample
+    assert sample["causal_bounds"]["pit_window_end"] == "unset"
 
 
 def test_build_relationship_graph_stub_and_write(tmp_path: Path) -> None:
@@ -117,7 +118,9 @@ def test_load_relationship_graph_config_missing_raises(tmp_path: Path) -> None:
 def test_build_graph_includes_causal_bounds_and_validates_roots() -> None:
     from research_pipeline.relationship_graph import (
         CAUSAL_BOUNDS_KEYS,
+        CAUSAL_BOUND_UNSET,
         build_relationship_graph_stub,
+        require_edges_scorable,
     )
 
     graph = build_relationship_graph_stub(
@@ -127,7 +130,10 @@ def test_build_graph_includes_causal_bounds_and_validates_roots() -> None:
     )
     sample = graph["edges"][0]
     assert set(sample["causal_bounds"]) == set(CAUSAL_BOUNDS_KEYS)
-    assert all(value is None for value in sample["causal_bounds"].values())
+    assert all(value == CAUSAL_BOUND_UNSET for value in sample["causal_bounds"].values())
+    assert graph["summary"]["scoring_ready"] is False
+    with pytest.raises(ValueError, match="not set for scoring"):
+        require_edges_scorable(graph["edges"])
 
 
 def test_build_graph_filters_edges_for_pilot_profile() -> None:
