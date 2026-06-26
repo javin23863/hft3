@@ -119,6 +119,7 @@ def _result_to_dict(result: UnitScreeningResult) -> Dict[str, Any]:
         "screening_artifact_relpath": _unit_artifact_relpath(result.unit_id),
         "screening_artifact_hash": result.screening_artifact_hash,
         "error": result.error,
+        "failure_class": result.failure_class,
         "elapsed_seconds": round(result.elapsed_seconds, 4),
         "promoted_ids": result.promoted_ids,
         "rejected_ids": result.rejected_ids,
@@ -1087,12 +1088,19 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     data_quality_skipped_unit_ids: List[str] = []
     inline_skip_ids: List[str] = []
+    raw_cfg: Dict[str, Any] = {}
     default_cfg_path = repo_root / "config" / "autoresearch" / "default.yaml"
     if default_cfg_path.is_file():
         import yaml
 
         raw_cfg = yaml.safe_load(default_cfg_path.read_text(encoding="utf-8")) or {}
         inline_skip_ids = [str(x) for x in (raw_cfg.get("skipped_unit_ids") or [])]
+
+    from research_pipeline.data_quality import abort_on_failed_units_for_scope
+
+    abort_on_failed_units = abort_on_failed_units_for_scope(args.vectorbt_scope, raw_cfg)
+    if args.abort_on_failed_units:
+        abort_on_failed_units = True
 
     if args.skip_bad_units_file or inline_skip_ids:
         from research_pipeline.data_quality import skipped_unit_id_set, unit_matches_skip
@@ -1354,12 +1362,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             partial_results.append(result)
             partial_result_dicts.append(_result_to_dict(result))
         run_state["collected_batches"] = int(run_state["collected_batches"]) + 1
-        if args.abort_on_failed_units and any(r.status == "ERROR" for r in batch_results):
+        model_errors = [
+            r
+            for r in batch_results
+            if r.status == "ERROR" and r.failure_class != "data_quality"
+        ]
+        if abort_on_failed_units and model_errors:
             run_state["stop_reason"] = "abort_on_failed_units"
-            failed = [r for r in batch_results if r.status == "ERROR"]
             print(
                 f"[abort] abort_on_failed_units: batch={_batch_id} "
-                f"failed={len(failed)} sample={failed[0].error if failed else ''}",
+                f"failed={len(model_errors)} sample={model_errors[0].error if model_errors else ''}",
                 flush=True,
             )
         _flush_running_manifest()

@@ -56,6 +56,20 @@ def test_check_npz_ohlcv_insufficient_events(tmp_path: Path) -> None:
     assert result.reason == "insufficient_events"
 
 
+def test_check_npz_ohlcv_zero_px_false_pass(tmp_path: Path) -> None:
+    path = tmp_path / "zero_px.npz"
+    dtype = _event_dtype()
+    data = np.zeros(3, dtype=dtype)
+    data["local_ts"] = np.arange(3, dtype=np.int64)
+    data["px"] = 0.0
+    data["qty"] = 1.0
+    data["ev"] = 1
+    np.savez(path, data=data)
+    result = check_npz_ohlcv(path)
+    assert result.valid is False
+    assert result.reason == "ohlcv_derivability_error:non_positive_px"
+
+
 def test_check_npz_ohlcv_missing_file(tmp_path: Path) -> None:
     result = check_npz_ohlcv(tmp_path / "missing.npz")
     assert result.valid is False
@@ -75,7 +89,9 @@ def test_classify_model_error() -> None:
 
 def test_is_no_ohlcv_error_string() -> None:
     assert is_no_ohlcv_error("no_ohlcv_data")
+    assert is_no_ohlcv_error("no_ohlcv_data: missing bars")
     assert not is_no_ohlcv_error("vectorbt timeout")
+    assert not is_no_ohlcv_error("insufficient_events")
 
 
 def test_skipped_unit_id_set_inline_and_file(tmp_path: Path) -> None:
@@ -117,6 +133,12 @@ def test_abort_on_failed_units_by_scope(scope: str, expected: bool) -> None:
         }
     }
     assert abort_on_failed_units_for_scope(scope, cfg) is expected
+
+
+def test_abort_on_failed_units_scope_overrides_legacy() -> None:
+    cfg = {"abort_on_failed_units": True, "abort_on_failed_units_by_scope": {"paid": False}}
+    assert abort_on_failed_units_for_scope("paid", cfg) is False
+    assert abort_on_failed_units_for_scope("pilot", cfg) is True
 
 
 def test_evaluation_classifies_no_ohlcv(monkeypatch, tmp_path: Path) -> None:

@@ -81,6 +81,7 @@ class UnitScreeningResult:
     elapsed_seconds: float = 0.0
     promoted_ids: list[str] = field(default_factory=list)
     rejected_ids: list[str] = field(default_factory=list)
+    failure_class: str | None = None  # data_quality | model
 
 
 @dataclass(frozen=True)

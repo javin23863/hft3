@@ -76,6 +76,14 @@ def check_npz_ohlcv(path: Path | str) -> NpzOhlcvCheckResult:
             event_count=event_count,
             npz_path=str(npz_path),
         )
+    derivability_reason = _npz_ohlcv_derivability_reason(raw)
+    if derivability_reason is not None:
+        return NpzOhlcvCheckResult(
+            valid=False,
+            reason=derivability_reason,
+            event_count=event_count,
+            npz_path=str(npz_path),
+        )
     return NpzOhlcvCheckResult(
         valid=True,
         reason=None,
@@ -84,13 +92,34 @@ def check_npz_ohlcv(path: Path | str) -> NpzOhlcvCheckResult:
     )
 
 
+def _npz_ohlcv_derivability_reason(raw: Any) -> str | None:
+    """Cheap sample checks mirroring ``_default_data_loader`` bar prerequisites."""
+    import numpy as np
+
+    try:
+        px = np.asarray(raw["px"], dtype=np.float64)
+        ts = np.asarray(raw["local_ts"], dtype=np.int64)
+    except (KeyError, TypeError, ValueError):
+        return "ohlcv_derivability_error:missing_px_or_ts"
+    if px.size == 0 or ts.size == 0:
+        return "ohlcv_derivability_error:empty_px_or_ts"
+    if not np.isfinite(px).any() or float(np.nanmax(px)) <= 0.0:
+        return "ohlcv_derivability_error:non_positive_px"
+    if ts.size >= 2 and not bool(np.all(ts[1:] >= ts[:-1])):
+        return "ohlcv_derivability_error:non_monotonic_local_ts"
+    return None
+
+
+_NO_OHLCV_ERROR_TOKENS = frozenset({"no_ohlcv_data", "no ohlcv data"})
+
+
 def is_no_ohlcv_error(exc: BaseException | str | None) -> bool:
     if exc is None:
         return False
     if isinstance(exc, NoOHLCVDataError):
         return True
-    text = str(exc).lower()
-    return "no_ohlcv_data" in text or "insufficient_events" in text
+    text = str(exc).strip().lower()
+    return text in _NO_OHLCV_ERROR_TOKENS or text.startswith("no_ohlcv_data:")
 
 
 def classify_evaluation_error(exc: BaseException) -> tuple[str | None, str]:

@@ -214,14 +214,21 @@ def main() -> int:
         if skip_file is None and cfg.skip_bad_units_file is not None:
             skip_file = cfg.skip_bad_units_file
         if skip_file is not None:
-            from research_pipeline.data_quality import load_skip_bad_units_payload
+            from research_pipeline.data_quality import skipped_unit_id_set
 
             skip_path = skip_file if skip_file.is_absolute() else repo_root / skip_file
             if skip_path.is_file():
-                payload = load_skip_bad_units_payload(skip_path)
-                invalid = payload.get("invalid_unit_ids") or {}
-                n_invalid = len(invalid) if isinstance(invalid, dict) else 0
-                print(f"[autoresearch] skip_bad_units_file={skip_path} invalid_units={n_invalid}", flush=True)
+                overrides["skip_bad_units_file"] = str(skip_path)
+                cfg = load_autoresearch_config(args.config, overrides=overrides)
+                skip_ids = skipped_unit_id_set(
+                    skip_bad_units_file=skip_path,
+                    skipped_unit_ids=list(cfg.skipped_unit_ids),
+                )
+                print(
+                    f"[autoresearch] skip_bad_units_file={skip_path} "
+                    f"skip_ids={len(skip_ids)} (wired into generation_loop)",
+                    flush=True,
+                )
             else:
                 print(f"Warning: skip_bad_units_file not found: {skip_path}", file=sys.stderr)
         chi404 = args.chi404_summary

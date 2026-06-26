@@ -127,6 +127,56 @@ def load_autoresearch_config(path: Path, *, overrides: dict[str, Any] | None = N
     )
 
 
+def _resolve_skip_ids(cfg: AutoresearchConfig, repo_root: Path) -> set[str]:
+    from research_pipeline.data_quality import skipped_unit_id_set
+
+    skip_path = cfg.skip_bad_units_file
+    if skip_path is not None and not skip_path.is_absolute():
+        skip_path = repo_root / skip_path
+    return skipped_unit_id_set(
+        skip_bad_units_file=skip_path if skip_path is not None and skip_path.is_file() else None,
+        skipped_unit_ids=list(cfg.skipped_unit_ids),
+    )
+
+
+def _campaign_unit_skipped(*, event_id: str, symbol: str, skip_ids: set[str]) -> bool:
+    from research_pipeline.data_quality import unit_matches_skip
+
+    if not skip_ids:
+        return False
+    return unit_matches_skip(
+        unit_id=f"{symbol}_{event_id}",
+        symbol=symbol,
+        event_id=event_id,
+        skip_ids=skip_ids,
+    )
+
+
+def _filter_candidates_for_skip(
+    candidates: list[CandidateModel],
+    *,
+    event_id: str,
+    symbol: str,
+    skip_ids: set[str],
+) -> list[CandidateModel]:
+    from research_pipeline.data_quality import unit_matches_skip
+
+    if not skip_ids:
+        return candidates
+    if _campaign_unit_skipped(event_id=event_id, symbol=symbol, skip_ids=skip_ids):
+        return []
+    return [
+        c
+        for c in candidates
+        if not unit_matches_skip(
+            c.candidate_id,
+            symbol=symbol,
+            event_id=event_id,
+            skip_ids=skip_ids,
+        )
+    ]
+
+
 def _cfg_semantic_dict(cfg: AutoresearchConfig) -> dict[str, Any]:
     return {
         "max_candidates_per_generation": cfg.max_candidates_per_generation,
@@ -1043,6 +1093,13 @@ def run_autoresearch_loop(
     repo_root = repo_root.resolve()
     parsed = parsed or parse_hypothesis(thesis, use_llm=not no_llm)
     config_hash = _campaign_config_hash(repo_root=repo_root, event_id=event_id, cfg=cfg)
+    skip_ids = _resolve_skip_ids(cfg, repo_root)
+    if _campaign_unit_skipped(event_id=event_id, symbol=cfg.symbol, skip_ids=skip_ids):
+        print(
+            f"[data_quality] skipping autoresearch for bad unit "
+            f"symbol={cfg.symbol} event_id={event_id} skip_ids={len(skip_ids)}",
+            flush=True,
+        )
     summaries: list[dict[str, Any]] = []
     terminal_stop_reasons = {
         "max_generations",
@@ -1050,6 +1107,7 @@ def run_autoresearch_loop(
         "no_improvement",
         "stop_file_present",
         "no_supported_exploration_remaining",
+        "data_quality_unit_skipped",
     }
     failure_stop_reasons = {
         "prior_generation_summary_missing",
@@ -1164,8 +1222,16 @@ def run_autoresearch_loop(
                 family_search_enabled=cfg.family_search_enabled,
                 family_search_fraction=cfg.family_search_fraction,
             )
+        candidates = _filter_candidates_for_skip(
+            candidates,
+            event_id=event_id,
+            symbol=cfg.symbol,
+            skip_ids=skip_ids,
+        )
         if not candidates:
-            if gen > 0:
+            if _campaign_unit_skipped(event_id=event_id, symbol=cfg.symbol, skip_ids=skip_ids):
+                manifest["stop_reason"] = "data_quality_unit_skipped"
+            elif gen > 0:
                 manifest["stop_reason"] = "no_supported_exploration_remaining"
             else:
                 manifest["stop_reason"] = "no_candidates_after_dedup"
