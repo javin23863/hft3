@@ -6,10 +6,16 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from features_engine.src.model_registry import all_slugs, legacy_to_slug, load_model_registry
+from features_engine.src.model_registry import (
+    all_slugs,
+    continuous_eligible_slugs,
+    get_continuous_model_entry,
+    legacy_to_slug,
+    load_model_registry,
+)
 
 from research_pipeline.llm import generate_json
-from research_pipeline.types import ParsedHypothesis
+from research_pipeline.types import ContinuousLaneProfile, ParsedHypothesis
 
 _PARSE_SYSTEM = """You convert natural-language trading hypotheses into JSON for a CME microstructure backtester.
 Return ONLY JSON with keys:
@@ -38,6 +44,96 @@ _KEYWORD_MODEL: List[tuple[str, str]] = [
     (r"lead.?lag|transfer entropy", "TRANSFER_ENTROPY"),
     (r"hybrid|avellaneda", "HYBRID_EXECUTION"),
 ]
+
+_CONTINUOUS_KEYWORD_MODEL: List[tuple[str, str]] = [
+    (r"cross.?market ofi|ofi impact", "CROSS_MARKET_OFI_IMPACT"),
+    (r"book resiliency|resiliency continuation", "BOOK_RESILIENCY_CONTINUATION"),
+    (r"queue depletion|replenishment", "QUEUE_DEPLETION_REPLENISHMENT"),
+    (r"hidden liquidity|iceberg reload", "HIDDEN_LIQUIDITY_RELOAD"),
+    (r"toxic flow|adverse selection", "TOXIC_FLOW_ADVERSE_SELECTION"),
+    (r"calendar curve|term structure impulse", "CALENDAR_CURVE_MICRO_IMPULSE"),
+    (r"spread dislocation|relative value spread", "STRUCTURAL_SPREAD_MICRO_DISLOCATION"),
+    (r"seasonal state|seasonality", "SEASONAL_STATE_CONDITIONED_MICRO_ALPHA"),
+    (r"self.?exciting|hawkes|flow burst", "SELF_EXCITING_FLOW_BURST"),
+    (r"rl execution|execution overlay", "RL_EXECUTION_OVERLAY"),
+    (r"micro.?standard|flow transfer", "MICRO_STANDARD_FLOW_TRANSFER"),
+    (r"lead.?lag", "MICRO_STANDARD_FLOW_TRANSFER"),
+]
+
+_RELATIONSHIP_FAMILY_BY_MODEL: Dict[str, str] = {
+    "MICRO_STANDARD_FLOW_TRANSFER": "micro_standard",
+    "CROSS_MARKET_OFI_IMPACT": "cross_asset_flow",
+    "BOOK_RESILIENCY_CONTINUATION": "micro_standard",
+    "QUEUE_DEPLETION_REPLENISHMENT": "micro_standard",
+    "HIDDEN_LIQUIDITY_RELOAD": "micro_standard",
+    "TOXIC_FLOW_ADVERSE_SELECTION": "micro_standard",
+    "CALENDAR_CURVE_MICRO_IMPULSE": "calendar_front_second",
+    "STRUCTURAL_SPREAD_MICRO_DISLOCATION": "rates_curve",
+    "SEASONAL_STATE_CONDITIONED_MICRO_ALPHA": "seasonal_state",
+    "SELF_EXCITING_FLOW_BURST": "micro_standard",
+    "RL_EXECUTION_OVERLAY": "execution_overlay",
+}
+
+
+def _continuous_slugs() -> List[str]:
+    return continuous_eligible_slugs()
+
+
+def _match_continuous_model(thesis: str) -> str:
+    slug_paren = _slug_from_parentheses(thesis)
+    if slug_paren is not None and slug_paren in _continuous_slugs():
+        return slug_paren
+    lower = thesis.lower()
+    for pattern, slug in _CONTINUOUS_KEYWORD_MODEL:
+        if re.search(pattern, lower):
+            return slug
+    for slug in _continuous_slugs():
+        entry = get_continuous_model_entry(slug)
+        display = str(entry.get("display_name") or "").lower()
+        if display and display in lower:
+            return slug
+    return "MICRO_STANDARD_FLOW_TRANSFER"
+
+
+def _normalize_param_ranges(raw: Any) -> Dict[str, List[float]]:
+    if not isinstance(raw, dict):
+        return {}
+    normalized: Dict[str, List[float]] = {}
+    for key, value in raw.items():
+        if isinstance(value, (list, tuple)) and len(value) >= 2:
+            normalized[str(key)] = [float(value[0]), float(value[1])]
+    return normalized
+
+
+def parse_continuous_lane_profile(
+    thesis: str,
+    *,
+    universe_profile: str = "full_cme_research",
+    use_llm: bool = False,
+) -> ContinuousLaneProfile:
+    """Parse continuous microstructure lane profile without universe expansion."""
+    thesis = thesis.strip()
+    if not thesis:
+        raise ValueError("thesis must be non-empty")
+    if use_llm:
+        raise NotImplementedError("continuous lane LLM parse deferred to Phase 5")
+
+    model_id = _match_continuous_model(thesis)
+    entry = get_continuous_model_entry(model_id)
+    param_ranges = _normalize_param_ranges(entry.get("default_param_ranges"))
+    if not param_ranges:
+        param_ranges = {"signal_threshold": [0.05, 0.35]}
+
+    return ContinuousLaneProfile(
+        thesis=thesis,
+        lane="continuous_microstructure",
+        primary_model_id=model_id,
+        model_family=str(entry.get("model_family") or "unknown"),
+        universe_profile=universe_profile,
+        relationship_family=_RELATIONSHIP_FAMILY_BY_MODEL.get(model_id),
+        param_ranges=param_ranges,
+        source="heuristic",
+    )
 
 
 def _hypothesis_slugs() -> List[str]:

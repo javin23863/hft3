@@ -1,4 +1,4 @@
-"""Unified model slug registry - 50 HYP + 11 PDF = 61 total."""
+"""Unified model slug registry - 50 HYP + 11 PDF + 11 continuous = 72 total."""
 
 from __future__ import annotations
 
@@ -34,6 +34,29 @@ def legacy_to_slug() -> Dict[str, str]:
 
 def all_slugs() -> List[str]:
     return sorted(_models().keys())
+
+
+def continuous_eligible_slugs() -> List[str]:
+    """Return registry slugs marked continuous_eligible (Phase 4)."""
+    return sorted(
+        slug
+        for slug, entry in _models().items()
+        if entry.get("continuous_eligible") is True
+        or entry.get("kind") == "continuous_microstructure"
+    )
+
+
+def get_continuous_model_entry(slug: str) -> dict:
+    """Resolve continuous model metadata; raises KeyError if not continuous-eligible."""
+    entry = _models().get(slug)
+    if entry is None:
+        raise KeyError(f"Unknown model id: {slug}")
+    if not (
+        entry.get("continuous_eligible") is True
+        or entry.get("kind") == "continuous_microstructure"
+    ):
+        raise KeyError(f"{slug} is not continuous-eligible")
+    return entry
 
 
 def resolve_model_id(model_id: str) -> str:

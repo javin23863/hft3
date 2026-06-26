@@ -417,3 +417,170 @@ models:
     legacy_id: PDF_MODEL_11
     display_name: Hawkes Toxic Flow Detection
     class: HawkesToxicFlowModel
+
+  MICRO_STANDARD_FLOW_TRANSFER:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Micro-standard flow transfer
+    model_family: cross_market_lead_lag
+    requires_relationship_graph: true
+    required_data: [rithmic_continuous, relationship_graph]
+    valid_relationship_types: [micro_standard]
+    default_param_ranges:
+      lag_window_sessions: [1, 5]
+      min_lead_lag_stability: [0.4, 0.9]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  CROSS_MARKET_OFI_IMPACT:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Cross-market OFI impact
+    model_family: cross_asset_flow
+    requires_relationship_graph: true
+    required_data: [rithmic_continuous, relationship_graph]
+    valid_relationship_types: [metals_complex, energy_complex, rates_curve]
+    default_param_ranges:
+      ofi_beta_lag: [1, 10]
+      impact_decay_halflife_ms: [50, 500]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  BOOK_RESILIENCY_CONTINUATION:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Book resiliency continuation
+    model_family: liquidity_resiliency
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: [micro_standard]
+    default_param_ranges:
+      resiliency_threshold: [0.2, 0.8]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  QUEUE_DEPLETION_REPLENISHMENT:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Queue depletion replenishment
+    model_family: queue_dynamics
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: [micro_standard]
+    default_param_ranges:
+      depletion_ratio: [0.3, 0.9]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  HIDDEN_LIQUIDITY_RELOAD:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Hidden liquidity reload
+    model_family: hidden_liquidity
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: [micro_standard]
+    default_param_ranges:
+      reload_sensitivity: [0.1, 0.6]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  TOXIC_FLOW_ADVERSE_SELECTION:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Toxic flow adverse selection
+    model_family: order_flow_toxicity
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: [micro_standard]
+    default_param_ranges:
+      toxicity_zscore: [1.0, 3.0]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  CALENDAR_CURVE_MICRO_IMPULSE:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Calendar curve micro impulse
+    model_family: term_structure
+    requires_relationship_graph: true
+    required_data: [rithmic_continuous, relationship_graph]
+    valid_relationship_types: [calendar_front_second]
+    default_param_ranges:
+      curve_zscore: [0.5, 2.5]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  STRUCTURAL_SPREAD_MICRO_DISLOCATION:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Structural spread micro dislocation
+    model_family: relative_value_spreads
+    requires_relationship_graph: true
+    required_data: [rithmic_continuous, relationship_graph]
+    valid_relationship_types: [micro_standard, rates_curve]
+    default_param_ranges:
+      spread_zscore: [1.0, 3.0]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  SEASONAL_STATE_CONDITIONED_MICRO_ALPHA:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Seasonal state conditioned micro alpha
+    model_family: seasonality_conditioning
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: [seasonal_state]
+    default_param_ranges:
+      seasonal_state_weight: [0.1, 0.5]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  SELF_EXCITING_FLOW_BURST:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: Self-exciting flow burst
+    model_family: hawkes_point_process
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: [micro_standard]
+    default_param_ranges:
+      burst_intensity: [0.05, 0.4]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
+
+  RL_EXECUTION_OVERLAY:
+    kind: continuous_microstructure
+    continuous_eligible: true
+    event_eligible: false
+    display_name: RL execution overlay
+    model_family: execution_overlay
+    requires_relationship_graph: false
+    required_data: [rithmic_continuous]
+    valid_relationship_types: []
+    default_param_ranges:
+      reward_scale: [0.5, 2.0]
+    risk_metrics:
+      primary: DSR
+      guardrails: [PBO]
