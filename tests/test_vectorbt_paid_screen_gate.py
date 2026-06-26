@@ -4,8 +4,10 @@ from __future__ import annotations
 import builtins
 import json
 import os
+import struct
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -677,6 +679,44 @@ def test_require_runnable_npz_drops_zero_row_npz(
     assert [unit["unit_id"] for unit in kept] == ["keep"]
 
 
+def _synthetic_npy_member(
+    *,
+    version: tuple[int, int] = (1, 0),
+    descr: str = "<i8",
+    shape: tuple[int, ...] = (3,),
+    payload: bytes = b"",
+    fortran_order: object = False,
+    extra_header: dict[str, object] | None = None,
+) -> bytes:
+    encoding = "latin1" if version[0] < 3 else "utf-8"
+    header_payload = {"descr": descr, "fortran_order": fortran_order, "shape": shape}
+    if extra_header:
+        header_payload.update(extra_header)
+    header = repr(header_payload) + "\n"
+    raw_header = header.encode(encoding)
+    raw_len = (
+        struct.pack("<H", len(raw_header))
+        if version == (1, 0)
+        else struct.pack("<I", len(raw_header))
+    )
+    return b"\x93NUMPY" + bytes(version) + raw_len + raw_header + payload
+
+
+def _write_npz_member(path: Path, name: str, payload: bytes) -> None:
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr(name, payload)
+
+
+def test_runnable_npz_row_check_accepts_data_member(tmp_path: Path) -> None:
+    """Nonempty data NPZ files written by np.savez are runnable."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_file = tmp_path / "data_member.npz"
+    np.savez(npz_file, data=np.arange(3, dtype=np.int64))
+
+    assert generator._npz_has_rows(npz_file)
+
+
 def test_runnable_npz_row_check_accepts_quotes_member(tmp_path: Path) -> None:
     """Nonempty quotes-only NPZ files are runnable."""
     import scripts.generate_vbt_paid_units_jsonl as generator
@@ -685,6 +725,97 @@ def test_runnable_npz_row_check_accepts_quotes_member(tmp_path: Path) -> None:
     np.savez(npz_file, quotes=np.arange(3, dtype=np.int64))
 
     assert generator._npz_has_rows(npz_file)
+
+
+def test_runnable_npz_row_check_rejects_truncated_positive_shape(tmp_path: Path) -> None:
+    """Positive row count is not runnable unless the member has the declared payload bytes."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_file = tmp_path / "truncated.npz"
+    _write_npz_member(
+        npz_file,
+        "data.npy",
+        _synthetic_npy_member(shape=(3,), payload=b"\0" * 8),
+    )
+
+    assert not generator._npz_has_rows(npz_file)
+
+
+def test_runnable_npz_row_check_rejects_negative_dim(tmp_path: Path) -> None:
+    """Malformed negative dimensions fail closed."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_file = tmp_path / "negative_dim.npz"
+    _write_npz_member(
+        npz_file,
+        "data.npy",
+        _synthetic_npy_member(shape=(-1,), payload=b"\0" * 32),
+    )
+
+    assert not generator._npz_has_rows(npz_file)
+
+
+def test_runnable_npz_row_check_rejects_unsupported_npy_version(tmp_path: Path) -> None:
+    """Only exact NPY versions 1.0, 2.0, and 3.0 are accepted."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_file = tmp_path / "version_3_1.npz"
+    _write_npz_member(
+        npz_file,
+        "data.npy",
+        _synthetic_npy_member(version=(3, 1), payload=b"\0" * 24),
+    )
+
+    assert not generator._npz_has_rows(npz_file)
+
+
+def test_runnable_npz_row_check_rejects_object_descr(tmp_path: Path) -> None:
+    """Object dtype members fail closed because stdlib cannot prove payload item size safely."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_file = tmp_path / "object_dtype.npz"
+    _write_npz_member(
+        npz_file,
+        "data.npy",
+        _synthetic_npy_member(descr="|O", payload=b"\0" * 24),
+    )
+
+    assert not generator._npz_has_rows(npz_file)
+
+
+def test_runnable_npz_row_check_rejects_malformed_header_contract(tmp_path: Path) -> None:
+    """NPY headers must have the expected keys and a boolean fortran_order."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    bad_order = tmp_path / "bad_order.npz"
+    _write_npz_member(
+        bad_order,
+        "data.npy",
+        _synthetic_npy_member(fortran_order="False", payload=b"\0" * 24),
+    )
+    extra_key = tmp_path / "extra_key.npz"
+    _write_npz_member(
+        extra_key,
+        "data.npy",
+        _synthetic_npy_member(extra_header={"unexpected": True}, payload=b"\0" * 24),
+    )
+
+    assert not generator._npz_has_rows(bad_order)
+    assert not generator._npz_has_rows(extra_key)
+
+
+def test_runnable_npz_row_check_rejects_invalid_dtype_grammar(tmp_path: Path) -> None:
+    """Ambiguous or malformed dtype descriptors fail closed."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    bad_descr = tmp_path / "bad_descr.npz"
+    _write_npz_member(
+        bad_descr,
+        "data.npy",
+        _synthetic_npy_member(descr="<i8[bogus]", payload=b"\0" * 24),
+    )
+
+    assert not generator._npz_has_rows(bad_descr)
 
 
 def test_require_runnable_npz_manifest_authority_blocks_glob_fallback(
