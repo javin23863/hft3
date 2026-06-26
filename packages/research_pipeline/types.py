@@ -164,6 +164,7 @@ class EvaluationResult:
     event_results: List[Dict[str, Any]] = field(default_factory=list)
     workbench_out: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    failure_class: Optional[str] = None  # data_quality | model
     gross_pnl: Optional[float] = None
     cost_total: float = 0.0
     cost_breakdown: Dict[str, float] = field(default_factory=dict)

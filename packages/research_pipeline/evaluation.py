@@ -444,6 +444,7 @@ def _error_result(
     event_id: str,
     gates: GateThresholds,
     error: str,
+    failure_class: Optional[str] = None,
 ) -> EvaluationResult:
     return EvaluationResult(
         candidate=candidate,
@@ -455,6 +456,7 @@ def _error_result(
         tail_loss=0.0,
         gates=gates,
         error=error,
+        failure_class=failure_class,
         gross_pnl=0.0,
     )
 
@@ -544,7 +546,10 @@ def evaluate_model(
     try:
         model_id = resolve_model_id(candidate.model_id)
     except KeyError as exc:
-        return _error_result(candidate=candidate, event_id=event_id, gates=gates, error=str(exc))
+        return _error_result(
+            candidate=candidate, event_id=event_id, gates=gates,
+            error=str(exc), failure_class="model",
+        )
 
     try:
         from workbench.src.run.engine import WorkbenchEngine
@@ -559,11 +564,17 @@ def evaluate_model(
             strategy_params=dict(candidate.strategy_params),
         )
     except Exception as exc:
+        from research_pipeline.data_quality import classify_evaluation_error
+
+        failure_class, message = classify_evaluation_error(exc)
         print(
-            f"evaluate_model failed for {candidate.candidate_id} ({candidate.model_id}): {exc}",
+            f"evaluate_model failed for {candidate.candidate_id} ({candidate.model_id}): {message}",
             file=sys.stderr,
         )
-        return _error_result(candidate=candidate, event_id=event_id, gates=gates, error=str(exc))
+        return _error_result(
+            candidate=candidate, event_id=event_id, gates=gates,
+            error=message, failure_class=failure_class,
+        )
 
     report = _as_mapping(out.get("report"))
     diag = _as_mapping(out.get("diagnostics"))
