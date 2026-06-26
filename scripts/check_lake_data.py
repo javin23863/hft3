@@ -43,29 +43,36 @@ def _iter_units_jsonl(
     offset: int = 0,
     max_units: int | None = None,
 ) -> Iterator[tuple[int, dict[str, Any]]]:
-    """Yield (line_index, row) without loading the full JSONL into memory."""
+    """Yield (unit_index, row) for dict JSONL rows; offset skips prior units."""
+    unit_index = 0
     yielded = 0
     with path.open("r", encoding="utf-8") as handle:
-        for line_index, line in enumerate(handle):
-            if line_index < offset:
-                continue
+        for line in handle:
             line = line.strip()
             if not line:
                 continue
             row = json.loads(line)
             if not isinstance(row, dict):
                 continue
-            yield line_index, row
+            if unit_index < offset:
+                unit_index += 1
+                continue
+            yield unit_index, row
+            unit_index += 1
             yielded += 1
             if max_units is not None and yielded >= max_units:
                 break
 
 
-def _count_jsonl_rows(path: Path) -> int:
+def _count_jsonl_unit_rows(path: Path) -> int:
     count = 0
     with path.open("r", encoding="utf-8") as handle:
         for line in handle:
-            if line.strip():
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            if isinstance(row, dict):
                 count += 1
     return count
 
@@ -97,7 +104,6 @@ def _check_manifest_row(row: dict[str, Any], repo_root: Path) -> tuple[str, str,
 def _empty_report(*, source: str, omit_valid_ids: bool = False) -> dict[str, Any]:
     report: dict[str, Any] = {
         "invalid_unit_ids": {},
-        "checked_paths": {},
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "source": source,
         "valid_count": 0,
@@ -114,26 +120,42 @@ def _empty_report(*, source: str, omit_valid_ids: bool = False) -> dict[str, Any
     if omit_valid_ids:
         report["valid_unit_ids_omitted"] = True
         report["checked_paths_omitted"] = True
-        report.pop("checked_paths", None)
     else:
         report["valid_unit_ids"] = []
+        report["checked_paths"] = {}
     return report
 
 
-def _merge_prior_report(base: dict[str, Any], prior: dict[str, Any]) -> None:
-    if prior.get("valid_unit_ids_omitted"):
+def _merge_prior_report(
+    base: dict[str, Any],
+    prior: dict[str, Any],
+    *,
+    source: str,
+    omit_valid_ids: bool,
+) -> None:
+    if str(prior.get("source")) != source:
+        raise ValueError(
+            f"resume source mismatch: {prior.get('source')!r} != {source!r}"
+        )
+    prior_omit = bool(prior.get("valid_unit_ids_omitted"))
+    if prior_omit != omit_valid_ids:
+        raise ValueError(
+            "resume omit_valid_ids mismatch: "
+            f"prior={prior_omit} current={omit_valid_ids}"
+        )
+
+    if prior_omit:
         base["valid_unit_ids_omitted"] = True
+        base["checked_paths_omitted"] = True
         base.pop("valid_unit_ids", None)
+        base.pop("checked_paths", None)
         base["valid_count"] = int(prior.get("valid_count") or 0)
     else:
         base["valid_unit_ids"] = list(prior.get("valid_unit_ids") or [])
-        base["valid_count"] = len(base["valid_unit_ids"])
-    base["invalid_unit_ids"] = dict(prior.get("invalid_unit_ids") or {})
-    if prior.get("checked_paths_omitted"):
-        base["checked_paths_omitted"] = True
-        base.pop("checked_paths", None)
-    else:
         base["checked_paths"] = dict(prior.get("checked_paths") or {})
+        base["valid_count"] = len(base["valid_unit_ids"])
+
+    base["invalid_unit_ids"] = dict(prior.get("invalid_unit_ids") or {})
     prior_progress = prior.get("scan_progress") or {}
     if isinstance(prior_progress, dict):
         base["scan_progress"]["offset"] = int(prior_progress.get("offset") or 0)
@@ -209,20 +231,25 @@ def scan_lake_data(
 
     report = _empty_report(source=source, omit_valid_ids=omit_valid_ids)
     if prior_report is not None:
-        _merge_prior_report(report, prior_report)
+        _merge_prior_report(
+            report,
+            prior_report,
+            source=source,
+            omit_valid_ids=omit_valid_ids,
+        )
         if offset == 0:
             offset = int(report["scan_progress"].get("next_offset") or 0)
+        if total_source_rows is None:
+            cached = report["scan_progress"].get("total_source_rows")
+            if cached is not None:
+                total_source_rows = int(cached)
 
     start_offset = offset
     scanned_this_run = 0
-    last_line_index = offset - 1
+    hit_eof = False
 
     if units_jsonl is not None:
-        if total_source_rows is None:
-            total_source_rows = _count_jsonl_rows(units_jsonl)
-        report["scan_progress"]["total_source_rows"] = total_source_rows
-
-        for line_index, row in _iter_units_jsonl(
+        for _unit_index, row in _iter_units_jsonl(
             units_jsonl,
             offset=offset,
             max_units=max_units,
@@ -230,7 +257,6 @@ def scan_lake_data(
             unit_id, reason, npz_path = _check_unit_row(row, repo_root, symbols)
             _apply_scan_result(report, unit_id=unit_id, reason=reason, npz_path=npz_path)
             scanned_this_run += 1
-            last_line_index = line_index
             if progress_every > 0 and scanned_this_run % progress_every == 0:
                 print(
                     f"progress offset={start_offset} scanned={scanned_this_run} "
@@ -238,19 +264,24 @@ def scan_lake_data(
                     f"invalid={report['invalid_count']}",
                     file=sys.stderr,
                 )
+        if max_units is None:
+            hit_eof = True
+        else:
+            hit_eof = scanned_this_run < max_units
     elif manifest_only:
         rows = list(load_manifest(repo_root))
         if total_source_rows is None:
             total_source_rows = len(rows)
-        report["scan_progress"]["total_source_rows"] = total_source_rows
         slice_rows = rows[offset:]
         if max_units is not None:
             slice_rows = slice_rows[:max_units]
+            hit_eof = len(slice_rows) < max_units
+        else:
+            hit_eof = True
         for row in slice_rows:
             unit_id, reason, npz_path = _check_manifest_row(row, repo_root)
             _apply_scan_result(report, unit_id=unit_id, reason=reason, npz_path=npz_path)
             scanned_this_run += 1
-            last_line_index += 1
             if progress_every > 0 and scanned_this_run % progress_every == 0:
                 print(
                     f"progress offset={start_offset} scanned={scanned_this_run} "
@@ -261,15 +292,22 @@ def scan_lake_data(
     else:
         raise ValueError("Provide --units-jsonl or --manifest-only")
 
-    next_offset = last_line_index + 1 if scanned_this_run > 0 else offset
-    total_rows = int(report["scan_progress"].get("total_source_rows") or 0)
-    complete = next_offset >= total_rows if total_rows else scanned_this_run == 0
+    next_offset = start_offset + scanned_this_run
+    if hit_eof:
+        total_source_rows = next_offset
+        complete = True
+    elif total_source_rows is None:
+        total_source_rows = _count_jsonl_unit_rows(units_jsonl) if units_jsonl is not None else next_offset
+        complete = next_offset >= total_source_rows
+    else:
+        complete = next_offset >= total_source_rows
 
     report["scan_progress"].update(
         {
             "offset": start_offset,
             "units_scanned_this_run": scanned_this_run,
             "next_offset": next_offset,
+            "total_source_rows": total_source_rows,
             "complete": complete,
         }
     )
@@ -277,7 +315,10 @@ def scan_lake_data(
 
 
 def load_report_json(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON in lake report {path}: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError(f"report must be a JSON object: {path}")
     return payload
@@ -304,7 +345,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Write compact summary JSON (counts + invalid_reasons only)",
     )
-    parser.add_argument("--offset", type=int, default=0, help="Skip first N JSONL rows before scanning")
+    parser.add_argument("--offset", type=int, default=0, help="Skip first N unit rows before scanning")
     parser.add_argument("--max-units", type=int, default=None, help="Maximum units to scan this invocation")
     parser.add_argument(
         "--progress-every",
@@ -340,19 +381,28 @@ def main(argv: list[str] | None = None) -> int:
     out_path = args.out if args.out.is_absolute() else repo_root / args.out
     prior_report: dict[str, Any] | None = None
     if args.resume and out_path.is_file():
-        prior_report = load_report_json(out_path)
+        try:
+            prior_report = load_report_json(out_path)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
 
-    report = scan_lake_data(
-        repo_root=repo_root,
-        units_jsonl=units_path,
-        manifest_only=bool(args.manifest_only),
-        symbols=symbols,
-        offset=max(0, int(args.offset)),
-        max_units=args.max_units,
-        progress_every=max(0, int(args.progress_every)),
-        prior_report=prior_report,
-        omit_valid_ids=bool(args.omit_valid_ids),
-    )
+    try:
+        report = scan_lake_data(
+            repo_root=repo_root,
+            units_jsonl=units_path,
+            manifest_only=bool(args.manifest_only),
+            symbols=symbols,
+            offset=max(0, int(args.offset)),
+            max_units=args.max_units,
+            progress_every=max(0, int(args.progress_every)),
+            prior_report=prior_report,
+            omit_valid_ids=bool(args.omit_valid_ids),
+        )
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
