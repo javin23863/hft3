@@ -7,6 +7,7 @@ NPZ ingestion are deferred; leakage guards run on declared timestamps only.
 from __future__ import annotations
 
 import json
+import math
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -113,7 +114,7 @@ def validate_feature_group_missingness(group: Mapping[str, Any]) -> list[str]:
     """Return missingness validation errors for one feature-group shell."""
     errors: list[str] = []
     row_count = group.get("row_count", 0)
-    if not isinstance(row_count, int) or row_count < 0:
+    if type(row_count) is not int or row_count < 0:
         errors.append("invalid_row_count")
         return errors
     missingness = group.get("missingness_ratio")
@@ -126,7 +127,7 @@ def validate_feature_group_missingness(group: Mapping[str, Any]) -> list[str]:
         errors.append("invalid_missingness_ratio")
         return errors
     ratio = float(missingness)
-    if ratio < 0.0 or ratio > 1.0:
+    if not math.isfinite(ratio) or ratio < 0.0 or ratio > 1.0:
         errors.append("missingness_out_of_range")
     return errors
 

@@ -148,6 +148,12 @@ def test_validate_feature_group_missingness_requires_ratio_when_rows() -> None:
     assert "missingness_out_of_range" in validate_feature_group_missingness(
         {"row_count": 10, "missingness_ratio": 1.5}
     )
+    assert "missingness_out_of_range" in validate_feature_group_missingness(
+        {"row_count": 10, "missingness_ratio": float("nan")}
+    )
+    assert validate_feature_group_missingness({"row_count": True, "missingness_ratio": None}) == [
+        "invalid_row_count"
+    ]
 
 
 def test_write_sets_pit_validated_true(tmp_path: Path) -> None:
@@ -315,5 +321,7 @@ def test_run_pipeline_build_feature_store_flag(tmp_path: Path) -> None:
     )
     assert fs_path.is_file()
     loaded = json.loads(fs_path.read_text(encoding="utf-8"))
+    assert loaded["lane"] == "continuous"
     assert loaded["summary"]["pit_validated"] is True
     assert loaded["summary"]["group_count"] == 8
+    assert len(loaded["feature_groups"]) == 8
