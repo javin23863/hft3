@@ -1,0 +1,86 @@
+# Phase 2 shell — CME root metadata for continuous lane (PDF §5).
+# Contract-level rows reference these roots via contract_root_symbol().
+
+schema_version: "1"
+
+roots:
+  ES:
+    asset_class: equity_index
+    tick_size: 0.25
+    session_template: equity_rth
+    micro_standard_pair: MES
+  MES:
+    asset_class: equity_index
+    tick_size: 0.25
+    session_template: equity_rth
+    micro_standard_pair: ES
+  NQ:
+    asset_class: equity_index
+    tick_size: 0.25
+    session_template: equity_rth
+    micro_standard_pair: MNQ
+  MNQ:
+    asset_class: equity_index
+    tick_size: 0.25
+    session_template: equity_rth
+    micro_standard_pair: NQ
+  GC:
+    asset_class: metals
+    tick_size: 0.10
+    session_template: metals_globex
+    micro_standard_pair: MGC
+  MGC:
+    asset_class: metals
+    tick_size: 0.10
+    session_template: metals_globex
+    micro_standard_pair: GC
+  SI:
+    asset_class: metals
+    tick_size: 0.005
+    session_template: metals_globex
+  HG:
+    asset_class: metals
+    tick_size: 0.0005
+    session_template: metals_globex
+  CL:
+    asset_class: energy
+    tick_size: 0.01
+    session_template: energy_globex
+    micro_standard_pair: MCL
+  MCL:
+    asset_class: energy
+    tick_size: 0.01
+    session_template: energy_globex
+    micro_standard_pair: CL
+  RB:
+    asset_class: energy
+    tick_size: 0.0001
+    session_template: energy_globex
+  HO:
+    asset_class: energy
+    tick_size: 0.0001
+    session_template: energy_globex
+  NG:
+    asset_class: energy
+    tick_size: 0.001
+    session_template: energy_globex
+  ZN:
+    asset_class: rates
+    tick_size: 0.015625
+    session_template: rates_globex
+  ZB:
+    asset_class: rates
+    tick_size: 0.03125
+    session_template: rates_globex
+  ZF:
+    asset_class: rates
+    tick_size: 0.0078125
+    session_template: rates_globex
+  ZT:
+    asset_class: rates
+    tick_size: 0.0078125
+    session_template: rates_globex
+  UB:
+    asset_class: rates
+    tick_size: 0.03125
+    session_template: rates_globex

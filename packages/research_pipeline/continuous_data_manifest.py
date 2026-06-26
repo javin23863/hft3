@@ -101,20 +101,35 @@ def _is_date_dir_name(name: str) -> bool:
     return True
 
 
+def _has_flat_typed_capture(contract_dir: Path) -> bool:
+    """True when typed ndjson exists at contract root without date partitions."""
+    for data_type in _DEFAULT_DATA_TYPES:
+        typed_path = contract_dir / f"{data_type}.ndjson"
+        if not typed_path.is_file() or _count_ndjson_rows(typed_path) <= 0:
+            continue
+        if not any(_is_date_dir_name(parent.name) for parent in typed_path.parents):
+            return True
+    return False
+
+
 def _contract_days_with_data(contract_dirs: list[Path]) -> int | None:
     days: set[str] = set()
     has_flat_data = False
     for contract_dir in contract_dirs:
         found_date_partition = False
         for path in contract_dir.rglob(_EVENTS_FILENAME):
+            row_count = _count_ndjson_rows(path) if path.is_file() else 0
             for parent in path.parents:
                 name = parent.name
                 if _is_date_dir_name(name):
-                    days.add(name)
+                    if row_count > 0:
+                        days.add(name)
                     found_date_partition = True
                     break
-            if not found_date_partition and path.is_file() and _count_ndjson_rows(path) > 0:
+            if not found_date_partition and path.is_file() and row_count > 0:
                 has_flat_data = True
+        if not has_flat_data and _has_flat_typed_capture(contract_dir):
+            has_flat_data = True
     if days:
         return len(days)
     if has_flat_data:

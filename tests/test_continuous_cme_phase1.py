@@ -265,3 +265,43 @@ def test_run_pipeline_event_lane_requires_thesis_and_event_id() -> None:
     )
     assert proc.returncode == 2
     assert "thesis" in proc.stderr.lower() or "event-id" in proc.stderr.lower()
+
+
+def test_empty_date_partition_events_do_not_inflate_days_with_data(
+    tmp_path: Path,
+) -> None:
+    from research_pipeline.continuous_data_manifest import build_coverage_manifest
+
+    week_root = tmp_path / "data" / "raw" / "rithmic_continuous" / "2026-W27" / "ESM6"
+    # ISO 2026-W27 trading days: Mon 2026-06-29 .. Fri 2026-07-03
+    for day in ("2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02"):
+        (week_root / day).mkdir(parents=True)
+        (week_root / day / "events.ndjson").write_text("\n", encoding="utf-8")
+    _write_events(week_root / "2026-07-03" / "events.ndjson", 50)
+
+    manifest = build_coverage_manifest(
+        repo_root=tmp_path,
+        rithmic_week="2026-W27",
+        universe_profile="full_cme_research",
+    )
+    row = manifest["contract_rows"][0]
+    assert row["row_count"] == 50
+    assert row["missing_ratio"] == pytest.approx(0.8)
+
+
+def test_typed_only_flat_capture_uses_none_missing_ratio(tmp_path: Path) -> None:
+    from research_pipeline.continuous_data_manifest import build_coverage_manifest
+
+    week_root = tmp_path / "data" / "raw" / "rithmic_continuous" / "2026-W27" / "ESM6"
+    _write_events(week_root / "mbo.ndjson", 25)
+    _write_events(week_root / "trades.ndjson", 25)
+
+    manifest = build_coverage_manifest(
+        repo_root=tmp_path,
+        rithmic_week="2026-W27",
+        universe_profile="full_cme_research",
+    )
+    row = manifest["contract_rows"][0]
+    assert row["row_count"] == 50
+    assert row["missing_ratio"] is None
+    assert row["eligible"] is False

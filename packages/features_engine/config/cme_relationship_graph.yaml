@@ -1,0 +1,43 @@
+# Phase 2 shell — CME relationship graph families (PDF §6).
+# Edge scoring is stubbed; pairs enumerate candidate instrument relationships.
+
+schema_version: "1"
+
+families:
+  micro_standard:
+    description: Cross-market micro vs standard flow transfer (MES/ES, MNQ/NQ, MGC/GC, MCL/CL)
+    relationship_type: micro_standard_flow_transfer
+    pairs:
+      - [MES, ES]
+      - [MNQ, NQ]
+      - [MGC, GC]
+      - [MCL, CL]
+
+  metals_complex:
+    description: Precious and base metals complex (GC/SI/HG, micro pairs)
+    relationship_type: cross_market_ofi_impact
+    pairs:
+      - [GC, SI]
+      - [GC, HG]
+      - [MGC, GC]
+      - [SI, HG]
+
+  energy_complex:
+    description: Crude and refined products / natgas complex
+    relationship_type: cross_market_ofi_impact
+    pairs:
+      - [CL, RB]
+      - [CL, HO]
+      - [CL, NG]
+      - [MCL, CL]
+      - [RB, HO]
+
+  rates_curve:
+    description: Treasury curve lead-lag (ZT/ZF/ZN/ZB/UB)
+    relationship_type: calendar_curve_micro_impulse
+    pairs:
+      - [ZT, ZF]
+      - [ZF, ZN]
+      - [ZN, ZB]
+      - [ZB, UB]
+      - [ZN, UB]
