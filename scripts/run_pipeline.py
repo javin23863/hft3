@@ -112,11 +112,66 @@ def _optional_resolved_path(path: Path | None) -> Path | None:
     return path.resolve() if path is not None else None
 
 
+def _run_continuous_lane(args: argparse.Namespace) -> int:
+    """Phase 1 scaffold: build weekly coverage manifest shell for continuous lane."""
+    from research_pipeline.continuous_data_manifest import (
+        build_coverage_manifest_stub,
+        write_coverage_manifest,
+    )
+    from research_pipeline.continuous_universe import validate_universe_profile
+
+    if not args.rithmic_week:
+        print("Error: --rithmic-week is required for --lane continuous.", file=sys.stderr)
+        return 2
+    try:
+        profile = validate_universe_profile(args.universe_profile)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    repo_root = args.repo_root.resolve()
+    manifest = build_coverage_manifest_stub(
+        repo_root=repo_root,
+        rithmic_week=args.rithmic_week,
+        universe_profile=profile,
+    )
+    out_path = write_coverage_manifest(repo_root, manifest)
+    payload = {
+        "status": "continuous_manifest_stub",
+        "lane": "continuous",
+        "rithmic_week": args.rithmic_week,
+        "universe_profile": profile,
+        "manifest_path": str(out_path),
+    }
+    _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Autoresearch pipeline")
-    parser.add_argument("--thesis", required=True, help="Natural-language trading thesis")
+    parser.add_argument(
+        "--lane",
+        choices=("event", "continuous"),
+        default="event",
+        help="Pipeline lane: event-driven (default) or continuous CME microstructure",
+    )
+    parser.add_argument("--thesis", default=None, help="Natural-language trading thesis (event lane)")
     parser.add_argument("--doc", type=Path, help="Optional research document (PDF/DOCX/URL)")
-    parser.add_argument("--event-id", required=True, help="Explicit catalog event id from events.csv")
+    parser.add_argument(
+        "--event-id",
+        default=None,
+        help="Explicit catalog event id from events.csv (event lane)",
+    )
+    parser.add_argument(
+        "--rithmic-week",
+        default=None,
+        help="ISO week label e.g. 2026-W27 (continuous lane)",
+    )
+    parser.add_argument(
+        "--universe-profile",
+        default="full_cme_research",
+        help="Continuous lane universe profile (default full_cme_research)",
+    )
     parser.add_argument(
         "--symbol",
         default="MES",
@@ -196,6 +251,16 @@ def main() -> int:
         help="JSON report from scripts/check_lake_data.py; invalid_unit_ids are skipped",
     )
     args = parser.parse_args()
+
+    if args.lane == "continuous":
+        return _run_continuous_lane(args)
+
+    if not args.thesis or not args.event_id:
+        print(
+            "Error: --thesis and --event-id are required for --lane event.",
+            file=sys.stderr,
+        )
+        return 2
 
     if args.autoresearch:
         from research_pipeline.generation_loop import (
