@@ -115,7 +115,7 @@ def _optional_resolved_path(path: Path | None) -> Path | None:
 def _run_continuous_lane(args: argparse.Namespace) -> int:
     """Phase 1 scaffold: build weekly coverage manifest shell for continuous lane."""
     from research_pipeline.continuous_data_manifest import (
-        build_coverage_manifest_stub,
+        build_coverage_manifest,
         write_coverage_manifest,
     )
     from research_pipeline.continuous_universe import validate_universe_profile
@@ -130,14 +130,14 @@ def _run_continuous_lane(args: argparse.Namespace) -> int:
         return 2
 
     repo_root = args.repo_root.resolve()
-    manifest = build_coverage_manifest_stub(
+    manifest = build_coverage_manifest(
         repo_root=repo_root,
         rithmic_week=args.rithmic_week,
         universe_profile=profile,
     )
     out_path = write_coverage_manifest(repo_root, manifest)
     payload = {
-        "status": "continuous_manifest_stub",
+        "status": "continuous_manifest",
         "lane": "continuous",
         "rithmic_week": args.rithmic_week,
         "universe_profile": profile,
