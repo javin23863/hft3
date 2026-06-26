@@ -139,6 +139,16 @@ def _first_number(metrics: Mapping[str, Any], *names: str) -> float | None:
     return None
 
 
+def _net_return_fraction(metrics: Mapping[str, Any]) -> float | None:
+    value = _first_number(metrics, "net_return")
+    if value is not None:
+        return value
+    pct = _first_number(metrics, "net_return_pct", "Total Return [%]", "Total Return")
+    if pct is not None:
+        return pct / 100.0
+    return None
+
+
 def _event_id_from(row: Mapping[str, Any], metadata: Mapping[str, Any]) -> str:
     value = metadata.get("event_id") or metadata.get("target_event_id")
     if value not in (None, ""):
@@ -200,7 +210,7 @@ def _extract_measured_row(row: Mapping[str, Any]) -> tuple[MeasuredRow | None, s
     params = _parameter_values(row, metrics)
     if not parameter_hash or params is None:
         return None, "parameter_values_missing"
-    net_return = _first_number(metrics, "net_return")
+    net_return = _net_return_fraction(metrics)
     net_pnl = _first_number(metrics, "net_pnl")
     expectancy = _first_number(metrics, "expectancy_per_trade", "expectancy", "oos_expectancy")
     sharpe = _first_number(metrics, "sharpe", "Sharpe Ratio")

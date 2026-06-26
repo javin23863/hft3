@@ -297,6 +297,37 @@ def test_accepts_surface_rows_from_official_vbt_stats(tmp_path: Path) -> None:
     assert receipt["packaged_count"] == 1
 
 
+def test_accepts_net_return_pct_as_measured_return(tmp_path: Path) -> None:
+    artifact = _complete_surface_artifact()
+    not_run_metric = {
+        "status": "not_run",
+        "reason": "candidate_rejected_before_replay:return_fraction_not_recorded",
+    }
+    for row in [*artifact["promoted"], *artifact["rejected"]]:
+        net_return = row["net_return"]
+        row["net_return"] = not_run_metric
+        metric_values = row.setdefault("metric_values", {})
+        assert isinstance(metric_values, dict)
+        metric_values.pop("net_return", None)
+        metric_values["net_return_pct"] = net_return * 100.0
+    artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
+    validate_screening_artifact(artifact)
+
+    result = _run_script(
+        tmp_path,
+        artifact,
+        "--fee-per-rt",
+        "0.001",
+        "--tick-value",
+        "0.01",
+    )
+
+    assert result.returncode == 0, result.stderr
+    receipt = json.loads(result.stdout)
+    assert receipt["status"] == "ok"
+    assert receipt["packaged_count"] == 1
+
+
 def test_extracts_zero_trade_official_vbt_stats_as_measured_cell() -> None:
     template = _screening_artifact("placeholder_promoted")["promoted"][0]
     row = _metric_row(
