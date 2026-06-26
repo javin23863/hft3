@@ -59,6 +59,16 @@ FORBIDDEN_BAR_CONSTRUCTION_IDS = {
     "ohlcv_1m_from_npz_or_supplied_array",
 }
 FAILED_STATUS_VALUES = {"failed", "blocked", "error", "aborted", "stalled"}
+END_TO_END_RUN_INTENTS = {"end_to_end", "full_pipeline"}
+STAGE_ONLY_RUN_INTENTS = {"", "stage_only", "partial", "targeted"}
+END_TO_END_REQUIRED_CONFIGURED_STAGES = (
+    STAGE_1_VECTORBT_SCREEN,
+    STAGE_2_PROMOTED_AGGREGATION,
+    STAGE_2_ROBUSTNESS_EVIDENCE,
+    STAGE_3_HFTBACKTEST_REALISM,
+    STAGE_4_WORKBENCH_ROBUSTNESS,
+    STAGE_5_LIFECYCLE_BEHAVIOR,
+)
 OFFICIAL_TRADE_COUNT_KEY = "Total Trades"
 
 
@@ -226,6 +236,47 @@ def default_target_stage(spec: Mapping[str, Any]) -> str:
         if ordered:
             return ordered[-1]
     return STAGE_5_LIFECYCLE_BEHAVIOR
+
+
+def normalize_run_intent(spec: Mapping[str, Any], *, enforce_end_to_end: bool = False) -> str:
+    if enforce_end_to_end:
+        return "end_to_end"
+    raw = str(spec.get("run_intent") or "").strip().lower().replace("-", "_")
+    return raw
+
+
+def validate_run_contract(
+    spec: Mapping[str, Any],
+    *,
+    target_stage: str,
+    stages_spec: Mapping[str, Any],
+    enforce_end_to_end: bool = False,
+) -> list[str]:
+    intent = normalize_run_intent(spec, enforce_end_to_end=enforce_end_to_end)
+    errors: list[str] = []
+    if intent not in END_TO_END_RUN_INTENTS and intent not in STAGE_ONLY_RUN_INTENTS:
+        errors.append(f"unknown_run_intent:{intent}")
+        return errors
+    if intent not in END_TO_END_RUN_INTENTS:
+        return errors
+
+    if target_stage != STAGE_5_LIFECYCLE_BEHAVIOR:
+        errors.append(
+            f"end_to_end_target_stage_required:{STAGE_5_LIFECYCLE_BEHAVIOR}:got={target_stage}"
+        )
+
+    for stage_id in END_TO_END_REQUIRED_CONFIGURED_STAGES:
+        stage_spec = stages_spec.get(stage_id)
+        if not isinstance(stage_spec, Mapping):
+            errors.append(f"end_to_end_stage_not_configured:{stage_id}")
+            continue
+        has_command = stage_spec.get("command") is not None or stage_spec.get("commands") is not None
+        outputs = stage_spec.get("outputs")
+        if not has_command:
+            errors.append(f"end_to_end_stage_missing_command:{stage_id}")
+        if not isinstance(outputs, Mapping) or not outputs:
+            errors.append(f"end_to_end_stage_missing_outputs:{stage_id}")
+    return errors
 
 
 def stage_name(stage_id: str) -> str:
@@ -771,6 +822,7 @@ def run_pipeline(
     resume: bool = False,
     dry_run: bool = False,
     force_rerun_failed: bool = False,
+    enforce_end_to_end: bool = False,
 ) -> Mapping[str, Any]:
     spec_path = spec_path.resolve()
     spec = read_json(spec_path)
@@ -781,6 +833,22 @@ def run_pipeline(
     stages_spec = spec.get("stages") or {}
     if not isinstance(stages_spec, Mapping):
         raise ValueError("pipeline spec 'stages' must be an object")
+    contract_errors = validate_run_contract(
+        spec,
+        target_stage=target_stage,
+        stages_spec=stages_spec,
+        enforce_end_to_end=enforce_end_to_end,
+    )
+    if contract_errors:
+        return write_bundle(
+            bundle_dir,
+            run_id=run_id,
+            target_stage=target_stage,
+            spec_path=spec_path,
+            stage_receipts=[],
+            status="blocked",
+            failures=[f"run_contract:{error}" for error in contract_errors],
+        )
 
     stage_receipts: list[Mapping[str, Any]] = []
     try:
@@ -862,6 +930,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="With --resume, rerun a failed/blocked/error stage after its root cause was fixed",
     )
+    parser.add_argument(
+        "--end-to-end",
+        action="store_true",
+        help="Require a full stage 1-5 execution contract before any stage runs",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Write the first planned receipt only")
     parser.add_argument("--status", action="store_true", help="Print current bundle status and exit")
     args = parser.parse_args(argv)
@@ -876,6 +949,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             resume=args.resume,
             dry_run=args.dry_run,
             force_rerun_failed=args.force_rerun_failed,
+            enforce_end_to_end=args.end_to_end,
         )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

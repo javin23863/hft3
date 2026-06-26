@@ -220,6 +220,60 @@ def test_robustness_bridge_blocks_zero_replay_eligible_rows(tmp_path: Path) -> N
     ]
 
 
+def test_end_to_end_intent_refuses_partial_target_stage_before_compute(tmp_path: Path) -> None:
+    marker = tmp_path / "ran.txt"
+    command = [
+        sys.executable,
+        "-c",
+        f"from pathlib import Path; Path(r'{marker}').write_text('ran', encoding='utf-8')",
+    ]
+    spec = _base_spec(tmp_path, target_stage="stage_2_robustness_evidence")
+    spec["run_intent"] = "end_to_end"
+    spec["stages"] = {
+        "stage_1_vectorbt_screen": {
+            "command": command,
+            "outputs": {"screening_artifact": str(tmp_path / "screening_artifact.json")},
+        }
+    }
+    spec_path = _write_json(tmp_path / "spec.json", spec)
+
+    bundle = run_pipeline(spec_path)
+
+    assert bundle["status"] == "blocked"
+    assert not marker.exists()
+    failures = "\n".join(bundle["failures"])
+    assert "run_contract:end_to_end_target_stage_required:stage_5_lifecycle_behavior_tracking" in failures
+    assert "run_contract:end_to_end_stage_not_configured:stage_3_hftbacktest_realism" in failures
+    assert "run_contract:end_to_end_stage_not_configured:stage_4_workbench_robustness" in failures
+    assert "run_contract:end_to_end_stage_not_configured:stage_5_lifecycle_behavior_tracking" in failures
+
+
+def test_end_to_end_cli_contract_refuses_partial_spec_before_compute(tmp_path: Path) -> None:
+    marker = tmp_path / "ran.txt"
+    command = [
+        sys.executable,
+        "-c",
+        f"from pathlib import Path; Path(r'{marker}').write_text('ran', encoding='utf-8')",
+    ]
+    spec = _base_spec(tmp_path, target_stage="stage_2_promoted_aggregation")
+    spec["stages"] = {
+        "stage_1_vectorbt_screen": {
+            "command": command,
+            "outputs": {"screening_artifact": str(tmp_path / "screening_artifact.json")},
+        }
+    }
+    spec_path = _write_json(tmp_path / "spec.json", spec)
+
+    bundle = run_pipeline(spec_path, enforce_end_to_end=True)
+
+    assert bundle["status"] == "blocked"
+    assert not marker.exists()
+    assert any(
+        failure.startswith("run_contract:end_to_end_target_stage_required:")
+        for failure in bundle["failures"]
+    )
+
+
 def test_resume_uses_existing_passed_receipt_without_rerunning_command(tmp_path: Path) -> None:
     marker = tmp_path / "ran.txt"
     artifact = tmp_path / "screening_artifact.json"

@@ -27,7 +27,7 @@ ResearchRunSpec
 The current entrypoint is:
 
 ```bash
-python scripts/run_research_pipeline.py --spec runtime/reports/<run_spec>.json --resume
+python scripts/run_research_pipeline.py --spec runtime/reports/<run_spec>.json --resume --end-to-end
 ```
 
 ## Bundle Layout
@@ -55,6 +55,7 @@ handoff index.
 {
   "version": 1,
   "run_id": "paid_recovery_YYYYMMDDTHHMMSSZ",
+  "run_intent": "end_to_end",
   "repo_root": "C:/Users/MSI/repos/hft3",
   "bundle_root": "research_cards/pipeline_runs",
   "target_stage": "stage_5_lifecycle_behavior_tracking",
@@ -133,6 +134,9 @@ does not guess hidden output paths.
 
 The runner blocks the run when:
 
+- `run_intent="end_to_end"` or CLI `--end-to-end` is set, but the spec does not
+  target `stage_5_lifecycle_behavior_tracking` with configured commands and
+  outputs for stages 1 through 5;
 - a preflight path or required environment variable is missing;
 - VectorBT outputs contain zero promoted ids;
 - VectorBT outputs contain zero positive trade rows;
