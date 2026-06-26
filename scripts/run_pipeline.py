@@ -273,6 +273,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    if args.lane == "event" and args.build_relationship_graph:
+        print(
+            "Error: --build-relationship-graph requires --lane continuous.",
+            file=sys.stderr,
+        )
+        return 2
+
     if args.lane == "continuous":
         return _run_continuous_lane(args)
 

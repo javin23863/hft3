@@ -80,6 +80,7 @@ def test_build_feature_store_stub_and_write(tmp_path: Path) -> None:
     )
     assert matrix["lane"] == "continuous"
     assert matrix["summary"]["group_count"] == 8
+    assert matrix["summary"]["pit_validated"] is False
     assert matrix["summary"]["data_loaded"] is False
 
     out = write_continuous_feature_store(tmp_path, matrix)
@@ -109,6 +110,53 @@ def test_write_rejects_leaky_row(tmp_path: Path) -> None:
     ]
     with pytest.raises(ValueError, match="feature_matrix_pit_invalid"):
         write_continuous_feature_store(tmp_path, matrix)
+
+
+def test_assert_no_timestamp_leakage_normalizes_mixed_tz() -> None:
+    from research_pipeline.continuous_feature_store import assert_no_timestamp_leakage
+
+    assert_no_timestamp_leakage(
+        decision_timestamp="2026-07-03T15:00:00+00:00",
+        source_timestamps=["2026-07-03T14:59:00"],
+    )
+
+
+def test_write_rejects_forbidden_group_feature_name(tmp_path: Path) -> None:
+    from research_pipeline.continuous_feature_store import (
+        build_continuous_feature_store_stub,
+        write_continuous_feature_store,
+    )
+
+    matrix = build_continuous_feature_store_stub(
+        repo_root=tmp_path,
+        rithmic_week="2026-W27",
+        universe_profile="full_cme_research",
+    )
+    matrix["feature_groups"][0]["feature_names"] = ["spread_z_future_bar"]
+    with pytest.raises(ValueError, match="feature_matrix_pit_invalid"):
+        write_continuous_feature_store(tmp_path, matrix)
+
+
+def test_run_pipeline_rejects_build_graph_on_event_lane() -> None:
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(REPO / "scripts" / "run_pipeline.py"),
+            "--lane",
+            "event",
+            "--build-relationship-graph",
+            "--thesis",
+            "test",
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+        ],
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 2
+    assert "build-relationship-graph" in proc.stderr
 
 
 def test_run_pipeline_build_relationship_graph_flag(tmp_path: Path) -> None:

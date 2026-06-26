@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -71,6 +71,13 @@ def empty_feature_group_shell(group_id: str) -> dict[str, Any]:
     }
 
 
+def _to_utc(dt: datetime) -> datetime:
+    """Normalize naive or aware timestamps to UTC for ordered compare."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def assert_no_timestamp_leakage(
     *,
     decision_timestamp: str,
@@ -80,13 +87,14 @@ def assert_no_timestamp_leakage(
     decision = _parse_ts(decision_timestamp)
     if decision is None:
         raise ValueError(f"invalid decision_timestamp: {decision_timestamp!r}")
+    decision_utc = _to_utc(decision)
     for index, raw in enumerate(source_timestamps):
         if raw is None:
             continue
         source = _parse_ts(raw)
         if source is None:
             raise ValueError(f"invalid source_timestamp at index {index}: {raw!r}")
-        if source > decision:
+        if _to_utc(source) > decision_utc:
             raise ValueError(
                 f"timestamp_leakage: source[{index}]={raw!r} > decision={decision_timestamp!r}"
             )
@@ -136,11 +144,29 @@ def validate_feature_row_pit(row: Mapping[str, Any]) -> list[str]:
 
 
 def validate_feature_matrix_pit(matrix: Mapping[str, Any]) -> list[str]:
-    """Validate all rows in a feature matrix shell."""
+    """Validate feature groups and row shells for PIT constraints."""
+    errors: list[str] = []
+    groups = matrix.get("feature_groups") or []
+    if not isinstance(groups, list):
+        errors.append("invalid_feature_groups")
+    else:
+        for index, group in enumerate(groups):
+            if not isinstance(group, dict):
+                errors.append(f"invalid_group:{index}")
+                continue
+            feature_names = group.get("feature_names") or []
+            if not isinstance(feature_names, list):
+                errors.append(f"group[{index}]:invalid_feature_names")
+                continue
+            try:
+                assert_no_forbidden_feature_names(feature_names)
+            except ValueError as exc:
+                errors.append(f"group[{index}]:{exc}")
+
     rows = matrix.get("rows") or []
     if not isinstance(rows, list):
-        return ["invalid_rows"]
-    errors: list[str] = []
+        errors.append("invalid_rows")
+        return errors
     for index, row in enumerate(rows):
         if not isinstance(row, dict):
             errors.append(f"invalid_row:{index}")
@@ -180,7 +206,7 @@ def build_continuous_feature_store_stub(
         "summary": {
             "group_count": len(groups),
             "row_count": 0,
-            "pit_validated": True,
+            "pit_validated": False,
             "data_loaded": False,
         },
     }
