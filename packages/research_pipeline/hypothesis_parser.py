@@ -75,9 +75,9 @@ def _event_lane_slug_set() -> set[str]:
 
 
 def _relationship_family_from_entry(entry: dict) -> Optional[str]:
-    """First graph relationship type from registry; None when unset or empty."""
+    """Single graph relationship type when registry lists exactly one; else Phase 5 disambiguation."""
     types = entry.get("valid_relationship_types") or []
-    if not types:
+    if len(types) != 1:
         return None
     return str(types[0])
 
@@ -175,7 +175,11 @@ def _legacy_slug_from_thesis(thesis: str) -> Optional[str]:
 
 def _match_model(thesis: str) -> str:
     slug_paren = _slug_from_parentheses(thesis)
-    if slug_paren is not None and slug_paren not in _continuous_slug_set():
+    if slug_paren is not None:
+        if slug_paren in _continuous_slug_set():
+            raise ValueError(
+                f"{slug_paren} is continuous-eligible; use parse_continuous_lane_profile"
+            )
         return slug_paren
     legacy_slug = _legacy_slug_from_thesis(thesis)
     if legacy_slug is not None:
