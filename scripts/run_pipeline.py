@@ -113,12 +113,16 @@ def _optional_resolved_path(path: Path | None) -> Path | None:
 
 
 def _run_continuous_lane(args: argparse.Namespace) -> int:
-    """Phase 1 scaffold: build weekly coverage manifest shell for continuous lane."""
+    """Continuous lane: coverage manifest and optional relationship graph."""
     from research_pipeline.continuous_data_manifest import (
         build_coverage_manifest,
         write_coverage_manifest,
     )
     from research_pipeline.continuous_universe import validate_universe_profile
+    from research_pipeline.relationship_graph import (
+        build_relationship_graph_stub,
+        write_relationship_graph,
+    )
 
     if not args.rithmic_week:
         print("Error: --rithmic-week is required for --lane continuous.", file=sys.stderr)
@@ -135,14 +139,26 @@ def _run_continuous_lane(args: argparse.Namespace) -> int:
         rithmic_week=args.rithmic_week,
         universe_profile=profile,
     )
-    out_path = write_coverage_manifest(repo_root, manifest)
-    payload = {
+    manifest_path = write_coverage_manifest(repo_root, manifest)
+    payload: dict = {
         "status": "continuous_manifest",
         "lane": "continuous",
         "rithmic_week": args.rithmic_week,
         "universe_profile": profile,
-        "manifest_path": str(out_path),
+        "manifest_path": str(manifest_path),
     }
+
+    if args.build_relationship_graph:
+        graph = build_relationship_graph_stub(
+            repo_root=repo_root,
+            rithmic_week=args.rithmic_week,
+            universe_profile=profile,
+        )
+        graph_path = write_relationship_graph(repo_root, graph)
+        payload["status"] = "continuous_manifest_and_graph"
+        payload["relationship_graph_path"] = str(graph_path)
+        payload["graph_summary"] = graph.get("summary")
+
     _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
     return 0
 
@@ -171,6 +187,11 @@ def main() -> int:
         "--universe-profile",
         default="full_cme_research",
         help="Continuous lane universe profile (default full_cme_research)",
+    )
+    parser.add_argument(
+        "--build-relationship-graph",
+        action="store_true",
+        help="Continuous lane: also write relationship graph stub for --rithmic-week",
     )
     parser.add_argument(
         "--symbol",
