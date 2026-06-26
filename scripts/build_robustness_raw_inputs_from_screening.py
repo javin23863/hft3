@@ -77,6 +77,35 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _value_counts(values: Mapping[str, str]) -> dict[str, int]:
+    return dict(Counter(str(value) for value in values.values()))
+
+
+def _sample_mapping(values: Mapping[str, str], *, limit: int = 20) -> dict[str, str]:
+    return {key: values[key] for key in sorted(values)[:limit]}
+
+
+def _failure_diagnostics(
+    *,
+    packaged_count: int,
+    min_packaged: int,
+    row_skip_reasons: Counter[str],
+    family_skips: Mapping[str, str],
+    candidate_skips: Mapping[str, str],
+) -> dict[str, Any]:
+    return {
+        "status": "blocked",
+        "reason": "raw_input_count_below_min",
+        "packaged_count": packaged_count,
+        "min_packaged": min_packaged,
+        "row_skip_counts": dict(row_skip_reasons),
+        "family_skip_counts": _value_counts(family_skips),
+        "candidate_skip_counts": _value_counts(candidate_skips),
+        "family_skip_sample": _sample_mapping(family_skips),
+        "candidate_skip_sample": _sample_mapping(candidate_skips),
+    }
+
+
 def _load_json_object(path: Path, label: str) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -474,6 +503,7 @@ def build_robustness_raw_inputs_from_screening(
     min_packaged: int,
     fee_per_rt: float | None,
     tick_value: float | None,
+    diagnostics_out: Path | None = None,
 ) -> dict[str, Any]:
     if min_packaged < 0:
         raise ValueError("min_packaged_must_be_non_negative")
@@ -590,10 +620,23 @@ def build_robustness_raw_inputs_from_screening(
         }
 
     if len(candidates) < min_packaged:
+        diagnostics = _failure_diagnostics(
+            packaged_count=len(candidates),
+            min_packaged=min_packaged,
+            row_skip_reasons=row_skip_reasons,
+            family_skips=family_skips,
+            candidate_skips=candidate_skips,
+        )
+        if diagnostics_out is not None:
+            _write_json(diagnostics_out, diagnostics)
+            diagnostics["diagnostics_out"] = str(diagnostics_out)
         raise ValueError(
             "raw_input_count_below_min:"
             f"packaged_count={len(candidates)}:min_packaged={min_packaged}:"
-            f"candidate_skips={candidate_skips}:family_skips={family_skips}:row_skips={dict(row_skip_reasons)}"
+            f"candidate_skip_counts={diagnostics['candidate_skip_counts']}:"
+            f"family_skip_counts={diagnostics['family_skip_counts']}:"
+            f"row_skip_counts={diagnostics['row_skip_counts']}:"
+            f"diagnostics_out={diagnostics.get('diagnostics_out')}"
         )
 
     payload = {
@@ -639,6 +682,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-packaged", type=int, default=1)
     parser.add_argument("--fee-per-rt", type=float, default=None)
     parser.add_argument("--tick-value", type=float, default=None)
+    parser.add_argument("--diagnostics-out", type=Path, default=None)
     return parser
 
 
@@ -656,6 +700,7 @@ def main(argv: list[str] | None = None) -> int:
             min_packaged=args.min_packaged,
             fee_per_rt=args.fee_per_rt,
             tick_value=args.tick_value,
+            diagnostics_out=args.diagnostics_out,
         )
     except (ScreeningArtifactError, ValueError) as exc:
         return _error(str(exc))

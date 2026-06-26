@@ -774,6 +774,9 @@ def run_stage(
                 receipt["validation_errors"] = [f"command_failed:index={idx}:returncode={returncode}"]
                 if stderr:
                     receipt["stderr_tail"] = stderr[-2000:]
+                for path in flatten_output_files(outputs):
+                    if path.exists() and path.is_file():
+                        receipt["output_hashes"][str(path)] = sha256_file(path)
                 receipt["completed_at"] = utc_now()
                 write_json(receipt_path, receipt)
                 raise PipelineBlocked(stage_id, receipt["validation_errors"])

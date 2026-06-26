@@ -95,7 +95,9 @@ handoff index.
           "--screening-artifact",
           "research_cards/pipeline_runs/<vbt_run>/screening_artifact.json",
           "--out",
-          "research_cards/pipeline_runs/<run_id>/03_stage_2_robustness_evidence/raw_inputs.json"
+          "research_cards/pipeline_runs/<run_id>/03_stage_2_robustness_evidence/raw_inputs.json",
+          "--diagnostics-out",
+          "research_cards/pipeline_runs/<run_id>/03_stage_2_robustness_evidence/raw_inputs_diagnostics.json"
         ],
         [
           "python",
@@ -120,6 +122,7 @@ handoff index.
       ],
       "outputs": {
         "robustness_evidence_receipt": "research_cards/pipeline_runs/<run_id>/03_stage_2_robustness_evidence/evidence_inputs.json",
+        "robustness_raw_input_diagnostics": "research_cards/pipeline_runs/<run_id>/03_stage_2_robustness_evidence/raw_inputs_diagnostics.json",
         "applied_screening_artifact": "research_cards/pipeline_runs/<run_id>/03_stage_2_robustness_evidence/applied_screening_artifact.json"
       }
     }

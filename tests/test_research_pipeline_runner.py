@@ -274,6 +274,42 @@ def test_end_to_end_cli_contract_refuses_partial_spec_before_compute(tmp_path: P
     )
 
 
+def test_failed_command_hashes_declared_diagnostic_output(tmp_path: Path) -> None:
+    diagnostic = tmp_path / "diagnostic.json"
+    command = [
+        sys.executable,
+        "-c",
+        (
+            "from pathlib import Path; "
+            f"Path(r'{diagnostic}').write_text('{{\"status\":\"blocked\"}}', encoding='utf-8'); "
+            "raise SystemExit(2)"
+        ),
+    ]
+    spec = _base_spec(tmp_path)
+    spec["stages"] = {
+        "stage_1_vectorbt_screen": {
+            "command": command,
+            "outputs": {"diagnostic": str(diagnostic)},
+        }
+    }
+    spec_path = _write_json(tmp_path / "spec.json", spec)
+
+    bundle = run_pipeline(spec_path)
+
+    assert bundle["status"] == "blocked"
+    receipt_path = (
+        tmp_path
+        / "research_cards"
+        / "pipeline_runs"
+        / "unit_pipeline"
+        / "receipts"
+        / "stage_1_vectorbt_screen.json"
+    )
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["status"] == "failed"
+    assert str(diagnostic.resolve()) in receipt["output_hashes"]
+
+
 def test_resume_uses_existing_passed_receipt_without_rerunning_command(tmp_path: Path) -> None:
     marker = tmp_path / "ran.txt"
     artifact = tmp_path / "screening_artifact.json"

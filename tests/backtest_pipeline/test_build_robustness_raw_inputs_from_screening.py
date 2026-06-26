@@ -399,6 +399,30 @@ def test_incomplete_surface_fails_closed_without_output(tmp_path: Path) -> None:
     assert not (tmp_path / "raw_robustness_inputs.json").exists()
 
 
+def test_failure_writes_compact_diagnostics_when_requested(tmp_path: Path) -> None:
+    artifact = _complete_surface_artifact(omit_last_cell=True)
+    diagnostics = tmp_path / "raw_robustness_diagnostics.json"
+    result = _run_script(
+        tmp_path,
+        artifact,
+        "--fee-per-rt",
+        "0.001",
+        "--tick-value",
+        "0.01",
+        "--diagnostics-out",
+        str(diagnostics),
+    )
+
+    assert result.returncode != 0
+    assert not (tmp_path / "raw_robustness_inputs.json").exists()
+    payload = json.loads(diagnostics.read_text(encoding="utf-8"))
+    assert payload["status"] == "blocked"
+    assert payload["reason"] == "raw_input_count_below_min"
+    assert payload["packaged_count"] == 0
+    assert payload["family_skip_counts"]
+    assert "family_skips={" not in result.stderr
+
+
 def test_min_completeness_packages_complete_parameter_subset(tmp_path: Path) -> None:
     artifact = _complete_surface_artifact(omit_last_cell=True)
     result = _run_script(
