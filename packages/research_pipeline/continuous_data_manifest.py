@@ -14,6 +14,16 @@ def coverage_manifest_path(repo_root: Path, rithmic_week: str) -> Path:
     return repo_root / "runtime" / "continuous_cme" / f"coverage_manifest_{safe_week}.json"
 
 
+def empty_contract_row(*, contract: str = "") -> dict[str, Any]:
+    """Per-contract row shell (Phase 1 acceptance shape)."""
+    return {
+        "contract": contract,
+        "missing_ratio": None,
+        "liquidity_score": None,
+        "eligible": None,
+    }
+
+
 def build_coverage_manifest_stub(
     *,
     repo_root: Path,
@@ -29,6 +39,7 @@ def build_coverage_manifest_stub(
         "universe_profile": universe_profile,
         "roots": [],
         "contracts": [],
+        "data_types": [],
         "contract_rows": [],
         "summary": {
             "total_contracts": 0,

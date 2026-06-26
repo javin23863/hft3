@@ -275,3 +275,15 @@ def test_config_hash_includes_skip_bad_units(tmp_path: Path) -> None:
     h_b = _campaign_config_hash(repo_root=tmp_path, event_id="E1", cfg=cfg_b)
     assert h_a != h_b
 
+
+def test_config_hash_includes_skip_bad_units_file_content(tmp_path: Path) -> None:
+    skip_a = tmp_path / "skip_a.json"
+    skip_b = tmp_path / "skip_b.json"
+    skip_a.write_text('{"skipped_unit_ids": ["unit_x"]}', encoding="utf-8")
+    skip_b.write_text('{"skipped_unit_ids": ["unit_y"]}', encoding="utf-8")
+    cfg_a = AutoresearchConfig(max_generations=1, skip_bad_units_file=skip_a)
+    cfg_b = AutoresearchConfig(max_generations=1, skip_bad_units_file=skip_b)
+    h_a = _campaign_config_hash(repo_root=tmp_path, event_id="E1", cfg=cfg_a)
+    h_b = _campaign_config_hash(repo_root=tmp_path, event_id="E1", cfg=cfg_b)
+    assert h_a != h_b
+

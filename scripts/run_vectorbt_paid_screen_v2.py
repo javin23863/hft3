@@ -1352,7 +1352,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         _write_run_manifest(
             manifest_path,
             status="running" if finished is None else determine_manifest_status(
-                completed,
+                completed + len(data_quality_skipped_unit_ids),
                 failed,
                 aborted,
                 len(units_raw),
@@ -1544,7 +1544,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     _write_run_manifest(
         manifest_path,
-        status=determine_manifest_status(completed, failed, aborted, len(units_raw)),
+        status=determine_manifest_status(
+            completed + len(data_quality_skipped_unit_ids),
+            failed,
+            aborted,
+            len(units_raw),
+        ),
         started=started,
         finished=finished,
         out_dir=out_dir,

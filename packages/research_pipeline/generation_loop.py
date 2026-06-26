@@ -195,9 +195,7 @@ def _cfg_semantic_dict(cfg: AutoresearchConfig) -> dict[str, Any]:
         "hft_source_npz": cfg.hft_source_npz,
         "hft_latency_model": cfg.hft_latency_model,
         "hft_fill_queue_model": cfg.hft_fill_queue_model,
-        "skip_bad_units_file": (
-            str(cfg.skip_bad_units_file) if cfg.skip_bad_units_file else None
-        ),
+        "skip_bad_units_file": cfg.skip_bad_units_file,
         "skipped_unit_ids": list(cfg.skipped_unit_ids),
     }
 

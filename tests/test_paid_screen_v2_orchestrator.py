@@ -459,6 +459,41 @@ class TestV2DataQualitySkipAccounting:
         )
         assert status == "complete"
 
+    def test_flush_manifest_status_includes_dq_skips_in_completed(self):
+        """Running/final manifest status must count pre-dispatch DQ skips as completed."""
+        from backtest_pipeline.src.paid_screen_profiling import determine_manifest_status
+
+        partial_completed = 3
+        resume_cached = 2
+        dq_skipped = 4
+        units_raw = 9
+        failed = 0
+        completed = partial_completed + resume_cached
+        skipped = dq_skipped
+        assert completed == 5
+        assert skipped == 4
+        status = determine_manifest_status(
+            completed + dq_skipped, failed, False, units_raw
+        )
+        assert status == "complete"
+
+    def test_final_manifest_status_includes_dq_skips_when_mixed(self):
+        from backtest_pipeline.src.paid_screen_profiling import determine_manifest_status
+
+        v2 = _load_v2_module()
+        fresh = UnitScreeningResult(unit_id="u1", status="OK")
+        completed, failed, skipped = v2._count_work_units([fresh])
+        resume_cached = 1
+        dq_skipped = 2
+        completed += resume_cached
+        skipped += dq_skipped
+        units_raw = 4
+        status = determine_manifest_status(
+            completed + dq_skipped, failed, False, units_raw
+        )
+        assert status == "complete"
+        assert failed == 0
+
 
 class TestDrainWorkersWallClockBudget:
     def test_drain_respects_run_wall_clock_deadline(self):

@@ -57,6 +57,15 @@ def _file_content_hash(path: Path | None) -> str | None:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:16]
 
 
+def _resolve_repo_path(repo_root: Path, path: Path | str | None) -> Path | None:
+    if path is None:
+        return None
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = Path(repo_root) / candidate
+    return candidate if candidate.is_file() else None
+
+
 def _yaml_config_snapshot(repo_root: Path, *relative_paths: str) -> dict[str, Any] | None:
     for rel in relative_paths:
         candidate = Path(repo_root) / rel
@@ -106,8 +115,10 @@ def collect_semantic_config_inputs(
         "hft_source_npz_hash": _file_content_hash(campaign_cfg.get("hft_source_npz")),
         "hft_latency_model_hash": _file_content_hash(campaign_cfg.get("hft_latency_model")),
         "hft_fill_queue_model_hash": _file_content_hash(campaign_cfg.get("hft_fill_queue_model")),
-        "skip_bad_units_file": campaign_cfg.get("skip_bad_units_file"),
-        "skipped_unit_ids": list(campaign_cfg.get("skipped_unit_ids") or []),
+        "skip_bad_units_file_hash": _file_content_hash(
+            _resolve_repo_path(repo_root, campaign_cfg.get("skip_bad_units_file"))
+        ),
+        "skipped_unit_ids": sorted(campaign_cfg.get("skipped_unit_ids") or []),
     }
     return payload
 

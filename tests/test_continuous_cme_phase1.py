@@ -17,7 +17,10 @@ if str(REPO / "packages") not in sys.path:
 
 
 def test_build_coverage_manifest_stub_keys() -> None:
-    from research_pipeline.continuous_data_manifest import build_coverage_manifest_stub
+    from research_pipeline.continuous_data_manifest import (
+        build_coverage_manifest_stub,
+        empty_contract_row,
+    )
 
     manifest = build_coverage_manifest_stub(
         repo_root=REPO,
@@ -28,8 +31,18 @@ def test_build_coverage_manifest_stub_keys() -> None:
     assert manifest["rithmic_week"] == "2026-W27"
     assert manifest["universe_profile"] == "full_cme_research"
     assert "roots" in manifest
+    assert "data_types" in manifest
+    assert manifest["data_types"] == []
     assert "contract_rows" in manifest
     assert "summary" in manifest
+    row = empty_contract_row(contract="ES")
+    assert row["contract"] == "ES"
+    assert "missing_ratio" in row
+    assert "liquidity_score" in row
+    assert "eligible" in row
+    assert row["missing_ratio"] is None
+    assert row["liquidity_score"] is None
+    assert row["eligible"] is None
 
 
 def test_write_coverage_manifest(tmp_path: Path) -> None:
