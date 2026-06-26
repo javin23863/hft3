@@ -267,3 +267,11 @@ def test_zero_final_pass_can_still_complete(tmp_path: Path, monkeypatch) -> None
     summary = json.loads((gen_dir / "generation_summary.json").read_text(encoding="utf-8"))
     assert summary.get("final_pass_count") == 0
     assert (gen_dir / ".generation_complete").is_file()
+
+def test_config_hash_includes_skip_bad_units(tmp_path: Path) -> None:
+    cfg_a = AutoresearchConfig(max_generations=1, skipped_unit_ids=("unit_a",))
+    cfg_b = AutoresearchConfig(max_generations=1, skipped_unit_ids=("unit_b",))
+    h_a = _campaign_config_hash(repo_root=tmp_path, event_id="E1", cfg=cfg_a)
+    h_b = _campaign_config_hash(repo_root=tmp_path, event_id="E1", cfg=cfg_b)
+    assert h_a != h_b
+

@@ -448,6 +448,17 @@ class TestV2DataQualitySkipAccounting:
         assert failed == 0
         assert dq["failure_class"] == "data_quality"
 
+    def test_all_dq_skip_manifest_is_complete_not_partial_failed(self):
+        from backtest_pipeline.src.paid_screen_profiling import determine_manifest_status
+
+        completed = 0
+        dq_skipped = 5
+        units_raw = 5
+        status = determine_manifest_status(
+            completed + dq_skipped, 0, False, units_raw
+        )
+        assert status == "complete"
+
 
 class TestDrainWorkersWallClockBudget:
     def test_drain_respects_run_wall_clock_deadline(self):

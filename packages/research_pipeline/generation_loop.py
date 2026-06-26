@@ -178,6 +178,7 @@ def _filter_candidates_for_skip(
 
 
 def _cfg_semantic_dict(cfg: AutoresearchConfig) -> dict[str, Any]:
+    # skip_bad_units_file / skipped_unit_ids affect which units run — must bust resume hash.
     return {
         "max_candidates_per_generation": cfg.max_candidates_per_generation,
         "robustness_max_candidates": cfg.robustness_max_candidates,
@@ -194,6 +195,10 @@ def _cfg_semantic_dict(cfg: AutoresearchConfig) -> dict[str, Any]:
         "hft_source_npz": cfg.hft_source_npz,
         "hft_latency_model": cfg.hft_latency_model,
         "hft_fill_queue_model": cfg.hft_fill_queue_model,
+        "skip_bad_units_file": (
+            str(cfg.skip_bad_units_file) if cfg.skip_bad_units_file else None
+        ),
+        "skipped_unit_ids": list(cfg.skipped_unit_ids),
     }
 
 

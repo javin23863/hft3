@@ -164,6 +164,29 @@ class TestScreenPaidBatch:
         assert len(errors) == 1
         assert errors[0].failure_class == "model"
 
+
+
+    def test_screening_model_exception_sets_failure_class(self, monkeypatch):
+        """Union screening ERROR rows from model exceptions tag failure_class=model."""
+        from backtest_pipeline.src.paid_screen_batch import screen_paid_batch
+        from backtest_pipeline.src.paid_screen_profiling import RunProfiler
+
+        ctx = make_context()
+        units = [make_unit(unit_id="u1")]
+        profiler = RunProfiler()
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("simulation failed")
+
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            _boom,
+        )
+        results = screen_paid_batch(units, ctx, profiler=profiler, data_cache={})
+        errors = [r for r in results if r.status == "ERROR"]
+        assert len(errors) == 1
+        assert errors[0].failure_class == "model"
+
     def test_build_candidate_model_attaches_feature_recipe_hash(self):
         unit = make_unit()
         model_entry = {"model_id": "HYP_5", "hyp_id": 5}

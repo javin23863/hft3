@@ -1274,7 +1274,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         dq_skipped = len(data_quality_skipped_unit_ids)
         _write_run_manifest(
             manifest_path,
-            status=determine_manifest_status(completed, 0, False, len(units_raw)),
+            status=determine_manifest_status(
+                completed + dq_skipped, 0, False, len(units_raw)
+            ),
             started=started,
             finished=finished,
             out_dir=out_dir,

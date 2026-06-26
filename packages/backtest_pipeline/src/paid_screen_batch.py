@@ -874,6 +874,7 @@ def screen_paid_batch(
                     unit_id=unit.unit_id,
                     status="ERROR",
                     error=str(e),
+                    failure_class="model",
                     elapsed_seconds=elapsed,
                 ))
 
