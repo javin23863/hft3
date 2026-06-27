@@ -1178,6 +1178,92 @@ def test_stage_a_require_runnable_npz_cli_reports_manifest_error(tmp_path: Path)
     assert not out.exists()
 
 
+def test_stage_a_require_runnable_npz_caps_after_filter(tmp_path: Path) -> None:
+    """Stage-A max-units caps surviving runnable units, not pre-filter rows."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    events_csv = tmp_path / "events.csv"
+    events_csv.write_text(
+        "event_id,event_type,release_date,release_time,timezone,window_name,"
+        "start_offset_seconds,end_offset_seconds,symbols,priority,source,source_url,"
+        "effective_date,notes,row_status\n"
+        "CPI_2020_01_15_TIGHT,CPI,2020-01-15,08:30:00,America/New_York,TIGHT,"
+        "-60,10,MES.v.0,50,CPI,https://example.com/,2020-01-01,missing npz,SOURCED\n"
+        "CPI_2020_02_15_TIGHT,CPI,2020-02-15,08:30:00,America/New_York,TIGHT,"
+        "-60,10,MES.v.0,50,CPI,https://example.com/,2020-02-01,runnable npz,SOURCED\n"
+        "CPI_2020_03_15_TIGHT,CPI,2020-03-15,08:30:00,America/New_York,TIGHT,"
+        "-60,10,MES.v.0,50,CPI,https://example.com/,2020-03-01,second runnable npz,SOURCED\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    npz_file = npz_root / "MES_CPI_2020_02_15_TIGHT_mbo.npz"
+    second_npz_file = npz_root / "MES_CPI_2020_03_15_TIGHT_mbo.npz"
+    np.savez(npz_file, data=np.arange(3, dtype=np.int64))
+    np.savez(second_npz_file, data=np.arange(3, dtype=np.int64))
+    (npz_root / "manifest.json").write_text(
+        json.dumps(
+            [
+                {
+                    "symbol": "MES",
+                    "event_id": "CPI_2020_02_15_TIGHT",
+                    "npz_path": npz_file.name,
+                    "event_count": 3,
+                },
+                {
+                    "symbol": "MES",
+                    "event_id": "CPI_2020_03_15_TIGHT",
+                    "npz_path": second_npz_file.name,
+                    "event_count": 3,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["HFT3_NPZ_ROOT"] = str(npz_root)
+    env.pop("HFT3_MANIFEST_PATH", None)
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--events-csv",
+            str(events_csv),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--require-runnable-npz",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    rows = [json.loads(ln) for ln in out.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert len(rows) == 1
+    assert [row["event_id"] for row in rows] == ["CPI_2020_02_15_TIGHT"]
+
+
 def test_stage_a_survivors_cli_reports_malformed_json(tmp_path: Path) -> None:
     """Malformed Stage-A survivor JSON should print ERROR instead of a traceback."""
     survivors = tmp_path / "stage_a_survivors.json"
@@ -2044,6 +2130,92 @@ def test_single_model_id_hyp_5_resolves_canonical_slug(tmp_path: Path) -> None:
     assert row["model_id"] == "SPREAD_BLOWOUT_RECOMPRESSION"
     assert row.get("hyp_id") == 5
     assert "SPREAD_BLOWOUT_RECOMPRESSION" in row["thesis"]
+
+
+@pytest.mark.parametrize(
+    "cap_args",
+    [
+        ["--smoke-count", "1"],
+        ["--max-units", "1"],
+        ["--smoke-count", "2", "--max-units", "1"],
+        ["--smoke-count", "1", "--max-units", "2"],
+    ],
+    ids=["smoke-count", "max-units", "combined-max", "combined-smoke"],
+)
+def test_single_model_require_runnable_npz_caps_after_filter(
+    tmp_path: Path,
+    cap_args: list[str],
+) -> None:
+    events_csv = tmp_path / "events.csv"
+    events_csv.write_text(
+        "event_id,event_type,release_date,release_time,timezone,window_name,"
+        "start_offset_seconds,end_offset_seconds,symbols,priority,source,source_url,"
+        "effective_date,notes,row_status\n"
+        "CPI_2020_01_15_TIGHT,CPI,2020-01-15,08:30:00,America/New_York,TIGHT,"
+        "-60,10,MES.v.0,50,CPI,https://example.com/,2020-01-01,missing npz,SOURCED\n"
+        "CPI_2020_02_15_TIGHT,CPI,2020-02-15,08:30:00,America/New_York,TIGHT,"
+        "-60,10,MES.v.0,50,CPI,https://example.com/,2020-02-01,runnable npz,SOURCED\n"
+        "CPI_2020_03_15_TIGHT,CPI,2020-03-15,08:30:00,America/New_York,TIGHT,"
+        "-60,10,MES.v.0,50,CPI,https://example.com/,2020-03-01,second runnable npz,SOURCED\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    npz_file = npz_root / "MES_CPI_2020_02_15_TIGHT_mbo.npz"
+    second_npz_file = npz_root / "MES_CPI_2020_03_15_TIGHT_mbo.npz"
+    np.savez(npz_file, data=np.arange(3, dtype=np.int64))
+    np.savez(second_npz_file, data=np.arange(3, dtype=np.int64))
+    (npz_root / "manifest.json").write_text(
+        json.dumps(
+            [
+                {
+                    "symbol": "MES",
+                    "event_id": "CPI_2020_02_15_TIGHT",
+                    "npz_path": npz_file.name,
+                    "event_count": 3,
+                },
+                {
+                    "symbol": "MES",
+                    "event_id": "CPI_2020_03_15_TIGHT",
+                    "npz_path": second_npz_file.name,
+                    "event_count": 3,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["HFT3_NPZ_ROOT"] = str(npz_root)
+    env.pop("HFT3_MANIFEST_PATH", None)
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--events-csv",
+            str(events_csv),
+            "--model-id",
+            "HYP_5",
+            "--symbols",
+            "MES.v.0",
+            "--event-types",
+            "CPI",
+            "--require-runnable-npz",
+            *cap_args,
+            "--out",
+            str(out),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    rows = [json.loads(ln) for ln in out.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert len(rows) == 1
+    assert [row["event_id"] for row in rows] == ["CPI_2020_02_15_TIGHT"]
 
 
 def test_multi_symbol_expansion_emits_all_matching_symbols(tmp_path: Path) -> None:

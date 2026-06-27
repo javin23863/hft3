@@ -1102,8 +1102,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         start_date=args.start_date,
         end_date=args.end_date,
     )
+    single_model_post_filter_row_cap: Optional[int] = None
+    post_filter_max_units: Optional[int] = None
 
     if args.from_stage_a_survivors:
+        if args.require_runnable_npz:
+            post_filter_max_units = args.max_units
         try:
             units = _units_from_stage_a_survivors(
                 args.from_stage_a_survivors,
@@ -1111,7 +1115,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 symbols=symbols,
                 event_types=event_types,
                 thesis_template=args.thesis_template,
-                max_units=args.max_units,
+                max_units=None if args.require_runnable_npz else args.max_units,
                 window_name=args.window_name,
                 start_date=split_start,
                 end_date=split_end,
@@ -1154,6 +1158,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 1
     else:
         max_rows = args.smoke_count or args.max_units
+        if args.require_runnable_npz:
+            single_model_post_filter_row_cap = args.smoke_count
+            post_filter_max_units = args.max_units
+            max_rows = None
         events = _load_events(
             args.events_csv,
             event_types=event_types,
@@ -1184,7 +1192,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 pass
             enriched.append(row)
         units = enriched
-        if args.max_units is not None:
+        if args.max_units is not None and not args.require_runnable_npz:
             units = units[: args.max_units]
 
     if args.require_runnable_npz:
@@ -1197,6 +1205,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         dropped = before - len(units)
         if dropped:
             print(f"Filtered {dropped} units without runnable NPZ ({len(units)} remain)")
+        if single_model_post_filter_row_cap is not None:
+            units = units[: single_model_post_filter_row_cap]
+        if post_filter_max_units is not None:
+            units = units[: post_filter_max_units]
 
     if not units:
         print("ERROR: zero units generated", file=sys.stderr)
