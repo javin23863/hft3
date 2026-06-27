@@ -1159,7 +1159,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     else:
         max_rows = args.smoke_count or args.max_units
         if args.require_runnable_npz:
-            single_model_post_filter_row_cap = max_rows
+            single_model_post_filter_row_cap = args.smoke_count
             post_filter_max_units = args.max_units
             max_rows = None
         events = _load_events(

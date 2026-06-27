@@ -1179,6 +1179,7 @@ def test_stage_a_require_runnable_npz_cli_reports_manifest_error(tmp_path: Path)
 
 
 def test_stage_a_require_runnable_npz_caps_after_filter(tmp_path: Path) -> None:
+    """Stage-A max-units caps surviving runnable units, not pre-filter rows."""
     survivors = tmp_path / "stage_a_survivors.json"
     survivors.write_text(
         json.dumps(
@@ -2131,10 +2132,19 @@ def test_single_model_id_hyp_5_resolves_canonical_slug(tmp_path: Path) -> None:
     assert "SPREAD_BLOWOUT_RECOMPRESSION" in row["thesis"]
 
 
-@pytest.mark.parametrize("cap_flag", ["--smoke-count", "--max-units"])
+@pytest.mark.parametrize(
+    "cap_args",
+    [
+        ["--smoke-count", "1"],
+        ["--max-units", "1"],
+        ["--smoke-count", "2", "--max-units", "1"],
+        ["--smoke-count", "1", "--max-units", "2"],
+    ],
+    ids=["smoke-count", "max-units", "combined-max", "combined-smoke"],
+)
 def test_single_model_require_runnable_npz_caps_after_filter(
     tmp_path: Path,
-    cap_flag: str,
+    cap_args: list[str],
 ) -> None:
     events_csv = tmp_path / "events.csv"
     events_csv.write_text(
@@ -2192,8 +2202,7 @@ def test_single_model_require_runnable_npz_caps_after_filter(
             "--event-types",
             "CPI",
             "--require-runnable-npz",
-            cap_flag,
-            "1",
+            *cap_args,
             "--out",
             str(out),
         ],
