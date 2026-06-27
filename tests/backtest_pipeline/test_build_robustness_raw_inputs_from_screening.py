@@ -161,7 +161,45 @@ def _complete_surface_artifact(*, omit_last_cell: bool = False) -> dict[str, Any
     return base
 
 
+def _rewrite_metric(row: dict[str, Any], *, net_return: float, expectancy: float) -> None:
+    row["gross_return"] = net_return
+    row["net_return"] = net_return
+    row["net_pnl"] = net_return * 10000.0
+    row["expectancy_per_trade"] = expectancy
+    row["sharpe"] = 1.0 if net_return > 0 else -1.0
+    row["profit_factor"] = 1.25 if net_return > 0 else 0.75
+    row["max_drawdown"] = -0.01
+    row["trade_count"] = 80
+    metric_values = row.get("metric_values")
+    if isinstance(metric_values, dict):
+        metric_values["net_return"] = row["net_return"]
+        metric_values["net_pnl"] = row["net_pnl"]
+        metric_values["expectancy"] = row["expectancy_per_trade"]
+        metric_values["profit_factor"] = row["profit_factor"]
+        metric_values["sharpe"] = row["sharpe"]
+        metric_values["max_drawdown"] = row["max_drawdown"]
+        metric_values["trade_count"] = row["trade_count"]
+
+
+def _first_event_fail_artifact() -> dict[str, Any]:
+    artifact = _complete_surface_artifact()
+    first_event_id = _event_ids()[0]
+    for row in [*artifact["promoted"], *artifact["rejected"]]:
+        metadata = row.get("base_candidate_metadata")
+        if not isinstance(metadata, dict) or metadata.get("event_id") != first_event_id:
+            continue
+        threshold = float(row["parameter_values"]["signal_threshold"])
+        if threshold == 0.10:
+            _rewrite_metric(row, net_return=1.0, expectancy=0.5)
+        else:
+            _rewrite_metric(row, net_return=-0.1, expectancy=-0.05)
+    artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
+    validate_screening_artifact(artifact)
+    return artifact
+
+
 def _run_script(tmp_path: Path, artifact: dict[str, Any], *extra: str) -> subprocess.CompletedProcess[str]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     screening_path = tmp_path / "screening_artifact.json"
     out_path = tmp_path / "raw_robustness_inputs.json"
     _write_json(screening_path, artifact)
@@ -219,6 +257,219 @@ def test_builds_raw_inputs_from_complete_screening_surface(tmp_path: Path) -> No
     assert entry["surface_stability_metrics"]["status"] == "pass"
     assert entry["source_evidence"]["screening_artifact"]["path"] == "screening_artifact.json"
     assert all(not item.startswith("rej_") for item in payload["candidates"])
+
+
+def test_current_first_event_surface_policy_reproduces_default_payload(tmp_path: Path) -> None:
+    artifact = _complete_surface_artifact()
+    args = ("--fee-per-rt", "0.001", "--tick-value", "0.01")
+    default_result = _run_script(tmp_path / "default", artifact, *args)
+    explicit_result = _run_script(
+        tmp_path / "explicit",
+        artifact,
+        *args,
+        "--surface-policy",
+        "current_first_event",
+    )
+
+    assert default_result.returncode == 0, default_result.stderr
+    assert explicit_result.returncode == 0, explicit_result.stderr
+    default_payload = json.loads(
+        (tmp_path / "default" / "raw_robustness_inputs.json").read_text(encoding="utf-8")
+    )
+    explicit_payload = json.loads(
+        (tmp_path / "explicit" / "raw_robustness_inputs.json").read_text(encoding="utf-8")
+    )
+    assert explicit_payload == default_payload
+
+
+def test_first_event_fail_can_pass_pooled_train_event_policy_in_report_only(tmp_path: Path) -> None:
+    artifact = _first_event_fail_artifact()
+    report_path = tmp_path / "pooled" / "sensitivity.json"
+    baseline = _run_script(
+        tmp_path / "baseline",
+        artifact,
+        "--fee-per-rt",
+        "0.001",
+        "--tick-value",
+        "0.01",
+    )
+    pooled = _run_script(
+        tmp_path / "pooled",
+        artifact,
+        "--fee-per-rt",
+        "0.001",
+        "--tick-value",
+        "0.01",
+        "--surface-policy",
+        "pooled_train_events",
+        "--sensitivity-report-out",
+        str(report_path),
+    )
+
+    assert baseline.returncode != 0
+    assert "surface_stability_metrics_not_replay_ready" in baseline.stderr
+    assert not (tmp_path / "baseline" / "raw_robustness_inputs.json").exists()
+    assert pooled.returncode == 0, pooled.stderr
+    receipt = json.loads(pooled.stdout)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert receipt["status"] == "diagnostic_only"
+    assert receipt["packaged_count"] == 0
+    assert not (tmp_path / "pooled" / "raw_robustness_inputs.json").exists()
+    assert report["summary"]["candidates_passing_pooled_train_events"] == 1
+    assert report["attrition"]["selected_policy_packaged_candidates"] == 0
+
+
+def test_median_event_policy_report_fields(tmp_path: Path) -> None:
+    artifact = _first_event_fail_artifact()
+    report_path = tmp_path / "robustness_bridge_sensitivity_report.json"
+    result = _run_script(
+        tmp_path,
+        artifact,
+        "--fee-per-rt",
+        "0.001",
+        "--tick-value",
+        "0.01",
+        "--surface-policy",
+        "median_event_surface",
+        "--sensitivity-report-out",
+        str(report_path),
+    )
+
+    assert result.returncode == 0, result.stderr
+    receipt = json.loads(result.stdout)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    family = report["families"][0]
+    promoted_id = artifact["promoted"][0]["candidate_id"]
+    assert receipt["status"] == "diagnostic_only"
+    assert not (tmp_path / "raw_robustness_inputs.json").exists()
+    assert report["schema"] == "hft3_robustness_bridge_sensitivity_report_v1"
+    assert report["selected_surface_policy"] == "median_event_surface"
+    assert family["model_family"]["model_id"] == "QUEUE_DEPLETION_TRIGGER"
+    assert family["vectorbt_promoted_count"] == 1
+    assert family["event_count"] == 4
+    assert family["usable_event_count"] == 4
+    assert family["rejected_event_count"] == 0
+    assert family["rejected_events"] == []
+    assert family["surface_training_event_count"] == 3
+    assert family["surface_training_event_ids"] == _event_ids()[:3]
+    assert family["parameter_cell_count"] == 16
+    assert family["event_0_id"] == _event_ids()[0]
+    assert family["current_first_event_pass"] is False
+    assert family["median_event_surface_pass"] is True
+    assert family["candidates_passing_median_event_surface"] == 1
+    assert "median_plateau_score" in family["median_event_surface_metrics"]
+    assert "downside_plateau_score" in family["median_event_surface_metrics"]
+    assert family["candidates_rejected_by_current_but_passed_by_corrected_policy"] == [
+        promoted_id
+    ]
+    assert report["summary"]["candidates_rejected_by_current_but_passed_by_corrected_policy"] == [
+        promoted_id
+    ]
+    assert report["summary"]["hftbacktest_eligible_candidates"] == 0
+    assert report["summary"]["packaged_count"] == 0
+    assert report["summary"]["min_packaged"] == 1
+    assert report["summary"]["packaging_eligible_family_count"] == 1
+    assert report["assembler_diagnostics"]["row_skip_counts"] == {}
+    assert report["assembler_diagnostics"]["candidate_skip_counts"] == {
+        "diagnostic_only_surface_policy:median_event_surface": 1
+    }
+    assert report["attrition"]["families_with_enough_events_cells_trades_data"] == 1
+    assert report["attrition"]["selected_policy_packaged_candidates"] == 0
+
+
+def test_corrected_policy_does_not_write_replay_eligibility_or_receipt(tmp_path: Path) -> None:
+    artifact = _first_event_fail_artifact()
+    original_promoted = copy.deepcopy(artifact["promoted"][0])
+    report_path = tmp_path / "sensitivity.json"
+    result = _run_script(
+        tmp_path,
+        artifact,
+        "--fee-per-rt",
+        "0.001",
+        "--tick-value",
+        "0.01",
+        "--surface-policy",
+        "pooled_train_events",
+        "--sensitivity-report-out",
+        str(report_path),
+    )
+
+    assert result.returncode == 0, result.stderr
+    receipt = json.loads(result.stdout)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert receipt["status"] == "diagnostic_only"
+    assert receipt["packaged_count"] == 0
+    assert not (tmp_path / "raw_robustness_inputs.json").exists()
+    persisted_artifact = json.loads((tmp_path / "screening_artifact.json").read_text(encoding="utf-8"))
+    assert persisted_artifact["promoted"][0] == original_promoted
+    assert persisted_artifact["promoted"][0].get("replay_eligibility_status") != "eligible"
+    assert persisted_artifact["promoted"][0].get("robustness_evidence_receipt") == (
+        original_promoted.get("robustness_evidence_receipt")
+    )
+    assert report["attrition"]["hftbacktest_eligible_candidates"] == 0
+
+
+def test_sensitivity_report_is_written_when_selected_policy_fails(tmp_path: Path) -> None:
+    artifact = _first_event_fail_artifact()
+    report_path = tmp_path / "sensitivity.json"
+    result = _run_script(
+        tmp_path,
+        artifact,
+        "--fee-per-rt",
+        "0.001",
+        "--tick-value",
+        "0.01",
+        "--sensitivity-report-out",
+        str(report_path),
+    )
+
+    assert result.returncode != 0
+    assert "surface_stability_metrics_not_replay_ready" in result.stderr
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    promoted_id = artifact["promoted"][0]["candidate_id"]
+    assert report["summary"]["packaged_count"] == 0
+    assert report["summary"]["candidates_passing_current_first_event"] == 0
+    assert report["summary"]["candidates_passing_pooled_train_events"] == 1
+    assert report["assembler_diagnostics"]["candidate_skip_counts"] == {
+        "family_surface_not_accepted": 1
+    }
+    assert report["summary"]["candidates_rejected_by_current_but_passed_by_corrected_policy"] == [
+        promoted_id
+    ]
+    assert report["attrition"]["selected_policy_packaged_candidates"] == 0
+
+
+def test_sensitivity_report_records_missing_surface_event_rejections(tmp_path: Path) -> None:
+    artifact = _complete_surface_artifact(omit_last_cell=True)
+    report_path = tmp_path / "sensitivity.json"
+    result = _run_script(
+        tmp_path,
+        artifact,
+        "--fee-per-rt",
+        "0.001",
+        "--tick-value",
+        "0.01",
+        "--min-completeness",
+        "0.9",
+        "--min-parameter-combinations",
+        "3",
+        "--sensitivity-report-out",
+        str(report_path),
+    )
+
+    assert result.returncode == 0, result.stderr
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    family = report["families"][0]
+    assert family["rejected_event_count"] == 1
+    assert family["rejected_events"] == [
+        {
+            "event_id": _event_ids()[-1],
+            "event_date": "2020-04-10",
+            "reasons": ["missing_surface"],
+            "missing_parameter_cell_count": 1,
+            "insufficient_trade_cell_count": 0,
+        }
+    ]
 
 
 def test_accepts_surface_rows_without_replay_net_pnl(tmp_path: Path) -> None:
