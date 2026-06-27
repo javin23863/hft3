@@ -271,6 +271,100 @@ def test_aggregate_promoted_ids(tmp_path: Path) -> None:
     assert set(payload["promoted_ids"]) == {"cand_a", "cand_b"}
 
 
+def test_fast_progress_audit_flags_zero_promo_bar_stub_sample(tmp_path: Path) -> None:
+    from scripts.audit_vbt_run_progress import _scan_run_dir_fast
+
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_full_bad"
+    units_dir = run_dir / "units"
+    for idx in range(10):
+        art_dir = units_dir / f"u{idx}"
+        art_dir.mkdir(parents=True)
+        (art_dir / "screening_artifact.json").write_text(
+            json.dumps(
+                {
+                    "promoted_ids": [],
+                    "rejected": [
+                        {
+                            "metric_values": {
+                                "vbt_stats": {
+                                    "Total Trades": 0,
+                                    "Expectancy": None,
+                                    "Max Drawdown [%]": None,
+                                }
+                            }
+                        }
+                    ],
+                    "feature_plane_status": "bar_stub_research_only",
+                    "bar_construction_id": "ohlcv_1m_from_npz_or_supplied_array",
+                }
+            ),
+            encoding="utf-8",
+        )
+    (run_dir / "paid_screen_run_manifest.json").write_text(
+        json.dumps(
+            {
+                "status": "running",
+                "expected_work_units": 100,
+                "completed_work_units": 10,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "workers": 4,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    audit = _scan_run_dir_fast(run_dir)
+
+    assert audit["sample_artifact_count"] == 10
+    assert audit["artifact_audit_mode"] == "sampled"
+    assert audit["artifact_audit_skipped"] is False
+    assert audit["sample_promoted_ids"] == 0
+    assert audit["sample_positive_trade_rows"] == 0
+    assert "zero_promoted_ids_in_artifact_sample:n=10" in audit["validation_errors"]
+    assert "zero_positive_trade_rows_in_artifact_sample:n=10" in audit["validation_errors"]
+    assert "bar_stub_research_only_in_artifact_sample:n=10" in audit["validation_errors"]
+    assert "npz_bar_fallback_in_artifact_sample:n=10" in audit["validation_errors"]
+
+
+def test_progress_audit_handles_single_artifact_canary(tmp_path: Path) -> None:
+    from scripts.audit_vbt_run_progress import _scan_run_dir
+
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_canary"
+    art_dir = run_dir / "units" / "u1"
+    art_dir.mkdir(parents=True)
+    (art_dir / "screening_artifact.json").write_text(
+        json.dumps(
+            {
+                "promoted_ids": [],
+                "feature_set_id": "fs_v1",
+                "feature_plane_status": "scheduled_event_only",
+                "bar_construction_id": "fs_v1_row_loop_from_feature_store",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "paid_screen_run_manifest.json").write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "expected_work_units": 1,
+                "completed_work_units": 1,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "workers": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    audit = _scan_run_dir(run_dir)
+
+    assert audit["artifact_files_on_disk"] == 1
+    assert audit["completed_work_units"] == 1
+    assert "zero_promoted_ids_in_artifacts:n=1" not in audit["validation_errors"]
+
+
 def test_all_active_models_generates_multiple_hypotheses(tmp_path: Path) -> None:
     """Full-scope generator expands active registry (not single model or Stage A)."""
     from features_engine.src.hypotheses.registry import get_active_hypotheses
@@ -383,6 +477,39 @@ def test_vast_full_script_defaults_to_stage_a_survivor_scope() -> None:
     assert "VBT_STAGE_A_SURVIVORS" in script
     assert "VBT_UNIT_SOURCE=all_active" in script
     assert "--all-active-models" in script
+
+
+def test_vast_full_script_pins_vectorbt_compatible_pandas() -> None:
+    install_script = (REPO / "scripts" / "install_vbt_hbt_handoff_verify_deps.sh").read_text(encoding="utf-8")
+    launch_script = (REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh").read_text(encoding="utf-8")
+
+    assert '"pandas>=2.0.0,<3.0.0"' in install_script
+    assert "pip3 install 'vectorbt[rust]==1.0.0' 'pandas>=2.0.0,<3.0.0' -q" in launch_script
+    assert "VectorBT dependency check:" in launch_script
+    assert "expected pandas<3.0" in launch_script
+
+
+def test_vast_launchers_do_not_auto_prefer_forensic_ready_gate() -> None:
+    launch_script = (REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh").read_text(encoding="utf-8")
+    ssh_script = (REPO / "scripts" / "vast_ssh_run_vbt_paid_screen.sh").read_text(encoding="utf-8")
+
+    assert "paid_screen_ready_gate_after_forensic_probe" not in launch_script
+    assert "paid_screen_ready_gate_after_forensic_probe" not in ssh_script
+    assert 'GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"' in launch_script
+    assert 'VBT_READY_GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"' in ssh_script
+    assert "Validating ready gate provenance" in launch_script
+    assert '"events_csv_hash", events_hash' in launch_script
+    assert '"lake_manifest_hash", lake_hash' in launch_script
+    assert "ready gate {name} missing" in launch_script
+    assert "Ready gate OK:" in launch_script
+    assert "VBT_READY_GATE_FILE=$VBT_READY_GATE_FILE bash scripts/run_vbt_paid_screen_vast_full.sh" in ssh_script
+
+
+def test_phase_b_smoke_does_not_depend_on_full_run_ready_gate() -> None:
+    smoke_script = (REPO / "scripts" / "run_vbt_paid_screen_smoke.sh").read_text(encoding="utf-8")
+
+    assert "--owner-waiver \"phase_b_smoke_before_ready_gate\"" in smoke_script
+    assert "--ready-gate-file runtime/reports/paid_screen_ready_gate.json" not in smoke_script
 
 
 def test_stage_a_survivors_expansion_not_capped_at_fifty(tmp_path: Path) -> None:
@@ -2033,6 +2160,9 @@ def test_vast_full_script_requires_declaration_before_workers() -> None:
     assert "got '$BATCH_TIMEOUT_SECONDS'" in script
     assert '"stall_minutes": int(stall_minutes)' in script
     assert '"batch_timeout_seconds": int(batch_timeout_seconds)' in script
+    assert 'DECL_ABORT_ON_FAILED_UNITS="${VBT_DECL_ABORT_ON_FAILED_UNITS:-true}"' in script
+    assert 'payload.get("abort_on_failed_units") is not True' in script
+    assert "abort_on_failed_units must be true;" in script
     assert 'expect_int("stall_minutes", int(stall_minutes))' in script
     assert 'expect_int("batch_timeout_seconds", int(batch_timeout_seconds))' in script
     assert 'expect_int("stall_minutes", 30)' not in script

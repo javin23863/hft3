@@ -27,6 +27,7 @@ import json
 import multiprocessing as mp
 import os
 import queue
+import shutil
 import signal
 import sys
 import time
@@ -309,6 +310,10 @@ def _persist_unit_artifact(
     src = Path(source_artifact_path)
     if src.is_file():
         dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        try:
+            shutil.rmtree(src.parent)
+        except OSError:
+            pass
         return dest
     return None
 
@@ -1665,7 +1670,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         _profiler_summary: Dict[str, Any],
     ) -> None:
         for result in batch_results:
-            _persist_unit_artifact(out_dir, result.unit_id, result.screening_artifact_path)
+            persisted = _persist_unit_artifact(
+                out_dir, result.unit_id, result.screening_artifact_path
+            )
+            if persisted is not None:
+                result.screening_artifact_path = str(persisted)
             partial_results.append(result)
             partial_result_dicts.append(_result_to_dict(result))
         run_state["collected_batches"] = int(run_state["collected_batches"]) + 1

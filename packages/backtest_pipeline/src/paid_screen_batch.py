@@ -89,6 +89,30 @@ def _should_skip_matrix_screening(
     return ohlcv_from_cache and isinstance(data_cache, dict)
 
 
+def _is_paid_scope(scope: str) -> bool:
+    return str(scope or "").strip().lower() in {
+        "paid",
+        "paid-compute",
+        "paid_compute",
+        "broad",
+        "broad-screen",
+        "broad_screen",
+        "all-models",
+        "all_model",
+        "all_models",
+    }
+
+
+def _ohlcv_row_count(ohlcv) -> int:
+    try:
+        return int(ohlcv.shape[0])
+    except (AttributeError, IndexError, TypeError, ValueError):
+        try:
+            return len(ohlcv)
+        except TypeError:
+            return 0
+
+
 def _resolve_models_without_screening(
     units: list[PaidScreenUnit],
     context: WorkerContext,
@@ -404,6 +428,32 @@ def _try_resolve_fs_v1_context(
         )
     except (ImportError, ModuleNotFoundError, OSError, ValueError):
         return None
+
+
+def _paid_scope_fs_v1_gate_error(
+    units: list[PaidScreenUnit],
+    context: WorkerContext,
+    reason: str,
+    profiler: RunProfiler,
+    ohlcv_cache_state: bool,
+) -> list[UnitScreeningResult]:
+    """Fail all units when paid scope cannot guarantee fs_v1-consistent screening."""
+    reason_text = str(reason)
+    results: list[UnitScreeningResult] = []
+    for unit in units:
+        profiler.record_failure(
+            "paid_scope_fs_v1_gate",
+            RuntimeError(reason_text),
+            unit.unit_id,
+            cache_state={"hit": bool(ohlcv_cache_state)},
+        )
+        results.append(UnitScreeningResult(
+            unit_id=unit.unit_id,
+            status="ERROR",
+            error=reason_text,
+            error_category="data_quality",
+        ))
+    return results
 
 
 def _load_ohlcv_for_unit(unit: PaidScreenUnit, context: WorkerContext):
@@ -765,6 +815,25 @@ def screen_paid_batch(
             ))
         return results
 
+    if run_screening and _is_paid_scope(context.screening_scope):
+        ohlcv_rows = _ohlcv_row_count(ohlcv)
+        if ohlcv_rows < 2:
+            error = f"insufficient_ohlcv_bars_for_paid_screen:min=2 got={ohlcv_rows}"
+            for unit in units:
+                profiler.record_failure(
+                    "npz_load",
+                    RuntimeError(error),
+                    unit.unit_id,
+                    cache_state={"hit": ohlcv_from_cache},
+                )
+                results.append(UnitScreeningResult(
+                    unit_id=unit.unit_id,
+                    status="ERROR",
+                    error=error,
+                    error_category="data_quality",
+                ))
+            return results
+
     # Cache-wiring / disabled-screening path: resolve models per unit group,
     # return SKIPPED for successes and ERROR for per-unit resolution failures.
     if _should_skip_matrix_screening(run_screening, ohlcv_from_cache, data_cache):
@@ -774,6 +843,27 @@ def screen_paid_batch(
     fs_v1_ctx = _get_or_load_fs_v1_context(
         representative, context, data_cache, profiler
     )
+    if run_screening and _is_paid_scope(context.screening_scope):
+        if fs_v1_ctx is None:
+            return _paid_scope_fs_v1_gate_error(
+                units=units,
+                context=context,
+                reason="paid_scope_requires_fs_v1_context",
+                profiler=profiler,
+                ohlcv_cache_state=ohlcv_from_cache,
+            )
+        if not _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_v1_ctx):
+            return _paid_scope_fs_v1_gate_error(
+                units=units,
+                context=context,
+                reason=(
+                    "paid_scope_fs_v1_ohlcv_misaligned:"
+                    f"ohlcv_rows={_ohlcv_row_count(ohlcv)} "
+                    f"store_rows={len(fs_v1_ctx.store.get('ts', []))}"
+                ),
+                profiler=profiler,
+                ohlcv_cache_state=ohlcv_from_cache,
+            )
     signal_computer = None
     if fs_v1_ctx is not None and _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_v1_ctx):
         signal_computer = _resolve_fs_v1_signal_computer(
@@ -784,7 +874,6 @@ def screen_paid_batch(
         )
     else:
         fs_v1_ctx = None
-
     # Compute OHLCV hash for artifact provenance
     ohlcv_hash = hashlib.sha256(ohlcv.tobytes()).hexdigest()[:32]
 

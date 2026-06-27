@@ -6,6 +6,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
+VBT_READY_GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"
+
 if [[ -n "${VAST_SSH_TARGET:-}" ]]; then
   VAST_SSH_HOST_ARG="$VAST_SSH_TARGET"
 elif [[ -n "${VAST_SSH_HOST:-}" ]]; then
@@ -42,11 +44,13 @@ ssh "${SSH_OPTS[@]}" "$VAST_SSH_HOST_ARG" "mkdir -p $(dirname "$REMOTE_REPO") &&
     git clone --branch $BRANCH https://github.com/javin23863/hft3.git $REMOTE_REPO; \
   fi"
 
-scp "${SCP_OPTS[@]}" runtime/reports/paid_screen_ready_gate.json \
-  "$VAST_SSH_HOST_ARG:$REMOTE_REPO/runtime/reports/paid_screen_ready_gate.json" 2>/dev/null || true
+REMOTE_GATE_DIR="$(dirname "$VBT_READY_GATE_FILE")"
+ssh "${SSH_OPTS[@]}" "$VAST_SSH_HOST_ARG" "mkdir -p $REMOTE_REPO/$REMOTE_GATE_DIR"
+scp "${SCP_OPTS[@]}" "$VBT_READY_GATE_FILE" \
+  "$VAST_SSH_HOST_ARG:$REMOTE_REPO/$VBT_READY_GATE_FILE" 2>/dev/null || true
 
 echo "Launching remote full screen (230 workers on 256 vCPU) in tmux..."
 ssh "${SSH_OPTS[@]}" "$VAST_SSH_HOST_ARG" "cd $REMOTE_REPO && \
-  tmux new-session -d -s vbt_full 'bash scripts/run_vbt_paid_screen_vast_full.sh; exec bash'"
+  tmux new-session -d -s vbt_full 'VBT_READY_GATE_FILE=$VBT_READY_GATE_FILE bash scripts/run_vbt_paid_screen_vast_full.sh; exec bash'"
 
 echo "Attached logs: ssh ${SSH_OPTS[*]} $VAST_SSH_HOST_ARG -t tmux attach -t vbt_full"

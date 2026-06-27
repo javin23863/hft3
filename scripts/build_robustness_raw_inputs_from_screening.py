@@ -35,9 +35,31 @@ from backtest_pipeline.src.vectorbt_adapter import (
 )
 
 RAW_SCHEMA = "hft3_robustness_raw_inputs_v1"
+SENSITIVITY_REPORT_SCHEMA = "hft3_robustness_bridge_sensitivity_report_v1"
 FEATURE_RECIPE_HASH_POLICY = "event_specific_hash_bound_per_candidate"
 EVENT_DATE_RE = re.compile(r"(20\d{2})_(\d{2})_(\d{2})")
 ROBUSTNESS_SCOPE = "assembled_screening_surface_evidence"
+SURFACE_POLICIES = (
+    "current_first_event",
+    "pooled_train_events",
+    "median_event_surface",
+    "fold_is_surface",
+)
+CORRECTED_SURFACE_POLICIES = tuple(
+    policy for policy in SURFACE_POLICIES if policy != "current_first_event"
+)
+DEFAULT_SENSITIVITY_REPORT_OUT = (
+    _REPO / "runtime" / "robustness" / "robustness_bridge_sensitivity_report.json"
+)
+SURFACE_NUMERIC_FIELDS = (
+    "plateau_score",
+    "plateau_width",
+    "neighbor_stability",
+    "cliff_distance_from_loss_regions",
+    "parameter_perturbation_sensitivity",
+    "peak_vs_plateau_comparison",
+    "minimum_sample_size",
+)
 
 
 @dataclass(frozen=True)
@@ -75,6 +97,35 @@ def _error(reason: str, **extra: Any) -> int:
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _value_counts(values: Mapping[str, str]) -> dict[str, int]:
+    return dict(Counter(str(value) for value in values.values()))
+
+
+def _sample_mapping(values: Mapping[str, str], *, limit: int = 20) -> dict[str, str]:
+    return {key: values[key] for key in sorted(values)[:limit]}
+
+
+def _failure_diagnostics(
+    *,
+    packaged_count: int,
+    min_packaged: int,
+    row_skip_reasons: Counter[str],
+    family_skips: Mapping[str, str],
+    candidate_skips: Mapping[str, str],
+) -> dict[str, Any]:
+    return {
+        "status": "blocked",
+        "reason": "raw_input_count_below_min",
+        "packaged_count": packaged_count,
+        "min_packaged": min_packaged,
+        "row_skip_counts": dict(row_skip_reasons),
+        "family_skip_counts": _value_counts(family_skips),
+        "candidate_skip_counts": _value_counts(candidate_skips),
+        "family_skip_sample": _sample_mapping(family_skips),
+        "candidate_skip_sample": _sample_mapping(candidate_skips),
+    }
 
 
 def _load_json_object(path: Path, label: str) -> dict[str, Any]:
@@ -139,6 +190,16 @@ def _first_number(metrics: Mapping[str, Any], *names: str) -> float | None:
     return None
 
 
+def _net_return_fraction(metrics: Mapping[str, Any]) -> float | None:
+    value = _first_number(metrics, "net_return")
+    if value is not None:
+        return value
+    pct = _first_number(metrics, "net_return_pct", "Total Return [%]", "Total Return")
+    if pct is not None:
+        return pct / 100.0
+    return None
+
+
 def _event_id_from(row: Mapping[str, Any], metadata: Mapping[str, Any]) -> str:
     value = metadata.get("event_id") or metadata.get("target_event_id")
     if value not in (None, ""):
@@ -200,7 +261,7 @@ def _extract_measured_row(row: Mapping[str, Any]) -> tuple[MeasuredRow | None, s
     params = _parameter_values(row, metrics)
     if not parameter_hash or params is None:
         return None, "parameter_values_missing"
-    net_return = _first_number(metrics, "net_return")
+    net_return = _net_return_fraction(metrics)
     net_pnl = _first_number(metrics, "net_pnl")
     expectancy = _first_number(metrics, "expectancy_per_trade", "expectancy", "oos_expectancy")
     sharpe = _first_number(metrics, "sharpe", "Sharpe Ratio")
@@ -227,6 +288,13 @@ def _extract_measured_row(row: Mapping[str, Any]) -> tuple[MeasuredRow | None, s
     if trade_count is None:
         if isinstance(vbt_stats, Mapping):
             trade_count = _integer(vbt_stats.get("Total Trades"))
+    if trade_count == 0 and net_return == 0.0 and isinstance(vbt_stats, Mapping):
+        if expectancy is None:
+            expectancy = 0.0
+        if sharpe is None:
+            sharpe = 0.0
+        if max_drawdown is None:
+            max_drawdown = 0.0
     if None in (net_return, expectancy, sharpe, max_drawdown) or trade_count is None:
         return None, "measured_metrics_missing"
     profit_factor = _first_number(metrics, "profit_factor", "Profit Factor")
@@ -268,6 +336,17 @@ def _extract_measured_row(row: Mapping[str, Any]) -> tuple[MeasuredRow | None, s
 
 def _mean(values: list[float]) -> float:
     return float(statistics.fmean(values)) if values else 0.0
+
+
+def _median(values: list[float]) -> float:
+    return float(statistics.median(values)) if values else 0.0
+
+
+def _lower_quartile(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    return float(ordered[math.floor((len(ordered) - 1) * 0.25)])
 
 
 def _aggregate(rows: list[MeasuredRow]) -> dict[str, float]:
@@ -321,6 +400,182 @@ def _compute_surface(rows_by_pair: dict[tuple[date, str], MeasuredRow], events: 
     return compute_surface_stability(grid, performance_metric="net_return")
 
 
+def _compute_pooled_surface(
+    rows_by_pair: dict[tuple[date, str], MeasuredRow],
+    events: list[date],
+    params: list[str],
+) -> dict[str, Any]:
+    first_rows = [rows_by_pair[(events[0], ph)] for ph in params]
+    key_by_hash = _surface_key_maps(first_rows)
+    grid = {}
+    for row in first_rows:
+        param_rows = [rows_by_pair[(event, row.parameter_hash)] for event in events]
+        grid[key_by_hash[row.parameter_hash]] = {
+            "net_return": _median([r.net_return for r in param_rows]),
+            "trade_count": int(_median([float(r.trade_count) for r in param_rows])),
+        }
+    surface = compute_surface_stability(grid, performance_metric="net_return")
+    surface["surface_policy"] = "pooled_train_events"
+    surface["aggregation_method"] = "median_by_parameter_cell"
+    surface["aggregation_event_count"] = len(events)
+    return surface
+
+
+def _summarise_surfaces(
+    surfaces: list[Mapping[str, Any]],
+    *,
+    policy: str,
+) -> dict[str, Any]:
+    if not surfaces:
+        return {
+            "status": "fail",
+            "formula_authority_status": "defined",
+            "literature_or_ontology_citation": "",
+            "required_checks": [],
+            "surface_policy": policy,
+            "reason": "no_usable_surfaces",
+            **{field: 0 for field in SURFACE_NUMERIC_FIELDS},
+        }
+    first = surfaces[0]
+    numeric: dict[str, float | int] = {}
+    for field in SURFACE_NUMERIC_FIELDS:
+        values = [_number(surface.get(field)) for surface in surfaces]
+        finite = [float(value) for value in values if value is not None]
+        value = _median(finite)
+        if field in {"plateau_width", "cliff_distance_from_loss_regions", "minimum_sample_size"}:
+            numeric[field] = int(round(value))
+        else:
+            numeric[field] = round(float(value), 6)
+    status = "fail" if any(
+        (
+            float(numeric["neighbor_stability"]) < 0.5,
+            float(numeric["parameter_perturbation_sensitivity"]) > 0.3,
+            int(numeric["cliff_distance_from_loss_regions"]) < 2,
+            float(numeric["peak_vs_plateau_comparison"]) > 1.3,
+            int(numeric["minimum_sample_size"]) < 30,
+        )
+    ) else "pass"
+    plateau_scores = [
+        float(value)
+        for surface in surfaces
+        for value in [_number(surface.get("plateau_score"))]
+        if value is not None
+    ]
+    surface_pass_count = sum(
+        1 for surface in surfaces if screening_status_text(surface) == "pass"
+    )
+    return {
+        "status": status,
+        "formula_authority_status": str(
+            first.get("formula_authority_status") or "defined"
+        ),
+        "literature_or_ontology_citation": str(
+            first.get("literature_or_ontology_citation") or ""
+        ),
+        "required_checks": list(first.get("required_checks") or []),
+        **numeric,
+        "surface_policy": policy,
+        "surface_count": len(surfaces),
+        "surface_pass_count": surface_pass_count,
+        "median_plateau_score": round(_median(plateau_scores), 6),
+        "downside_plateau_score": round(_lower_quartile(plateau_scores), 6),
+        "event_surface_dispersion": round(
+            float(statistics.pstdev(plateau_scores)) if len(plateau_scores) > 1 else 0.0,
+            6,
+        ),
+    }
+
+
+def _compute_median_event_surface(
+    rows_by_pair: dict[tuple[date, str], MeasuredRow],
+    events: list[date],
+    params: list[str],
+) -> dict[str, Any]:
+    surfaces = [_compute_surface(rows_by_pair, [event], params) for event in events]
+    return _summarise_surfaces(surfaces, policy="median_event_surface")
+
+
+def _best_param_by_net_return(
+    rows_by_pair: dict[tuple[date, str], MeasuredRow],
+    events: list[date],
+    params: list[str],
+) -> str:
+    return max(
+        params,
+        key=lambda parameter_hash: _median([
+            rows_by_pair[(event, parameter_hash)].net_return for event in events
+        ]),
+    )
+
+
+def _compute_fold_surface(
+    rows_by_pair: dict[tuple[date, str], MeasuredRow],
+    events: list[date],
+    params: list[str],
+    folds: list[tuple[list[date], list[date]]],
+) -> dict[str, Any]:
+    surfaces: list[Mapping[str, Any]] = []
+    persistence_rows: list[dict[str, Any]] = []
+    for fold_index, (train_events, test_events) in enumerate(folds):
+        surface = _compute_pooled_surface(rows_by_pair, train_events, params)
+        surface["surface_policy"] = "fold_is_surface"
+        surfaces.append(surface)
+        selected_param = _best_param_by_net_return(rows_by_pair, train_events, params)
+        oos_by_param = {
+            parameter_hash: _mean([
+                rows_by_pair[(event, parameter_hash)].net_return for event in test_events
+            ])
+            for parameter_hash in params
+        }
+        selected_oos = oos_by_param[selected_param]
+        persisted = selected_oos > 0.0 and selected_oos >= _median(list(oos_by_param.values()))
+        persistence_rows.append({
+            "fold_id": f"fold_{fold_index}",
+            "selected_parameter_hash": selected_param,
+            "selected_oos_net_return": round(selected_oos, 8),
+            "median_oos_net_return": round(_median(list(oos_by_param.values())), 8),
+            "selected_region_persisted_oos": persisted,
+        })
+    summary = _summarise_surfaces(surfaces, policy="fold_is_surface")
+    persisted_count = sum(1 for row in persistence_rows if row["selected_region_persisted_oos"])
+    summary["fold_count"] = len(folds)
+    summary["fold_oos_persistence"] = persistence_rows
+    summary["selected_region_oos_persistence_ratio"] = (
+        round(persisted_count / len(persistence_rows), 6) if persistence_rows else 0.0
+    )
+    if persistence_rows and persisted_count < math.ceil(len(persistence_rows) / 2):
+        summary["status"] = "fail"
+        summary["reason"] = "selected_region_oos_persistence_below_majority"
+    return summary
+
+
+def _compute_surface_for_policy(
+    *,
+    policy: str,
+    rows_by_pair: dict[tuple[date, str], MeasuredRow],
+    events: list[date],
+    params: list[str],
+    folds: list[tuple[list[date], list[date]]],
+) -> dict[str, Any]:
+    if policy == "current_first_event":
+        return _compute_surface(rows_by_pair, events, params)
+    if policy == "pooled_train_events":
+        return _compute_pooled_surface(rows_by_pair, events, params)
+    if policy == "median_event_surface":
+        return _compute_median_event_surface(rows_by_pair, events, params)
+    if policy == "fold_is_surface":
+        return _compute_fold_surface(rows_by_pair, events, params, folds)
+    raise ValueError(f"unsupported_surface_policy:{policy}")
+
+
+def _training_events_from_folds(
+    events: list[date],
+    folds: list[tuple[list[date], list[date]]],
+) -> list[date]:
+    train_events = sorted({event for fold_train, _fold_test in folds for event in fold_train})
+    return train_events or events
+
+
 def _p_value(expectancies: list[float]) -> float:
     n = len(expectancies)
     if n < 2:
@@ -367,7 +622,7 @@ def _build_wfc_rows(
     return rows
 
 
-def _build_family_payload(
+def _prepare_family_surface_inputs(
     *,
     family_rows: list[MeasuredRow],
     folds_requested: int,
@@ -379,8 +634,6 @@ def _build_family_payload(
     params = sorted({row.parameter_hash for row in family_rows})
     if len(events) < min_events:
         return None, f"insufficient_events:{len(events)}<{min_events}"
-    if len(params) < min_parameter_combinations:
-        return None, f"insufficient_parameter_combinations:{len(params)}<{min_parameter_combinations}"
     rows_by_pair: dict[tuple[date, str], MeasuredRow] = {}
     for row in family_rows:
         pair = (row.event_date, row.parameter_hash)
@@ -391,18 +644,66 @@ def _build_family_payload(
     completeness = len(rows_by_pair) / expected if expected else 0.0
     if completeness + 1e-12 < min_completeness:
         return None, f"incomplete_event_parameter_surface:{completeness:.6f}<{min_completeness:.6f}"
-    missing = [
-        (event.isoformat(), parameter_hash)
-        for event in events
+    complete_params = [
+        parameter_hash
         for parameter_hash in params
-        if (event, parameter_hash) not in rows_by_pair
+        if all((event, parameter_hash) in rows_by_pair for event in events)
     ]
-    if missing:
-        return None, f"missing_event_parameter_cells:{len(missing)}"
+    if len(complete_params) < min_parameter_combinations:
+        return (
+            None,
+            "insufficient_complete_parameter_combinations:"
+            f"{len(complete_params)}<{min_parameter_combinations}",
+        )
+    missing_count = expected - len(rows_by_pair)
+    if missing_count and min_completeness >= 1.0:
+        return None, f"missing_event_parameter_cells:{missing_count}"
+    params = complete_params
     folds = _build_folds(events, folds_requested)
     if len(folds) < folds_requested:
         return None, f"insufficient_walk_forward_folds:{len(folds)}<{folds_requested}"
-    surface = _compute_surface(rows_by_pair, events, params)
+    return (
+        {
+            "events": events,
+            "params": params,
+            "rows_by_pair": rows_by_pair,
+            "folds": folds,
+            "n_trials": len(params),
+            "missing_profit_factor_count": sum(1 for row in family_rows if row.profit_factor_missing),
+        },
+        "ok",
+    )
+
+
+def _build_family_payload(
+    *,
+    family_rows: list[MeasuredRow],
+    folds_requested: int,
+    min_events: int,
+    min_parameter_combinations: int,
+    min_completeness: float,
+    surface_policy: str,
+) -> tuple[dict[str, Any] | None, str]:
+    prepared, reason = _prepare_family_surface_inputs(
+        family_rows=family_rows,
+        folds_requested=folds_requested,
+        min_events=min_events,
+        min_parameter_combinations=min_parameter_combinations,
+        min_completeness=min_completeness,
+    )
+    if prepared is None:
+        return None, reason
+    events = prepared["events"]
+    params = prepared["params"]
+    rows_by_pair = prepared["rows_by_pair"]
+    folds = prepared["folds"]
+    surface = _compute_surface_for_policy(
+        policy=surface_policy,
+        rows_by_pair=rows_by_pair,
+        events=events,
+        params=params,
+        folds=folds,
+    )
     if screening_status_text(surface) != "pass":
         return None, "surface_stability_metrics_not_replay_ready"
     wfc_rows = _build_wfc_rows(
@@ -434,10 +735,273 @@ def _build_family_payload(
             "p_values": p_values,
             "by_param": by_param,
             "n_trials": len(params),
-            "missing_profit_factor_count": sum(1 for row in family_rows if row.profit_factor_missing),
+            "missing_profit_factor_count": prepared["missing_profit_factor_count"],
         },
         "ok",
     )
+
+
+def _family_key_map(key: tuple[str, str, str, str, str]) -> dict[str, str]:
+    return dict(zip(("model_id", "symbol", "event_type", "research_clock", "context_set_id"), key))
+
+
+def _promoted_family_candidate_ids(family_rows: list[MeasuredRow], params: list[str]) -> list[str]:
+    param_set = set(params)
+    return sorted(
+        row.candidate_id
+        for row in family_rows
+        if screening_status_text(row.screening_status) == "pass"
+        and row.parameter_hash in param_set
+    )
+
+
+def _event_quality_rejections(
+    *,
+    events: list[date],
+    params: list[str],
+    rows_by_pair: Mapping[tuple[date, str], MeasuredRow],
+    event_id_by_date: Mapping[date, str],
+) -> list[dict[str, Any]]:
+    rejected: list[dict[str, Any]] = []
+    for event in events:
+        reasons: list[str] = []
+        missing = [
+            parameter_hash
+            for parameter_hash in params
+            if (event, parameter_hash) not in rows_by_pair
+        ]
+        insufficient_trade_cells = [
+            parameter_hash
+            for parameter_hash in params
+            if (event, parameter_hash) in rows_by_pair
+            and rows_by_pair[(event, parameter_hash)].trade_count <= 0
+        ]
+        if missing:
+            reasons.append("missing_surface")
+        if insufficient_trade_cells:
+            reasons.append("insufficient_trades")
+        if reasons:
+            rejected.append({
+                "event_id": event_id_by_date.get(event, ""),
+                "event_date": event.isoformat(),
+                "reasons": reasons,
+                "missing_parameter_cell_count": len(missing),
+                "insufficient_trade_cell_count": len(insufficient_trade_cells),
+            })
+    return rejected
+
+
+def _family_sensitivity_report(
+    *,
+    family_rows: list[MeasuredRow],
+    folds_requested: int,
+    min_events: int,
+    min_parameter_combinations: int,
+    min_completeness: float,
+) -> dict[str, Any]:
+    events = sorted({row.event_date for row in family_rows})
+    params = sorted({row.parameter_hash for row in family_rows})
+    event_id_by_date: dict[date, str] = {}
+    rows_by_pair_for_report: dict[tuple[date, str], MeasuredRow] = {}
+    for row in family_rows:
+        event_id_by_date.setdefault(row.event_date, row.event_id)
+        rows_by_pair_for_report.setdefault((row.event_date, row.parameter_hash), row)
+    event_rejections = _event_quality_rejections(
+        events=events,
+        params=params,
+        rows_by_pair=rows_by_pair_for_report,
+        event_id_by_date=event_id_by_date,
+    )
+    prepared, prepare_reason = _prepare_family_surface_inputs(
+        family_rows=family_rows,
+        folds_requested=folds_requested,
+        min_events=min_events,
+        min_parameter_combinations=min_parameter_combinations,
+        min_completeness=min_completeness,
+    )
+    policy_passes: dict[str, bool] = {}
+    policy_failure_reasons: dict[str, str] = {}
+    policy_candidate_ids: dict[str, list[str]] = {}
+    policy_metrics: dict[str, Any] = {}
+    usable_event_count = max(0, len(events) - len(event_rejections))
+    rejected_event_count = len(event_rejections)
+    complete_params: list[str] = []
+    training_events: list[date] = []
+    if prepared is None:
+        for policy in SURFACE_POLICIES:
+            policy_passes[policy] = False
+            policy_failure_reasons[policy] = prepare_reason
+            policy_candidate_ids[policy] = []
+            policy_metrics[policy] = {"status": "fail", "reason": prepare_reason}
+    else:
+        training_events = _training_events_from_folds(prepared["events"], prepared["folds"])
+        complete_params = list(prepared["params"])
+        for policy in SURFACE_POLICIES:
+            policy_events = (
+                training_events
+                if policy in {"pooled_train_events", "median_event_surface"}
+                else prepared["events"]
+            )
+            try:
+                surface = _compute_surface_for_policy(
+                    policy=policy,
+                    rows_by_pair=prepared["rows_by_pair"],
+                    events=policy_events,
+                    params=prepared["params"],
+                    folds=prepared["folds"],
+                )
+            except ValueError as exc:
+                surface = {"status": "fail", "reason": str(exc)}
+            passed = screening_status_text(surface) == "pass"
+            policy_passes[policy] = passed
+            policy_failure_reasons[policy] = (
+                ""
+                if passed
+                else str(surface.get("reason") or "surface_stability_metrics_not_replay_ready")
+            )
+            policy_candidate_ids[policy] = _promoted_family_candidate_ids(
+                family_rows,
+                prepared["params"],
+            ) if passed else []
+            policy_metrics[policy] = surface
+
+    current_ids = set(policy_candidate_ids["current_first_event"])
+    corrected_ids = set().union(
+        *(set(policy_candidate_ids[policy]) for policy in CORRECTED_SURFACE_POLICIES)
+    )
+    family_key = family_rows[0].family_key if family_rows else ("", "", "", "", "")
+    report = {
+        "model_family": _family_key_map(family_key),
+        "vectorbt_promoted_count": sum(
+            1 for row in family_rows if screening_status_text(row.screening_status) == "pass"
+        ),
+        "packaging_eligible": prepared is not None,
+        "packaging_failure_reason": "" if prepared is not None else prepare_reason,
+        "event_count": len(events),
+        "usable_event_count": usable_event_count,
+        "rejected_event_count": rejected_event_count,
+        "rejected_events": event_rejections,
+        "surface_training_event_count": len(training_events),
+        "surface_training_event_ids": [
+            event_id_by_date.get(event, "") for event in training_events
+        ],
+        "parameter_cell_count": len(family_rows),
+        "complete_parameter_combination_count": len(complete_params),
+        "event_0_id": event_id_by_date.get(events[0], "") if events else "",
+        "event_0_surface_metrics": policy_metrics["current_first_event"],
+        "pooled_surface_metrics": policy_metrics["pooled_train_events"],
+        "median_event_surface_metrics": policy_metrics["median_event_surface"],
+        "fold_is_surface_metrics": policy_metrics["fold_is_surface"],
+        "surface_policy_passes": policy_passes,
+        "policy_failure_reasons": policy_failure_reasons,
+        "candidates_rejected_by_current_but_passed_by_corrected_policy": sorted(
+            corrected_ids - current_ids
+        ),
+    }
+    for policy in SURFACE_POLICIES:
+        report[f"{policy}_pass"] = policy_passes[policy]
+        report[f"candidates_passing_{policy}"] = len(policy_candidate_ids[policy])
+        report[f"candidate_ids_passing_{policy}"] = policy_candidate_ids[policy]
+    return report
+
+
+def _build_sensitivity_report(
+    *,
+    source_path: str,
+    artifact: Mapping[str, Any],
+    selected_surface_policy: str,
+    promoted_rows: list[Mapping[str, Any]],
+    family_reports: list[dict[str, Any]],
+    row_skip_reasons: Mapping[str, int],
+    family_skips: Mapping[str, str],
+    candidate_skips: Mapping[str, str],
+    packaged_count: int,
+    min_packaged: int,
+) -> dict[str, Any]:
+    corrected_ids = set().union(
+        *(
+            set(report.get(f"candidate_ids_passing_{policy}", []))
+            for report in family_reports
+            for policy in CORRECTED_SURFACE_POLICIES
+        )
+    ) if family_reports else set()
+    current_ids = (
+        set().union(
+            *(
+                set(report.get("candidate_ids_passing_current_first_event", []))
+                for report in family_reports
+            )
+        )
+        if family_reports
+        else set()
+    )
+    summary = {
+        "vectorbt_promoted_count": len(promoted_rows),
+        "model_family_count": len(family_reports),
+        "packaging_eligible_family_count": sum(
+            1 for report in family_reports if report.get("packaging_eligible") is True
+        ),
+        "packaged_count": packaged_count,
+        "min_packaged": min_packaged,
+        "current_first_event_family_pass_count": sum(
+            1 for report in family_reports if report["current_first_event_pass"]
+        ),
+        "pooled_train_events_family_pass_count": sum(
+            1 for report in family_reports if report["pooled_train_events_pass"]
+        ),
+        "median_event_surface_family_pass_count": sum(
+            1 for report in family_reports if report["median_event_surface_pass"]
+        ),
+        "fold_is_surface_family_pass_count": sum(
+            1 for report in family_reports if report["fold_is_surface_pass"]
+        ),
+        "candidates_passing_current_first_event": sum(
+            report["candidates_passing_current_first_event"] for report in family_reports
+        ),
+        "candidates_passing_pooled_train_events": sum(
+            report["candidates_passing_pooled_train_events"] for report in family_reports
+        ),
+        "candidates_passing_median_event_surface": sum(
+            report["candidates_passing_median_event_surface"] for report in family_reports
+        ),
+        "candidates_passing_fold_is_surface": sum(
+            report["candidates_passing_fold_is_surface"] for report in family_reports
+        ),
+        "candidates_rejected_by_current_but_passed_by_corrected_policy": sorted(
+            corrected_ids - current_ids
+        ),
+        "hftbacktest_eligible_candidates": 0,
+    }
+    return {
+        "schema": SENSITIVITY_REPORT_SCHEMA,
+        "screening_artifact": source_path,
+        "screening_artifact_hash": artifact.get("screening_artifact_hash"),
+        "selected_surface_policy": selected_surface_policy,
+        "baseline_surface_policy": "current_first_event",
+        "summary": summary,
+        "families": family_reports,
+        "assembler_diagnostics": {
+            "row_skip_counts": dict(row_skip_reasons),
+            "family_skip_counts": _value_counts(family_skips),
+            "candidate_skip_counts": _value_counts(candidate_skips),
+            "family_skip_sample": _sample_mapping(family_skips),
+            "candidate_skip_sample": _sample_mapping(candidate_skips),
+        },
+        "attrition": {
+            "vectorbt_promoted_candidates": len(promoted_rows),
+            "model_families": len(family_reports),
+            "families_with_enough_events_cells_trades_data": summary[
+                "packaging_eligible_family_count"
+            ],
+            "selected_policy_packaged_candidates": packaged_count,
+            "current_first_event_surface_survivors": summary["candidates_passing_current_first_event"],
+            "corrected_policy_surface_survivors": len(corrected_ids),
+            "wfc_walk_forward_survivors": 0,
+            "cscv_pbo_survivors": 0,
+            "dsr_survivors": 0,
+            "hftbacktest_eligible_candidates": 0,
+        },
+    }
 
 
 def build_robustness_raw_inputs_from_screening(
@@ -452,7 +1016,15 @@ def build_robustness_raw_inputs_from_screening(
     min_packaged: int,
     fee_per_rt: float | None,
     tick_value: float | None,
+    diagnostics_out: Path | None = None,
+    surface_policy: str = "current_first_event",
+    sensitivity_report_out: Path | None = None,
 ) -> dict[str, Any]:
+    if surface_policy not in SURFACE_POLICIES:
+        raise ValueError(f"unsupported_surface_policy:{surface_policy}")
+    diagnostic_only_policy = surface_policy != "current_first_event"
+    if diagnostic_only_policy and sensitivity_report_out is None:
+        sensitivity_report_out = DEFAULT_SENSITIVITY_REPORT_OUT
     if min_packaged < 0:
         raise ValueError("min_packaged_must_be_non_negative")
     if folds <= 0:
@@ -490,27 +1062,42 @@ def build_robustness_raw_inputs_from_screening(
         if measured is not None:
             promoted_measured[measured.candidate_id] = measured
 
+    source_path = _source_path(screening_artifact_path, source_root)
     family_payloads: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
     family_skips: dict[str, str] = {}
+    family_reports: list[dict[str, Any]] = []
     for key, rows in sorted(family_rows.items(), key=lambda item: item[0]):
+        if sensitivity_report_out is not None:
+            family_reports.append(
+                _family_sensitivity_report(
+                    family_rows=rows,
+                    folds_requested=folds,
+                    min_events=min_events,
+                    min_parameter_combinations=min_parameter_combinations,
+                    min_completeness=min_completeness,
+                )
+            )
         payload, reason = _build_family_payload(
             family_rows=rows,
             folds_requested=folds,
             min_events=min_events,
             min_parameter_combinations=min_parameter_combinations,
             min_completeness=min_completeness,
+            surface_policy="current_first_event",
         )
         if payload is None:
-            family_skips[_compact_json(dict(zip(("model_id", "symbol", "event_type", "research_clock", "context_set_id"), key)))] = reason
+            family_skips[_compact_json(_family_key_map(key))] = reason
             continue
         family_payloads[key] = payload
 
-    source_path = _source_path(screening_artifact_path, source_root)
     candidates: dict[str, Any] = {}
     candidate_skips: dict[str, str] = {}
     stress_ready = fee_per_rt is not None and tick_value is not None
     for candidate_id, measured in sorted(promoted_measured.items()):
         if candidate_id not in promoted_by_id:
+            continue
+        if diagnostic_only_policy:
+            candidate_skips[candidate_id] = f"diagnostic_only_surface_policy:{surface_policy}"
             continue
         if not stress_ready:
             candidate_skips[candidate_id] = "stress_decomposition_missing"
@@ -567,11 +1154,57 @@ def build_robustness_raw_inputs_from_screening(
             },
         }
 
+    if sensitivity_report_out is not None:
+        _write_json(
+            sensitivity_report_out,
+            _build_sensitivity_report(
+                source_path=source_path,
+                artifact=artifact,
+                selected_surface_policy=surface_policy,
+                promoted_rows=promoted_rows,
+                family_reports=family_reports,
+                row_skip_reasons=row_skip_reasons,
+                family_skips=family_skips,
+                candidate_skips=candidate_skips,
+                packaged_count=len(candidates),
+                min_packaged=min_packaged,
+            ),
+        )
+
+    if diagnostic_only_policy:
+        return {
+            "status": "diagnostic_only",
+            "surface_policy": surface_policy,
+            "sensitivity_report_out": str(sensitivity_report_out),
+            "packaged_count": 0,
+            "packaged_candidate_ids": [],
+            "skipped": {
+                "rows": dict(row_skip_reasons),
+                "families": family_skips,
+                "candidates": candidate_skips,
+            },
+        }
+
     if len(candidates) < min_packaged:
+        diagnostics = _failure_diagnostics(
+            packaged_count=len(candidates),
+            min_packaged=min_packaged,
+            row_skip_reasons=row_skip_reasons,
+            family_skips=family_skips,
+            candidate_skips=candidate_skips,
+        )
+        if diagnostics_out is not None:
+            _write_json(diagnostics_out, diagnostics)
+            diagnostics["diagnostics_out"] = str(diagnostics_out)
+        if sensitivity_report_out is not None:
+            diagnostics["sensitivity_report_out"] = str(sensitivity_report_out)
         raise ValueError(
             "raw_input_count_below_min:"
             f"packaged_count={len(candidates)}:min_packaged={min_packaged}:"
-            f"candidate_skips={candidate_skips}:family_skips={family_skips}:row_skips={dict(row_skip_reasons)}"
+            f"candidate_skip_counts={diagnostics['candidate_skip_counts']}:"
+            f"family_skip_counts={diagnostics['family_skip_counts']}:"
+            f"row_skip_counts={diagnostics['row_skip_counts']}:"
+            f"diagnostics_out={diagnostics.get('diagnostics_out')}"
         )
 
     payload = {
@@ -617,6 +1250,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-packaged", type=int, default=1)
     parser.add_argument("--fee-per-rt", type=float, default=None)
     parser.add_argument("--tick-value", type=float, default=None)
+    parser.add_argument("--diagnostics-out", type=Path, default=None)
+    parser.add_argument(
+        "--surface-policy",
+        choices=SURFACE_POLICIES,
+        default="current_first_event",
+    )
+    parser.add_argument(
+        "--sensitivity-report-out",
+        type=Path,
+        nargs="?",
+        const=DEFAULT_SENSITIVITY_REPORT_OUT,
+        default=None,
+    )
     return parser
 
 
@@ -634,6 +1280,9 @@ def main(argv: list[str] | None = None) -> int:
             min_packaged=args.min_packaged,
             fee_per_rt=args.fee_per_rt,
             tick_value=args.tick_value,
+            diagnostics_out=args.diagnostics_out,
+            surface_policy=args.surface_policy,
+            sensitivity_report_out=args.sensitivity_report_out,
         )
     except (ScreeningArtifactError, ValueError) as exc:
         return _error(str(exc))

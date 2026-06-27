@@ -67,7 +67,17 @@ echo "repo=$REPO_ROOT nproc=$NPROC workers=$WORKERS npz_root=$HFT3_NPZ_ROOT"
 echo "events_csv=$EVENTS_CSV symbols=$SYMBOLS unit_source=$UNIT_SOURCE model_scope=$MODEL_SCOPE units_out=$UNITS_JSONL"
 
 bash scripts/install_vbt_hbt_handoff_verify_deps.sh
-pip3 install 'vectorbt[rust]==1.0.0' -q
+pip3 install 'vectorbt[rust]==1.0.0' 'pandas>=2.0.0,<3.0.0' -q
+python3 - <<'PY'
+import pandas as pd
+import vectorbt as vbt
+
+if int(pd.__version__.split(".", 1)[0]) >= 3:
+    raise SystemExit(
+        f"ERROR: pandas {pd.__version__} is incompatible with vectorbt; expected pandas<3.0"
+    )
+print(f"VectorBT dependency check: vectorbt={getattr(vbt, '__version__', 'unknown')} pandas={pd.__version__}")
+PY
 
 # --- Unit generation (Stage-A survivors by default + require-runnable-npz) ---
 GEN_ARGS=(
@@ -136,14 +146,60 @@ if [[ -z "$LAKE_MANIFEST_HASH" ]]; then
 fi
 GIT_HEAD="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 
+echo "Validating ready gate provenance"
+python3 - "$GATE_FILE" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" <<'PY'
+import json
+import sys
+
+gate_path, events_hash, lake_hash = sys.argv[1:4]
+payload = json.load(open(gate_path, encoding="utf-8"))
+errors = []
+
+if not isinstance(payload, dict):
+    errors.append("ready gate file must contain a JSON object")
+elif payload.get("ready_for_full_run") is not True:
+    errors.append("ready gate file reports ready_for_full_run=false")
+else:
+    gate_errors = payload.get("errors", [])
+    if gate_errors not in (None, []):
+        errors.append(f"ready gate errors are not empty: {gate_errors}")
+    pilot_hashes = payload.get("pilot_hashes", {})
+    if pilot_hashes is None:
+        pilot_hashes = {}
+    if not isinstance(pilot_hashes, dict):
+        errors.append("ready gate pilot_hashes must be a JSON object")
+    else:
+        for name, expected in (
+            ("events_csv_hash", events_hash),
+            ("lake_manifest_hash", lake_hash),
+        ):
+            actual = pilot_hashes.get(name, payload.get(name))
+            if not isinstance(actual, str) or not actual.strip():
+                errors.append(f"ready gate {name} missing")
+            elif actual.strip() != expected:
+                errors.append(f"ready gate {name} {actual.strip()} != current {expected}")
+
+if errors:
+    for err in errors:
+        print(f"ERROR: {err}", file=sys.stderr)
+    sys.exit(1)
+print(f"Ready gate OK: {gate_path}")
+PY
+
 if [[ "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "1" || "${VBT_WRITE_DECLARATION_TEMPLATE:-0}" == "true" ]]; then
-  python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" "$STALL_MINUTES" "$BATCH_TIMEOUT_SECONDS" <<'PY'
+  DECL_ABORT_ON_FAILED_UNITS="${VBT_DECL_ABORT_ON_FAILED_UNITS:-true}"
+  if [[ "$DECL_ABORT_ON_FAILED_UNITS" == "1" || "${DECL_ABORT_ON_FAILED_UNITS,,}" == "true" || "${DECL_ABORT_ON_FAILED_UNITS,,}" == "yes" || "${DECL_ABORT_ON_FAILED_UNITS,,}" == "on" ]]; then
+    DECL_ABORT_ON_FAILED_UNITS="true"
+  else
+    DECL_ABORT_ON_FAILED_UNITS="false"
+  fi
+  python3 - "$DECL_FILE" "$UNIT_COUNT" "$NPROC" "$WORKERS" "$UNITS_SOURCE_DESC" "$GIT_HEAD" "$EVENTS_CSV_HASH" "$LAKE_MANIFEST_HASH" "$STALL_MINUTES" "$BATCH_TIMEOUT_SECONDS" "$DECL_ABORT_ON_FAILED_UNITS" <<'PY'
 import json
 import os
 import sys
 from pathlib import Path
 
-decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash, stall_minutes, batch_timeout_seconds = sys.argv[1:11]
+decl_path, unit_count, host_vcpu, workers, units_source, git_head, events_hash, lake_hash, stall_minutes, batch_timeout_seconds, abort_on_failed_units = sys.argv[1:12]
 payload = {
     "host_vcpu": int(host_vcpu),
     "reserved_vcpu": 26,
@@ -152,7 +208,7 @@ payload = {
     "units_source": units_source,
     "stall_minutes": int(stall_minutes),
     "batch_timeout_seconds": int(batch_timeout_seconds),
-    "abort_on_failed_units": True,
+    "abort_on_failed_units": str(abort_on_failed_units).lower() in {"1", "true", "yes", "on"},
     "git_head": git_head,
     "events_csv_hash": events_hash,
     "lake_manifest_hash": lake_hash,

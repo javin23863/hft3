@@ -25,6 +25,7 @@ setup_repo_paths()
 feature_plane_validation_errors = None
 validate_screening_artifact = None
 _VALIDATORS_LOADED = False
+_FAST_ARTIFACT_SAMPLE_LIMIT = 20
 
 
 def _ensure_validators_loaded() -> None:
@@ -146,6 +147,83 @@ def _accounted_units(
     return sum(value for value in counts if value is not None)
 
 
+def _positive_trade_rows(payload: dict[str, Any]) -> int:
+    total = 0
+    for section in ("promoted", "rejected"):
+        rows = payload.get(section) or []
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            metric_values = row.get("metric_values") or {}
+            stats = metric_values.get("vbt_stats") or row.get("vectorbt_results") or {}
+            if not isinstance(stats, dict):
+                continue
+            try:
+                trades = float(stats.get("Total Trades"))
+            except (TypeError, ValueError):
+                continue
+            if trades > 0:
+                total += 1
+    return total
+
+
+def _sample_artifact_health(run_dir: Path, limit: int = _FAST_ARTIFACT_SAMPLE_LIMIT) -> dict[str, Any]:
+    units_dir = run_dir / "units"
+    sample_count = 0
+    promoted_total = 0
+    positive_trade_rows = 0
+    feature_plane_statuses: Counter[str] = Counter()
+    bar_construction_ids: Counter[str] = Counter()
+    errors: list[str] = []
+    if not units_dir.is_dir() or limit <= 0:
+        return {
+            "sample_artifact_count": sample_count,
+            "sample_promoted_ids": promoted_total,
+            "sample_positive_trade_rows": positive_trade_rows,
+            "sample_feature_plane_status_counts": {},
+            "sample_bar_construction_id_counts": {},
+            "sample_validation_errors": errors,
+        }
+    for art in units_dir.glob("*/screening_artifact.json"):
+        if sample_count >= limit:
+            break
+        try:
+            payload = _load_json(art)
+        except Exception as exc:  # noqa: BLE001 — audit should report and continue
+            errors.append(f"{art.relative_to(run_dir)}:{exc}")
+            sample_count += 1
+            continue
+        sample_count += 1
+        promoted_total += len(payload.get("promoted_ids") or [])
+        positive_trade_rows += _positive_trade_rows(payload)
+        fps = str(payload.get("feature_plane_status") or "MISSING")
+        feature_plane_statuses[fps] += 1
+        bar_id = str(payload.get("bar_construction_id") or "MISSING")
+        bar_construction_ids[bar_id] += 1
+
+    if sample_count >= 10 and promoted_total == 0:
+        errors.append(f"zero_promoted_ids_in_artifact_sample:n={sample_count}")
+    if sample_count >= 10 and positive_trade_rows == 0:
+        errors.append(f"zero_positive_trade_rows_in_artifact_sample:n={sample_count}")
+    bar_stub_count = feature_plane_statuses.get("bar_stub_research_only", 0)
+    if bar_stub_count:
+        errors.append(f"bar_stub_research_only_in_artifact_sample:n={bar_stub_count}")
+    npz_fallback_count = bar_construction_ids.get("ohlcv_1m_from_npz_or_supplied_array", 0)
+    if npz_fallback_count:
+        errors.append(f"npz_bar_fallback_in_artifact_sample:n={npz_fallback_count}")
+
+    return {
+        "sample_artifact_count": sample_count,
+        "sample_promoted_ids": promoted_total,
+        "sample_positive_trade_rows": positive_trade_rows,
+        "sample_feature_plane_status_counts": dict(sorted(feature_plane_statuses.items())),
+        "sample_bar_construction_id_counts": dict(sorted(bar_construction_ids.items())),
+        "sample_validation_errors": errors,
+    }
+
+
 def _scan_run_dir(run_dir: Path) -> dict[str, Any]:
     _ensure_validators_loaded()
     manifest_path = run_dir / "paid_screen_run_manifest.json"
@@ -179,9 +257,17 @@ def _scan_run_dir(run_dir: Path) -> dict[str, Any]:
         except Exception as exc:  # noqa: BLE001 — audit aggregates failures
             validation_errors.append(f"{art.relative_to(run_dir)}:{exc}")
 
+    artifact_count = len(artifacts)
     fs_counts = Counter(feature_set_ids)
     unique_fs = len(fs_counts)
     duplicate_fs = {k: v for k, v in fs_counts.items() if v > 1}
+    if artifact_count >= 10 and promoted_total == 0:
+        validation_errors.append(f"zero_promoted_ids_in_artifacts:n={artifact_count}")
+    if artifact_count >= 10 and feature_plane_statuses.get("bar_stub_research_only", 0):
+        validation_errors.append(
+            "bar_stub_research_only_in_artifacts:"
+            f"n={feature_plane_statuses.get('bar_stub_research_only', 0)}"
+        )
 
     manifest_payload = manifest or {}
     expected = _as_int(manifest_payload.get("expected_work_units"))
@@ -201,7 +287,6 @@ def _scan_run_dir(run_dir: Path) -> dict[str, Any]:
         _first_present(manifest_payload, "collected_batches", "batches_collected")
     )
     expected_batches = _as_int(manifest_payload.get("expected_batches"))
-    artifact_count = len(artifacts)
     accounted = _accounted_units(completed, failed, skipped)
     done_units = accounted if accounted is not None else artifact_count
 
@@ -267,6 +352,9 @@ def _scan_run_dir_fast(run_dir: Path) -> dict[str, Any]:
     eta_seconds = None
     if remaining and units_per_hour and float(units_per_hour) > 0:
         eta_seconds = int(remaining / float(units_per_hour) * 3600)
+    sample = _sample_artifact_health(run_dir)
+    validation_errors = list(sample["sample_validation_errors"])
+    sample_artifact_count = sample["sample_artifact_count"]
 
     return {
         "run_id": run_dir.name,
@@ -287,16 +375,21 @@ def _scan_run_dir_fast(run_dir: Path) -> dict[str, Any]:
         "units_per_hour": units_per_hour,
         "eta_seconds": eta_seconds,
         "promoted_ids_in_artifacts": None,
+        "sample_artifact_count": sample_artifact_count,
+        "sample_promoted_ids": sample["sample_promoted_ids"],
+        "sample_positive_trade_rows": sample["sample_positive_trade_rows"],
         "unique_feature_set_ids": 0,
         "feature_set_id_counts": {},
         "duplicate_feature_set_ids": {},
-        "feature_plane_status_counts": {},
+        "feature_plane_status_counts": sample["sample_feature_plane_status_counts"],
+        "bar_construction_id_counts": sample["sample_bar_construction_id_counts"],
         "production_feature_set_ok": None,
         "feature_plane_production_ok": None,
-        "validation_errors": [],
-        "validation_error_count": 0,
+        "validation_error_count": len(validation_errors),
         "audit_mode": "fast_status",
-        "artifact_audit_skipped": True,
+        "artifact_audit_mode": "sampled" if sample_artifact_count else "skipped",
+        "artifact_audit_skipped": sample_artifact_count == 0,
+        "validation_errors": validation_errors[:20],
     }
 
 
@@ -403,6 +496,11 @@ def _build_status(best: dict[str, Any] | None, *, generated_at_utc: str) -> dict
         "manifest_path": (best or {}).get("manifest_path"),
         "artifact": (best or {}).get("artifact"),
         "output_path": (best or {}).get("artifact"),
+        "sample_artifact_count": (best or {}).get("sample_artifact_count"),
+        "sample_promoted_ids": (best or {}).get("sample_promoted_ids"),
+        "sample_positive_trade_rows": (best or {}).get("sample_positive_trade_rows"),
+        "feature_plane_status_counts": (best or {}).get("feature_plane_status_counts"),
+        "bar_construction_id_counts": (best or {}).get("bar_construction_id_counts"),
         "progress": progress,
         "anomalies": anomalies or None,
         "host_label": _env_first("VBT_HOST_LABEL", "HOST_LABEL"),
