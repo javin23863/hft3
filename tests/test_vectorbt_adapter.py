@@ -47,6 +47,7 @@ from backtest_pipeline.src.vectorbt_adapter import (
     ScreeningArtifactError,
     ParameterSpaceArtifactError,
     _rust_required_for_scope,
+    _fs_v1_required_for_scope,
 )
 from research_pipeline.types import CandidateModel
 
@@ -1246,6 +1247,94 @@ class TestFilterCandidates:
         assert artifact["stop_reasons"] == ["rust_runtime_proof_missing_fail_closed"]
         assert artifact["rejected"][0]["rejection_reason_or_null"] == "rust_runtime_proof_missing_fail_closed"
 
+    @pytest.mark.parametrize("prefer_fs_v1_path", [True, False])
+    def test_paid_compute_scope_requires_fs_v1_context_before_loader(
+        self,
+        monkeypatch,
+        tmp_path,
+        prefer_fs_v1_path,
+    ):
+        from backtest_pipeline.src import fs_v1_screen_path, vectorbt_adapter
+
+        monkeypatch.setattr(vectorbt_adapter, "_has_vectorbt", True)
+        monkeypatch.setattr(vectorbt_adapter, "_vectorbt_version", "1.0.0")
+        monkeypatch.setattr(vectorbt_adapter, "_rust_engine_available", True)
+        monkeypatch.setattr(vectorbt_adapter, "_VECTORBT_ENGINE_RUNTIME_PROOF", True)
+
+        calls = {"resolver": 0, "loader": 0, "signal": 0}
+
+        def resolve_missing_context(**_kwargs):
+            calls["resolver"] += 1
+            return None
+
+        def data_loader(*_args, **_kwargs):
+            calls["loader"] += 1
+            raise AssertionError("paid-compute fs_v1 gate must run before data load")
+
+        def signal_computer(*_args, **_kwargs):
+            calls["signal"] += 1
+            raise AssertionError("paid-compute fs_v1 gate must run before signal compute")
+
+        monkeypatch.setattr(fs_v1_screen_path, "resolve_fs_v1_screen_context", resolve_missing_context)
+
+        result = filter_candidates(
+            candidates=[_mock_candidate("HYP_5", 0.15)],
+            parsed=None,
+            event_id="SYNTHETIC",
+            repo_root=tmp_path,
+            data_loader=data_loader,
+            signal_computer=signal_computer,
+            screening_scope="paid-compute",
+            prefer_fs_v1_path=prefer_fs_v1_path,
+        )
+
+        artifact = result.to_dict()
+        validate_screening_artifact(artifact)
+        assert calls == {
+            "resolver": 1 if prefer_fs_v1_path else 0,
+            "loader": 0,
+            "signal": 0,
+        }
+        assert result.backend == "paid_scope_fs_v1_gate"
+        assert result.trials_run == 0
+        assert not result.promoted
+        assert result.stop_reasons == ["paid_scope_requires_fs_v1_context"]
+        assert result.rejected[0].reject_reason == "paid_scope_requires_fs_v1_context"
+        assert artifact["stop_reasons"] == ["paid_scope_requires_fs_v1_context"]
+        assert artifact["rejected"][0]["rejection_reason_or_null"] == "paid_scope_requires_fs_v1_context"
+        assert artifact["rejected"][0]["fs_v1_required_for_scope"] is True
+        assert artifact["rejected"][0]["fs_v1_context_resolved"] is False
+        assert artifact["rejected"][0]["prefer_fs_v1_path"] is prefer_fs_v1_path
+
+    def test_paid_compute_fs_v1_resolver_code_errors_stay_loud(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        from backtest_pipeline.src import fs_v1_screen_path, vectorbt_adapter
+
+        monkeypatch.setattr(vectorbt_adapter, "_has_vectorbt", True)
+        monkeypatch.setattr(vectorbt_adapter, "_vectorbt_version", "1.0.0")
+        monkeypatch.setattr(vectorbt_adapter, "_rust_engine_available", True)
+        monkeypatch.setattr(vectorbt_adapter, "_VECTORBT_ENGINE_RUNTIME_PROOF", True)
+
+        def broken_resolver(**_kwargs):
+            raise RuntimeError("resolver bug")
+
+        monkeypatch.setattr(fs_v1_screen_path, "resolve_fs_v1_screen_context", broken_resolver)
+
+        with pytest.raises(RuntimeError, match="resolver bug"):
+            filter_candidates(
+                candidates=[_mock_candidate("HYP_5", 0.15)],
+                parsed=None,
+                event_id="SYNTHETIC",
+                repo_root=tmp_path,
+                data_loader=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                    AssertionError("data loader must not run after resolver bug")
+                ),
+                screening_scope="paid-compute",
+            )
+
     def test_rust_preflight_reject_ids_include_symbol_idea_context(self, monkeypatch, tmp_path):
         from backtest_pipeline.src import vectorbt_adapter
 
@@ -1786,6 +1875,17 @@ class TestFilterCandidates:
         assert _rust_required_for_scope("broad_screen") is True
         assert _rust_required_for_scope("paid-compute") is True
         assert _rust_required_for_scope("paid_compute") is True
+        assert _fs_v1_required_for_scope("paid") is True
+        assert _fs_v1_required_for_scope("paid-compute") is True
+        assert _fs_v1_required_for_scope("paid_compute") is True
+        assert _fs_v1_required_for_scope("broad") is True
+        assert _fs_v1_required_for_scope("broad-screen") is True
+        assert _fs_v1_required_for_scope("broad_screen") is True
+        assert _fs_v1_required_for_scope("all-model") is True
+        assert _fs_v1_required_for_scope("all_models") is True
+        assert _fs_v1_required_for_scope("screen") is False
+        assert _fs_v1_required_for_scope("refine") is False
+        assert _fs_v1_required_for_scope("pilot") is False
 
     def test_validator_derives_rust_requirement_from_scope(self, tmp_path):
         result = filter_candidates(

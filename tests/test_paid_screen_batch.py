@@ -101,6 +101,7 @@ class TestScreenPaidBatch:
 
     def test_paid_scope_rejects_one_bar_ohlcv_before_vectorbt(self, monkeypatch):
         """A one-row paid OHLCV batch cannot trade after the no-lookahead shift."""
+        from types import SimpleNamespace
         from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
 
         ctx = make_context(screening_scope="paid_compute")
@@ -117,9 +118,21 @@ class TestScreenPaidBatch:
             "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
             _unexpected_matrix,
         )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._get_or_load_fs_v1_context",
+            lambda *_, **__: SimpleNamespace(
+                store={
+                    "ts": np.array([1], dtype=np.int64),
+                    "X": np.zeros((1, 41), dtype=float),
+                    "best_bid": np.array([100.0]),
+                    "best_ask": np.array([100.25]),
+                }
+            ),
+        )
 
         results = screen_paid_batch([unit], ctx, data_cache=cache, run_screening=True)
 
+        assert cache.hit_count == 0
         assert called["matrix"] is False
         assert len(results) == 1
         assert results[0].status == "ERROR"
@@ -128,22 +141,29 @@ class TestScreenPaidBatch:
 
     def test_paid_scope_rejects_missing_fs_v1_context_before_matrix(self, monkeypatch):
         """Paid scope must fail closed when fs/v1 context is unavailable."""
-        import numpy as np
         from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
 
         ctx = make_context(screening_scope="paid-compute")
         unit = make_unit()
         cache = BoundedLRUCache(max_entries=4, max_memory_mb=64)
-        cache.put(_batch_cache_key(ctx, unit), np.array([[1, 2, 3, 4, 5, 1_700_000_000_000.0]] * 2))
-        called = {"matrix": False}
+        cache.put(_batch_cache_key(ctx, unit), np.array([[1, 2, 3, 4, 5]]))
+        called = {"default_loader": False, "matrix": False}
 
         def _unexpected_matrix(**_kwargs):
             called["matrix"] = True
             raise AssertionError("matrix should not run when fs_v1 context is missing")
 
+        def _unexpected_default_loader(*_args, **_kwargs):
+            called["default_loader"] = True
+            raise AssertionError("default loader must not run for paid scope without fs_v1 context")
+
         monkeypatch.setattr(
             "backtest_pipeline.src.paid_screen_batch._get_or_load_fs_v1_context",
             lambda *_, **__: None,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.vectorbt_adapter._default_data_loader",
+            _unexpected_default_loader,
         )
         monkeypatch.setattr(
             "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
@@ -156,6 +176,8 @@ class TestScreenPaidBatch:
 
         results = screen_paid_batch([unit], ctx, data_cache=cache, run_screening=True)
 
+        assert cache.hit_count == 0
+        assert called["default_loader"] is False
         assert called["matrix"] is False
         assert len(results) == 1
         assert results[0].status == "ERROR"
@@ -175,16 +197,26 @@ class TestScreenPaidBatch:
         cache.put(_batch_cache_key(ctx, unit), np.array([[1, 2, 3, 4, 5, 1_700_000_000_000.0]] * 3))
         called = {"matrix": False}
 
+        expected_fs_ctx = SimpleNamespace(store={"ts": [1, 2]})
+
         def _fake_fs_ctx(*_args, **_kwargs):
-            return SimpleNamespace(store={"ts": [1, 2]})
+            return expected_fs_ctx
 
         def _unexpected_matrix(**_kwargs):
             called["matrix"] = True
             raise AssertionError("matrix should not run when fs/v1 lengths mismatch")
 
+        def _fake_load_ohlcv(unit_arg, context_arg, fs_ctx=None):
+            assert fs_ctx is expected_fs_ctx
+            return np.array([[1, 2, 3, 4, 5, 1_700_000_000_000.0]] * 3)
+
         monkeypatch.setattr(
             "backtest_pipeline.src.paid_screen_batch._get_or_load_fs_v1_context",
             _fake_fs_ctx,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._load_ohlcv_for_unit",
+            _fake_load_ohlcv,
         )
         monkeypatch.setattr(
             "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
@@ -201,11 +233,44 @@ class TestScreenPaidBatch:
         assert len(results) == 1
         assert results[0].status == "ERROR"
         assert results[0].error_category == "data_quality"
+        assert cache.hit_count == 0
         assert "paid_scope_fs_v1_ohlcv_misaligned" in str(results[0].error)
         assert "ohlcv_rows=3" in str(results[0].error)
         assert "store_rows=2" in str(results[0].error)
 
+    def test_paid_scope_reports_fs_v1_ohlcv_load_failure(self, monkeypatch):
+        """Malformed fs/v1 stores must not collapse into generic no_ohlcv_data."""
+        from types import SimpleNamespace
+        from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+
+        ctx = make_context(screening_scope="paid_compute")
+        unit = make_unit()
+        cache = BoundedLRUCache(max_entries=4, max_memory_mb=64)
+        called = {"matrix": False}
+
+        def _unexpected_matrix(**_kwargs):
+            called["matrix"] = True
+            raise AssertionError("matrix should not run when fs/v1 OHLCV load fails")
+
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._get_or_load_fs_v1_context",
+            lambda *_, **__: SimpleNamespace(store={"ts": [1, 2]}),
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            _unexpected_matrix,
+        )
+
+        results = screen_paid_batch([unit], ctx, data_cache=cache, run_screening=True)
+
+        assert called["matrix"] is False
+        assert len(results) == 1
+        assert results[0].status == "ERROR"
+        assert results[0].error_category == "data_quality"
+        assert "paid_scope_fs_v1_ohlcv_load_failed:KeyError" in str(results[0].error)
+
     def test_all_models_scope_is_paid_scope_alias(self):
+        assert _is_paid_scope("all-model")
         assert _is_paid_scope("all-models")
         assert _is_paid_scope("all_model")
         assert _is_paid_scope("all_models")
@@ -1325,7 +1390,12 @@ class TestPromotionGateWiringPlantedPass:
                 "FSV1",
                 (),
                 {
-                    "store": {"ts": [0] * 40},
+                    "store": {
+                        "ts": np.arange(40, dtype=np.int64),
+                        "X": np.zeros((40, 41), dtype=float),
+                        "best_bid": np.full(40, 100.0),
+                        "best_ask": np.full(40, 100.25),
+                    },
                     "leader_legs": [],
                     "symbol": unit.symbol,
                     "feature_latency_ms": 0.0,
