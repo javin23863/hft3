@@ -97,6 +97,7 @@ def _is_paid_scope(scope: str) -> bool:
         "broad",
         "broad-screen",
         "broad_screen",
+        "all-model",
         "all-models",
         "all_model",
         "all_models",
@@ -456,9 +457,10 @@ def _paid_scope_fs_v1_gate_error(
     return results
 
 
-def _load_ohlcv_for_unit(unit: PaidScreenUnit, context: WorkerContext):
+def _load_ohlcv_for_unit(unit: PaidScreenUnit, context: WorkerContext, fs_ctx=None):
     """Load OHLCV for one unit via symbol-aware fs_v1 or NPZ paths."""
-    fs_ctx = _try_resolve_fs_v1_context(unit, context)
+    if fs_ctx is None:
+        fs_ctx = _try_resolve_fs_v1_context(unit, context)
     if fs_ctx is not None:
         from backtest_pipeline.src.fs_v1_screen_path import ohlcv_from_feature_store
 
@@ -769,13 +771,38 @@ def screen_paid_batch(
     # Load OHLCV once for the shared (symbol, event_id) batching key.
     profiler.start_stage("npz_discovery")
     representative = units[0]
+    paid_screening_scope = run_screening and _is_paid_scope(context.screening_scope)
+    fs_v1_ctx = None
+    if paid_screening_scope:
+        fs_v1_ctx = _get_or_load_fs_v1_context(
+            representative, context, data_cache, profiler
+        )
+        if fs_v1_ctx is None:
+            profiler.end_stage("npz_discovery")
+            return _paid_scope_fs_v1_gate_error(
+                units=units,
+                context=context,
+                reason="paid_scope_requires_fs_v1_context",
+                profiler=profiler,
+                ohlcv_cache_state=False,
+            )
+        if use_lru:
+            pre_hits = data_cache.hit_count
+            pre_misses = data_cache.miss_count
     cache_key = ohlcv_data_cache_key(representative, context)
-    ohlcv = _cache_get(data_cache, cache_key)
-    ohlcv_from_cache = ohlcv is not None
+    if paid_screening_scope:
+        ohlcv = None
+        ohlcv_from_cache = False
+    else:
+        ohlcv = _cache_get(data_cache, cache_key)
+        ohlcv_from_cache = ohlcv is not None
     if ohlcv is None:
         try:
-            ohlcv = _load_ohlcv_for_unit(representative, context)
-            if ohlcv is not None:
+            if fs_v1_ctx is not None:
+                ohlcv = _load_ohlcv_for_unit(representative, context, fs_ctx=fs_v1_ctx)
+            else:
+                ohlcv = _load_ohlcv_for_unit(representative, context)
+            if ohlcv is not None and not paid_screening_scope:
                 _cache_put(data_cache, cache_key, ohlcv)
                 if not use_lru:
                     profiler.cache_misses += 1
@@ -787,6 +814,15 @@ def screen_paid_batch(
                 "npz_load", e,
                 f"batch_{representative.symbol}_{representative.event_id}",
                 cache_state={"hit": False})
+            if paid_screening_scope:
+                profiler.end_stage("npz_discovery")
+                return _paid_scope_fs_v1_gate_error(
+                    units=units,
+                    context=context,
+                    reason=f"paid_scope_fs_v1_ohlcv_load_failed:{type(e).__name__}",
+                    profiler=profiler,
+                    ohlcv_cache_state=False,
+                )
             ohlcv = None
     else:
         if not use_lru:
@@ -815,7 +851,7 @@ def screen_paid_batch(
             ))
         return results
 
-    if run_screening and _is_paid_scope(context.screening_scope):
+    if paid_screening_scope:
         ohlcv_rows = _ohlcv_row_count(ohlcv)
         if ohlcv_rows < 2:
             error = f"insufficient_ohlcv_bars_for_paid_screen:min=2 got={ohlcv_rows}"
@@ -840,18 +876,12 @@ def screen_paid_batch(
         return _resolve_models_without_screening(units, context, profiler)
 
     # v1 screening auto-selects fs_v1 signal computer; v2 matrix path must too.
-    fs_v1_ctx = _get_or_load_fs_v1_context(
-        representative, context, data_cache, profiler
-    )
-    if run_screening and _is_paid_scope(context.screening_scope):
-        if fs_v1_ctx is None:
-            return _paid_scope_fs_v1_gate_error(
-                units=units,
-                context=context,
-                reason="paid_scope_requires_fs_v1_context",
-                profiler=profiler,
-                ohlcv_cache_state=ohlcv_from_cache,
-            )
+    if fs_v1_ctx is None:
+        fs_v1_ctx = _get_or_load_fs_v1_context(
+            representative, context, data_cache, profiler
+        )
+    if paid_screening_scope:
+        # Paid scope reached this point only after the up-front fs_v1 gate.
         if not _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_v1_ctx):
             return _paid_scope_fs_v1_gate_error(
                 units=units,

@@ -76,6 +76,14 @@ _RUST_REQUIRED_SCOPES = {
     "all_model",
     "all_models",
 }
+_FS_V1_REQUIRED_SCOPES = {
+    "paid",
+    "paid_compute",
+    "broad",
+    "broad_screen",
+    "all_model",
+    "all_models",
+}
 
 _VECTORBT_ENGINE_RUNTIME_PROOF: Optional[bool] = None
 
@@ -230,6 +238,10 @@ def _normalise_screening_scope(scope: str) -> str:
 
 def _rust_required_for_scope(scope: str) -> bool:
     return _normalise_screening_scope(scope) in _RUST_REQUIRED_SCOPES
+
+
+def _fs_v1_required_for_scope(scope: str) -> bool:
+    return _normalise_screening_scope(scope) in _FS_V1_REQUIRED_SCOPES
 
 
 def _screening_engine_metadata(screening_scope: str = "pilot") -> Dict[str, Any]:
@@ -1440,6 +1452,10 @@ def _normalise_rejected_screening_row(
         "missing_budget_dimension",
         "memory_monitor_status",
         "budget_stop_reason",
+        "fs_v1_required_for_scope",
+        "fs_v1_context_resolved",
+        "prefer_fs_v1_path",
+        "fs_v1_resolution_error",
     ):
         if extra_field in metrics:
             row[extra_field] = metrics[extra_field]
@@ -3152,20 +3168,65 @@ def filter_candidates(
     fs_v1_ctx = None
     research_clock = _resolve_research_clock(candidates)
     screen_symbol = _resolve_screen_symbol(candidates, symbol)
+    fs_v1_required = _fs_v1_required_for_scope(screening_scope)
+    fs_v1_resolution_error: Optional[str] = None
     if prefer_fs_v1_path and candidates:
-        from backtest_pipeline.src.fs_v1_screen_path import (
-            build_fs_v1_signal_computer,
-            ohlcv_from_feature_store,
-            resolve_fs_v1_screen_context,
-        )
+        try:
+            from backtest_pipeline.src.fs_v1_screen_path import (
+                build_fs_v1_signal_computer,
+                ohlcv_from_feature_store,
+                resolve_fs_v1_screen_context,
+            )
 
-        fs_v1_ctx = resolve_fs_v1_screen_context(
-            repo_root=repo_root,
-            event_id=event_id,
-            symbol=screen_symbol,
-            feature_store_root_override=feature_store_root,
-            feature_latency_ms=feature_latency_ms,
+            fs_v1_ctx = resolve_fs_v1_screen_context(
+                repo_root=repo_root,
+                event_id=event_id,
+                symbol=screen_symbol,
+                feature_store_root_override=feature_store_root,
+                feature_latency_ms=feature_latency_ms,
+            )
+        except (ImportError, ModuleNotFoundError, OSError, ValueError) as exc:
+            if not fs_v1_required:
+                raise
+            fs_v1_resolution_error = type(exc).__name__
+            logger.warning(
+                "fs_v1 context resolution failed for required screening scope %s",
+                screening_scope,
+                exc_info=True,
+            )
+
+    if fs_v1_required and fs_v1_ctx is None:
+        stop_reason = "paid_scope_requires_fs_v1_context"
+        result = _new_filter_result(
+            backend="paid_scope_fs_v1_gate",
+            run_id=f"paid_scope_fs_v1_gate_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
+            candidates=candidates,
+            grid=grid,
+            trials_run=0,
+            stop_reasons=[stop_reason],
+            screening_scope=screening_scope,
+            max_total_trials=max_total_trials,
+            run_budget=budget,
         )
+        for cand in candidates:
+            row_id = _pretrial_rejection_id(cand, stop_reason)
+            result.rejected.append(RejectedCandidate(
+                candidate_id=row_id,
+                hypothesis_id=cand.model_id,
+                reject_reason=stop_reason,
+                metric_values={
+                    **_base_candidate_metric_values(cand),
+                    "fs_v1_required_for_scope": True,
+                    "fs_v1_context_resolved": False,
+                    "prefer_fs_v1_path": bool(prefer_fs_v1_path),
+                    **(
+                        {"fs_v1_resolution_error": fs_v1_resolution_error}
+                        if fs_v1_resolution_error
+                        else {}
+                    ),
+                },
+            ))
+        return result
 
     if fs_v1_ctx is not None:
         ohlcv = ohlcv_from_feature_store(fs_v1_ctx.store)
