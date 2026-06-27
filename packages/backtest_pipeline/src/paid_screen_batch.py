@@ -881,14 +881,7 @@ def screen_paid_batch(
             representative, context, data_cache, profiler
         )
     if paid_screening_scope:
-        if fs_v1_ctx is None:
-            return _paid_scope_fs_v1_gate_error(
-                units=units,
-                context=context,
-                reason="paid_scope_requires_fs_v1_context",
-                profiler=profiler,
-                ohlcv_cache_state=ohlcv_from_cache,
-            )
+        # Paid scope reached this point only after the up-front fs_v1 gate.
         if not _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_v1_ctx):
             return _paid_scope_fs_v1_gate_error(
                 units=units,
