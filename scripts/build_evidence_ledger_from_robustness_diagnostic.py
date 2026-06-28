@@ -298,8 +298,14 @@ def _has_rejected_trade_quality(report: Mapping[str, Any]) -> bool:
         if int(event.get("insufficient_trade_cell_count") or 0) > 0:
             return True
         reasons = event.get("reasons")
-        if isinstance(reasons, list) and any("trade" in str(reason) for reason in reasons):
-            return True
+        if isinstance(reasons, list):
+            for reason in reasons:
+                reason_text = str(reason)
+                if (
+                    "trade" in reason_text.lower()
+                    or _reason_contains(reason_text, DATA_REASON_MARKERS)
+                ):
+                    return True
     return False
 
 
@@ -369,10 +375,10 @@ def _classify_family(
     if report.get("packaging_eligible") is not True:
         if _reason_contains(reason, ADAPTER_REASON_MARKERS):
             return "adapter_contract_failure", reason, secondary
-        if _reason_contains(reason, SURFACE_REASON_MARKERS):
-            return "surface_incomplete_missing_cells", reason, secondary
         if _reason_contains(reason, DATA_REASON_MARKERS) or _has_rejected_trade_quality(report):
             return "data_quality_failure", reason, secondary
+        if _reason_contains(reason, SURFACE_REASON_MARKERS):
+            return "surface_incomplete_missing_cells", reason, secondary
         return "surface_incomplete_missing_cells", reason, secondary
 
     if not _selected_policy_pass(report, selected_surface_policy):

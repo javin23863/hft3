@@ -19,7 +19,7 @@ from test_build_robustness_raw_inputs_from_screening import (
     _first_event_fail_artifact,
     _write_event_unit_artifacts,
 )
-from scripts.build_evidence_ledger_from_robustness_diagnostic import _number
+from scripts.build_evidence_ledger_from_robustness_diagnostic import _classify_family, _number
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "build_evidence_ledger_from_robustness_diagnostic.py"
@@ -260,6 +260,42 @@ def _write_sensitivity_report(path: Path, unit_dir: Path, tmp_path: Path) -> dic
     return report
 
 
+def test_non_packaging_classification_preserves_adapter_then_data_then_surface() -> None:
+    adapter_report = _family_report(
+        model_id="ADAPTER_MODEL",
+        symbol="ES",
+        packaging_eligible=False,
+        current_pass=False,
+        reason="schema_contract_failure",
+        insufficient_trade_cells=1,
+    )
+    data_report = _family_report(
+        model_id="DATA_MODEL",
+        symbol="NQ",
+        packaging_eligible=False,
+        current_pass=False,
+        reason="incomplete_event_parameter_surface:0.937500<1.000000",
+        missing_cells=1,
+        insufficient_trade_cells=1,
+    )
+    surface_report = _family_report(
+        model_id="SURFACE_MODEL",
+        symbol="RTY",
+        packaging_eligible=False,
+        current_pass=False,
+        reason="incomplete_event_parameter_surface:0.937500<1.000000",
+        missing_cells=1,
+    )
+
+    classify_kwargs = {
+        "selected_surface_policy": "current_first_event",
+        "has_hftbacktest_eligible_candidate": False,
+    }
+    assert _classify_family(adapter_report, **classify_kwargs)[0] == "adapter_contract_failure"
+    assert _classify_family(data_report, **classify_kwargs)[0] == "data_quality_failure"
+    assert _classify_family(surface_report, **classify_kwargs)[0] == "surface_incomplete_missing_cells"
+
+
 def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> None:
     unit_dir = tmp_path / "units"
     robust_fail = _rewrite_artifact_family(
@@ -342,9 +378,7 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
         robust_refs["fold_gate_decision_json"],
     ):
         assert (tmp_path / ref).exists()
-    assert families_by_model["INCOMPLETE_MODEL"]["classification_bucket"] == (
-        "surface_incomplete_missing_cells"
-    )
+    assert families_by_model["INCOMPLETE_MODEL"]["classification_bucket"] == "data_quality_failure"
     assert families_by_model["INCOMPLETE_MODEL"]["surface_completeness_ratio"] == 0.9375
     assert families_by_model["HYP_5"]["classification_bucket"] == (
         "hftbacktest_eligible_derived"
@@ -379,7 +413,8 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     assert summary["any_hftbacktest_eligible_derived"] is True
     assert summary["families_by_bucket"]["robustness_fail_complete_evidence"] == 1
     assert summary["families_by_bucket"]["robustness_pass_needs_evidence_apply"] == 1
-    assert summary["families_by_bucket"]["surface_incomplete_missing_cells"] == 1
+    assert summary["families_by_bucket"]["surface_incomplete_missing_cells"] == 0
+    assert summary["families_by_bucket"]["data_quality_failure"] == 1
     assert summary["families_by_bucket"]["hftbacktest_eligible_derived"] == 1
 
     report = (out_dir / "robustness_bridge_readiness_report.md").read_text(encoding="utf-8")
