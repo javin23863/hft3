@@ -537,7 +537,7 @@ def render_registry_data(snapshot: RunEvidenceSnapshot) -> None:
 
 
 def render_backtest_evidence(snapshot: RunEvidenceSnapshot) -> None:
-    st.header("Smoke Diagnostics & Backtest Gates")
+    st.header("HftBacktest Runs & Backtest Gates")
     render_run_header(snapshot)
     rows = snapshot.backtest.get("rows") or []
     hft_rows = snapshot.backtest.get("hft_validation_rows") or []
@@ -549,6 +549,47 @@ def render_backtest_evidence(snapshot: RunEvidenceSnapshot) -> None:
     coverage_rows = (snapshot.system or {}).get("pipeline_coverage") or []
     coverage_by_stage = {str(row.get("stage")): row for row in coverage_rows if isinstance(row, dict)}
     rithmic_trial = snapshot.backtest.get("rithmic_trial") or {}
+    hbt_run = snapshot.backtest.get("hbt_run") or {}
+
+    if hbt_run:
+        st.subheader("HBT Runs")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Symbol", str(hbt_run.get("symbol") or "unknown"))
+        c2.metric("Event", _short_id(hbt_run.get("event_id"), keep=22))
+        c3.metric("Mechanical", str(hbt_run.get("mechanical_validity_status") or "missing").upper())
+        c4.metric("Fills", int(_num(hbt_run.get("fills_count"))))
+        c5.metric("Decision", str(hbt_run.get("decision") or "blocked").upper())
+        st.caption(f"Artifact folder: `{hbt_run.get('artifact_dir') or snapshot.root}`")
+        _display_df(
+            [hbt_run],
+            {
+                "run_id": "Run ID",
+                "artifact_dir": "Artifact folder",
+                "symbol": "Symbol",
+                "contract": "Contract",
+                "event_id": "Event",
+                "strategy_id": "Strategy",
+                "mechanical_validity_status": "Mechanical",
+                "economic_result_status": "Economic",
+                "orders_submitted": "Orders",
+                "fills_count": "Fills",
+                "fill_rate": "Fill rate",
+                "net_pnl": "Net P&L",
+                "promotion_allowed": "Promotion allowed",
+            },
+        )
+        if coverage_rows:
+            st.subheader("HBT Artifact Coverage")
+            _display_df(
+                coverage_rows,
+                {
+                    "stage": "Layer",
+                    "status": "Status",
+                    "role": "Role",
+                    "artifact_contract": "Artifact contract",
+                    "evidence": "Evidence",
+                },
+            )
 
     if rithmic_trial:
         summary = snapshot.backtest.get("summary") or {}
@@ -747,9 +788,9 @@ def render_backtest_evidence(snapshot: RunEvidenceSnapshot) -> None:
                 },
             )
 
-    if not rithmic_trial:
+    if not rithmic_trial and not hbt_run:
         st.subheader("Smoke OOS diagnostic rows")
-        st.caption("These rows come from smoke-layer purged OOS diagnostics. Full execution replay appears below only after VectorBT promotes a registry candidate.")
+        st.caption("These rows come from smoke-layer purged OOS diagnostics. Active execution replay truth appears in HBT run artifacts.")
         _display_df(
             rows,
             {

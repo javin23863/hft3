@@ -17,6 +17,7 @@ SOURCE_TO_LANE = {
     "options": "equities",
     "workbench_campaign": "workbench_campaign",
     "autonomous": "autonomous",
+    "hbt_runs": "hbt_runs",
 }
 
 ARTIFACT_NAMES = (

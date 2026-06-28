@@ -2,7 +2,11 @@
 
 # Robustness Pipeline Source Of Truth
 
-Status: implementation/data-contract source of truth for the VectorBT to HftBacktest robustness handoff. This document explains what each robustness section is constructed from, how the data is used, and which receipts justify the method. It does not claim that every producer is already wired end to end.
+Status: historical / inactive for active HftBacktest-only routing.
+Implementation/data-contract source of truth for the legacy VectorBT to
+HftBacktest robustness handoff. Active HBT runs follow
+[HFTBACKTEST_ONLY_PIPELINE_PLAN.md](HFTBACKTEST_ONLY_PIPELINE_PLAN.md) and do not
+require this handoff before replay.
 
 Last checked: 2026-06-24.
 

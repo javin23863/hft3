@@ -2,7 +2,10 @@
 
 # VectorBT Screening Engine Spec
 
-Status: scoped implementation-control specification. VBT-0, VBT-1, VBT-2, the
+Status: historical / inactive for active HftBacktest-only routing. This remains
+a scoped implementation-control specification for legacy VectorBT screening.
+The active pipeline is `docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md`, where
+VectorBT must not decide what HftBacktest receives. VBT-0, VBT-1, VBT-2, the
 bounded-budget parts of VBT-3, VBT-5 cockpit visibility, and the VBT-5a
 `run_pipeline.py` HftBacktest handoff bridge are implemented and locally
 verified; VBT-3 surface stability and VBT-4 remain open, and the full VectorBT

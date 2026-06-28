@@ -1,12 +1,15 @@
 # VectorBT research product scope map (derivative handoff)
 
-Status: derivative condensation, not canonical authority. This file exists only
-to help humans and agents navigate the current paid JSONL/Vast thread. The
+Status: historical / inactive for active HftBacktest-only routing. This file is
+a derivative condensation, not canonical authority. It exists only
+to help humans and agents navigate the legacy paid JSONL/Vast thread. The
 canonical product authority remains [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md),
 [VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md),
 [MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md](../cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md),
 and [FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](FEATURE_LITERATURE_TRACEABILITY_MATRIX.md).
-If this file conflicts with those docs, those docs win. Update those docs first.
+If this file conflicts with those docs or
+[HFTBACKTEST_ONLY_PIPELINE_PLAN.md](HFTBACKTEST_ONLY_PIPELINE_PLAN.md), those docs
+win. Update those docs first.
 Read this before [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md)
 only as a handoff map.
 

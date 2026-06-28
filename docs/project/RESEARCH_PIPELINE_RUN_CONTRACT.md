@@ -1,6 +1,9 @@
 # Research Pipeline Run Contract
 
-Status: active contract for the one-input/one-output hft3 research pipeline.
+Status: historical / superseded for active HftBacktest-only routing. The active
+pipeline now follows
+[HFTBACKTEST_ONLY_PIPELINE_PLAN.md](HFTBACKTEST_ONLY_PIPELINE_PLAN.md) and writes
+current backtest truth under `artifacts/hbt_runs/<run_id>/`.
 
 Authority: `docs/vault/UNIFIED_RESEARCH_PIPELINE.md`,
 `docs/vault/RESEARCH_ENTRYPOINTS.md`, `docs/project/AUTORESEARCH_PIPELINE_UPGRADE_PLAN.md`.

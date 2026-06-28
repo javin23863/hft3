@@ -1,6 +1,8 @@
 # VectorBT paid screen — post-gate execution playbook
 
-Status: **authoritative sequence after Phase B smoke passes** (zero unit errors, lookahead proof present).
+Status: **Historical / inactive for active HftBacktest-only routing.** Legacy
+authoritative sequence after Phase B smoke passes (zero unit errors, lookahead
+proof present).
 Companion: [VBT_PAID_SCREEN_RUNBOOK.md](VBT_PAID_SCREEN_RUNBOOK.md) (Phases A–E overview).
 
 **Rule:** Do not rent Vast 256 vCPU until `runtime/reports/paid_screen_ready_gate.json` has `ready_for_full_run: true`. Smoke pass alone is not enough — Phase C must write the gate file with exit code 0.

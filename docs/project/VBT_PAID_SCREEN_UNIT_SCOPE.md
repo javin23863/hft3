@@ -1,6 +1,8 @@
 ﻿# VectorBT paid-screen unit scope (authoritative)
 
-Status: binding scope for Phase D full rent. Supersedes ad-hoc CPI+NFP / single-hypothesis JSONL.
+Status: historical / inactive for active HftBacktest-only work. This remains a
+Phase D VectorBT rent reference, not an active HBT prerequisite. The current
+active path is [HFTBACKTEST_ONLY_PIPELINE_PLAN.md](HFTBACKTEST_ONLY_PIPELINE_PLAN.md).
 
 Authority: [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md), [CME_M6_SWEEP_CONTROL_PLAN.md](../cockpit/CME_M6_SWEEP_CONTROL_PLAN.md) (symbol universe), [VBT_PAID_SCREEN_RUNBOOK.md](VBT_PAID_SCREEN_RUNBOOK.md), [VBT_MODEL_ONTOLOGY.md](VBT_MODEL_ONTOLOGY.md).
 
@@ -70,9 +72,11 @@ Record that line count and the matching git/hash/worker/abort fields in `runtime
 
 Historical reference (different job shape): M6 `run_event_universe` full scope reported ~28,136 JSONL rows with one latency band and all hypotheses inside each unit ΓÇö not comparable 1:1 to VectorBT per-hypothesis units.
 
-## Downstream HftBacktest realism
+## Historical downstream HftBacktest realism
 
-HftBacktest is the heavier downstream realism pass on **VectorBT promoted outputs** ΓÇö not a prerequisite to unit generation or Vast full rent.
+In this historical VectorBT rent path, HftBacktest was the heavier downstream
+realism pass on **VectorBT promoted outputs**. Active HftBacktest-only runs do
+not require Stage A survivor files, VectorBT paid units, or screening artifacts.
 
 ## Vast workers
 

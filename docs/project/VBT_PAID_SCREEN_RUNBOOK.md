@@ -1,6 +1,10 @@
 # VectorBT paid-compute screen runbook (Vast 256 vCPU)
 
-Status: operational runbook for corrected VectorBT→HftBacktest discovery path.
+Status: historical / inactive for active HftBacktest-only routing. Operational
+runbook for the legacy corrected VectorBT→HftBacktest discovery path.
+Active HBT runs follow
+[HFTBACKTEST_ONLY_PIPELINE_PLAN.md](HFTBACKTEST_ONLY_PIPELINE_PLAN.md) and do not
+require paid-screen artifacts.
 Authority: [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md), [VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md), [RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md), [UNIFIED_RESEARCH_PIPELINE.md](../vault/UNIFIED_RESEARCH_PIPELINE.md) (stages 0–2), [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md).
 
 **Do not** use `run_event_universe` as broad discovery on rented compute. Paid rent starts only after gated pilot + smoke passes.

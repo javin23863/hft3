@@ -2,9 +2,12 @@
 
 # Opportunity Research Spec
 
-Status: planning-control correction after the 2026-06-16 CME M6 Vast sweep.
-This is not a new pipeline. It defines the research question the existing
-pipeline, replay, feature, robustness, and cockpit objects must answer.
+Status: historical planning-control correction after the 2026-06-16 CME M6 Vast
+sweep; active pipeline routing is superseded by
+[HFTBACKTEST_ONLY_PIPELINE_PLAN.md](HFTBACKTEST_ONLY_PIPELINE_PLAN.md). This
+document still defines research questions and feature-scope lessons. Treat
+VectorBT-first or Stage-A-first routing references below as historical unless an
+owner explicitly re-enables the legacy path.
 
 2026-06-16 M6/Vast lesson: broad `run_event_universe` was the wrong first
 discovery path. Discovery must start with a first-class VectorBT/workbench
