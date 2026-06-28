@@ -44,7 +44,13 @@ def _event_contract() -> tuple[np.dtype, dict[str, int]]:
     return dtype, constants
 
 
-def _write_valid_l3_npz(path: Path, *, base_exch_ts: int = 1_000_000_000) -> Path:
+def _write_valid_l3_npz(
+    path: Path,
+    *,
+    base_exch_ts: int = 1_000_000_000,
+    include_timestamp_units: bool = True,
+    include_trade_event: bool = False,
+) -> Path:
     dtype, constants = _event_contract()
     rows = [
         {
@@ -68,11 +74,27 @@ def _write_valid_l3_npz(path: Path, *, base_exch_ts: int = 1_000_000_000) -> Pat
             "fval": 0.0,
         },
     ]
+    if include_trade_event:
+        rows.append(
+            {
+                "ev": constants["TRADE_EVENT"] | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+                "exch_ts": base_exch_ts + 750,
+                "local_ts": base_exch_ts + 850,
+                "px": 5000.25,
+                "qty": 1.0,
+                "order_id": 1002,
+                "ival": 0,
+                "fval": 0.0,
+            }
+        )
     events = np.zeros(len(rows), dtype=dtype)
     for index, row in enumerate(rows):
         for field, value in row.items():
             events[index][field] = value
-    np.savez_compressed(path, data=events, timestamp_units="nanoseconds")
+    payload = {"data": events}
+    if include_timestamp_units:
+        payload["timestamp_units"] = "nanoseconds"
+    np.savez_compressed(path, **payload)
     return path
 
 
@@ -138,6 +160,24 @@ def _install_fake_hftbacktest(monkeypatch: pytest.MonkeyPatch) -> None:
         def trading_qty_fee_model(self, _maker: float, _taker: float) -> "RecordingAsset":
             return self
 
+    class RecordingOrderDict:
+        def __init__(self, order_id: int) -> None:
+            self.order_id = order_id
+
+        def get(self, order_id: int) -> dict[str, object] | None:
+            if order_id != self.order_id:
+                return None
+            return {
+                "status": 1,
+                "qty": 1.0,
+                "leaves_qty": 1.0,
+                "exec_qty": 0.0,
+                "price": 5000.0,
+                "exec_price": 0.0,
+                "exch_timestamp": 1_000_000_000,
+                "local_timestamp": 1_000_000_100,
+            }
+
     class RecordingBacktest:
         def __init__(self, _assets: list[RecordingAsset]) -> None:
             self.steps = 0
@@ -167,19 +207,8 @@ def _install_fake_hftbacktest(monkeypatch: pytest.MonkeyPatch) -> None:
         def wait_order_response(self, *_args: object) -> int:
             return 0
 
-        def orders(self, _asset_no: int) -> dict[int, dict[str, object]]:
-            return {
-                self.order_id: {
-                    "status": 1,
-                    "qty": 1.0,
-                    "leaves_qty": 1.0,
-                    "exec_qty": 0.0,
-                    "price": 5000.0,
-                    "exec_price": 0.0,
-                    "exch_timestamp": 1_000_000_000,
-                    "local_timestamp": 1_000_000_100,
-                }
-            }
+        def orders(self, _asset_no: int) -> RecordingOrderDict:
+            return RecordingOrderDict(self.order_id)
 
         def cancel(self, *_args: object) -> int:
             return 0
@@ -272,6 +301,29 @@ def test_validation_records_l3_hftbacktest_contract(
     assert validation["timestamp_units"] == "nanoseconds"
     assert validation["official_validate_event_order_status"] == "pass"
     assert validation["l2_l3_classification"] == "l3_mbo"
+
+
+def test_validation_accepts_converted_lake_l3_with_trades_and_inferred_ns(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    base_ns = int(datetime(2024, 9, 11, 12, 29, tzinfo=timezone.utc).timestamp() * 1_000_000_000)
+    data_path = _write_valid_l3_npz(
+        tmp_path / "event_l3_lake.npz",
+        base_exch_ts=base_ns,
+        include_timestamp_units=False,
+        include_trade_event=True,
+    )
+    snapshot_path = _write_valid_l3_npz(tmp_path / "snapshot.npz", base_exch_ts=base_ns)
+
+    validation = validate_hftbacktest_only_input(_config(tmp_path, data_path, snapshot_path))
+
+    assert validation["data_validation_status"] == "pass"
+    assert validation["timestamp_units"] == "nanoseconds"
+    assert validation["l2_l3_classification"] == "l3_mbo"
+    assert "TIMESTAMP_UNITS_UNPROVEN" not in validation["fail_closed_reasons"]
+    assert "L2_L3_MISMATCH" not in validation["fail_closed_reasons"]
 
 
 def test_validation_allows_current_year_epoch_data_before_validation_clock(

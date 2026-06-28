@@ -143,6 +143,8 @@ def validate_hftbacktest_only_input(config: HftBacktestOnlyRunConfig) -> dict[st
                 reasons.append("EVENT_DTYPE_INVALID")
         if row_count <= 0:
             reasons.append("EVENT_ARRAY_EMPTY")
+        if timestamp_units == "unproven" and _looks_like_epoch_ns(events["exch_ts"]) and _looks_like_epoch_ns(events["local_ts"]):
+            timestamp_units = "nanoseconds"
         if timestamp_units != "nanoseconds":
             reasons.append("TIMESTAMP_UNITS_UNPROVEN")
 
@@ -414,7 +416,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             )
             active_orders = hbt.orders(0)
             api_calls.append("HashMapMarketDepthBacktest.orders")
-            order_obj = active_orders.get(order_id) if isinstance(active_orders, Mapping) else None
+            order_obj = _get_order(active_orders, order_id)
             order_snapshot = _order_snapshot(order_obj)
             if order_snapshot:
                 orders.append({"order_id": order_id, "event_type": "ORDER_STATE", **order_snapshot})
@@ -777,15 +779,19 @@ def _classify_events(events: Any, constants: Mapping[str, int]) -> str:
         constants["MODIFY_ORDER_EVENT"],
         constants["FILL_EVENT"],
     }
-    l2_types = {constants["DEPTH_EVENT"], constants.get("TRADE_EVENT", 2)}
+    trade_type = constants.get("TRADE_EVENT", 2)
+    l2_depth_types = {constants["DEPTH_EVENT"]}
+    neutral_types = {trade_type}
     has_l3 = bool(ev_types & l3_types)
-    has_l2 = bool(ev_types & l2_types)
-    has_unknown = bool(ev_types - l3_types - l2_types)
+    has_depth = bool(ev_types & l2_depth_types)
+    has_unknown = bool(ev_types - l3_types - l2_depth_types - neutral_types)
     if has_unknown:
         return "unknown_rejected"
-    if has_l2 and has_l3:
+    if has_depth and has_l3:
         return "mixed_rejected"
-    return "l3_mbo" if has_l3 else "l2_mbp"
+    if has_l3:
+        return "l3_mbo"
+    return "l2_mbp" if has_depth or trade_type in ev_types else "unknown_rejected"
 
 
 def _event_type_counts(events: Any) -> dict[str, int]:
@@ -844,6 +850,15 @@ def _order_snapshot(order: Any) -> dict[str, Any]:
         "exch_timestamp": _int_field(order, "exch_timestamp"),
         "local_timestamp": _int_field(order, "local_timestamp"),
     }
+
+
+def _get_order(orders: Any, order_id: int) -> Any:
+    getter = getattr(orders, "get", None)
+    if callable(getter):
+        return getter(order_id)
+    if isinstance(orders, Mapping):
+        return orders.get(order_id)
+    return None
 
 
 def _field_value(obj: Any, field_name: str, default: Any = None) -> Any:
