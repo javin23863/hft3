@@ -2,13 +2,14 @@
 
 # HftBacktest-Only Active Pipeline Plan
 
-Status: accepted planning-control decision, implementation pending.
+Status: accepted planning-control decision, implementation in progress.
 Date: 2026-06-29.
 
 This document records the active direction: HftBacktest becomes the source of
 truth for the current backtesting path. VectorBT is frozen as inactive
-infrastructure for this plan. This is a plan document, not evidence that the
-repo implementation already satisfies the new path.
+infrastructure for this plan. The repo now has an initial HftBacktest-only
+active-path slice; remaining workbench and historical-doc reclassification work
+is still tracked below.
 
 ## Authority And Supersession
 
@@ -479,6 +480,14 @@ Was it rejected, observed, or promoted?
 ```
 
 ## Smallest Implementation Sequence
+
+Implementation progress as of 2026-06-29:
+
+- Step 1 active CLI freeze landed in `scripts/run_pipeline.py`.
+- Steps 2-4 initial active-path slice landed in
+  `packages/backtest_pipeline/src/hftbacktest_only_pipeline.py` and
+  `scripts/run_hftbacktest_only.py`.
+- Step 5 and Step 6 remain open.
 
 ### Step 1: Freeze VectorBT Active Path
 
