@@ -506,7 +506,13 @@ def test_vast_launchers_do_not_auto_prefer_forensic_ready_gate() -> None:
     assert '[[ ! "$VBT_MAX_UNITS_PER_BATCH" =~ ^[0-9]+$ ]]' in ssh_script
     assert "ERROR: VBT_MAX_UNITS_PER_BATCH must be a non-negative integer" in ssh_script
     assert 'printf -v REMOTE_VBT_MAX_UNITS_PER_BATCH "%q" "$VBT_MAX_UNITS_PER_BATCH"' in ssh_script
-    assert "VBT_READY_GATE_FILE=$VBT_READY_GATE_FILE VBT_MAX_UNITS_PER_BATCH=$REMOTE_VBT_MAX_UNITS_PER_BATCH bash scripts/run_vbt_paid_screen_vast_full.sh" in ssh_script
+    assert 'SKIP_AGGREGATE_SCREENING_ARTIFACT="${VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT-1}"' in launch_script
+    assert "skip_aggregate_screening_artifact" in launch_script
+    assert "--skip-aggregate-screening-artifact" in launch_script
+    assert 'VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT="${VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT-1}"' in ssh_script
+    assert "ERROR: VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT must be boolean" in ssh_script
+    assert 'printf -v REMOTE_VBT_SKIP_AGGREGATE "%q" "$VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT"' in ssh_script
+    assert "VBT_READY_GATE_FILE=$VBT_READY_GATE_FILE VBT_MAX_UNITS_PER_BATCH=$REMOTE_VBT_MAX_UNITS_PER_BATCH VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT=$REMOTE_VBT_SKIP_AGGREGATE bash scripts/run_vbt_paid_screen_vast_full.sh" in ssh_script
 
 
 def test_phase_b_smoke_does_not_depend_on_full_run_ready_gate() -> None:

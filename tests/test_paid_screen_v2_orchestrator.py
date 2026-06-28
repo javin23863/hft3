@@ -245,6 +245,46 @@ def _resolve_vast_launch_hashes(
     return events_hash, lake_hash
 
 
+def _write_minimal_v2_run_inputs(
+    tmp_path: Path,
+) -> tuple[Path, Path, Path, Path, Path]:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    events_csv = repo / "events.csv"
+    events_csv.write_text("event_id\nE1\n", encoding="utf-8")
+    units_path = repo / "units.jsonl"
+    units_path.write_text(
+        json.dumps(
+            {
+                "unit_id": "u0",
+                "model_id": "HYP_5",
+                "hyp_id": 5,
+                "symbol": "MES.v.0",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "event_type": "CPI",
+                "research_split": "discovery_confirmation",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    out_dir = repo / "out"
+    gate_path = repo / "gate.json"
+    gate_path.write_text(
+        json.dumps({
+            "errors": [],
+            "ready_for_full_run": True,
+            "lookahead_pytest_tail": "1 passed in 0.01s",
+            "pilot_hashes": {
+                "events_csv_hash": "events_csv_hash",
+                "lake_manifest_hash": "explicit_lake_hash",
+            },
+        }),
+        encoding="utf-8",
+    )
+    return repo, events_csv, units_path, out_dir, gate_path
+
+
 class TestWorkerAffinity:
     def test_parse_worker_affinity_accepts_ranges_and_lists(self):
         v2 = _load_v2_module()
@@ -1155,6 +1195,73 @@ class TestV2RunHashResolution:
         out = capsys.readouterr().out
         assert "[resume] skipping 1 units with valid artifacts" in out
         assert "DRY_RUN units=1 after_resume=0 batches=0" in out
+
+    def test_main_resume_all_skipped_can_skip_aggregate(
+        self, tmp_path, monkeypatch, capsys,
+    ):
+        v2 = _load_v2_module()
+        unit = _matching_paid_batch_unit()
+        units_path = tmp_path / "units.jsonl"
+        units_path.write_text(
+            json.dumps(
+                {
+                    "unit_id": unit.unit_id,
+                    "model_id": unit.model_id,
+                    "hyp_id": unit.hyp_id,
+                    "symbol": unit.symbol,
+                    "event_id": unit.event_id,
+                    "event_type": unit.event_type,
+                    "research_split": unit.research_split,
+                    "research_clock": unit.research_clock,
+                    "context_set_id": unit.context_set_id,
+                    "declared_context_sets": list(unit.declared_context_sets),
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        out_dir = tmp_path / "out"
+        _copy_valid_unit_artifact(
+            out_dir / "units" / unit.unit_id / "screening_artifact.json",
+            repo_root=_REPO,
+            unit=unit,
+        )
+
+        def fail_if_called(*_args, **_kwargs):
+            raise AssertionError("aggregate writer should not be called")
+
+        monkeypatch.setattr(v2, "write_aggregate_screening_artifact", fail_if_called)
+
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(_REPO),
+                "--resume",
+                "--events-csv-hash",
+                "not_applicable_for_vectorbt_pilot",
+                "--lake-manifest-hash",
+                "pilot_requires_lake_manifest_before_screen",
+                "--vectorbt-scope",
+                "pilot",
+                "--skip-aggregate-screening-artifact",
+            ],
+        )
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Skipping aggregate screening artifact" in out
+        manifest = json.loads(
+            (out_dir / "paid_screen_run_manifest.json").read_text(encoding="utf-8")
+        )
+        assert manifest["status"] == "complete"
+        assert manifest["completed_work_units"] == 1
+        assert manifest["aggregate_status"] == "skipped"
+        assert manifest["aggregate_path"] is None
 
     def test_main_fails_closed_without_hash_sources(self, tmp_path):
         v2 = _load_v2_module()
@@ -2135,6 +2242,149 @@ class TestPipelinedDispatchAndDrain:
 
 
 class TestOrchestratorMainExit:
+    def _patch_single_ok_batch(self, v2, monkeypatch):
+        def fake_spawn(_ctx, _worker_args, _batch_queue, _result_queue):
+            return _FakeProcess(pid=82_000, exitcode=0, alive=False)
+
+        def fake_dispatch(
+            workers,
+            batch_queue,
+            result_queue,
+            batches,
+            expected_batches,
+            **kwargs,
+        ):
+            assert expected_batches == 1
+            on_batch = kwargs.get("on_batch_collected")
+            batch_id, _units = batches[0]
+            results = [UnitScreeningResult(unit_id="u0", status="OK")]
+            summary = {"stage_timings": {}}
+            if on_batch is not None:
+                on_batch(batch_id, results, summary)
+            v2._shutdown_workers(
+                workers,
+                batch_queue,
+                total_timeout_seconds=v2._POST_DRAIN_EXIT_BUDGET_SECONDS,
+            )
+            v2._close_mp_queues(batch_queue, result_queue)
+            return [(batch_id, results, summary)], None
+
+        monkeypatch.setattr(v2, "_spawn_paid_screen_worker", fake_spawn)
+        monkeypatch.setattr(v2, "_pipelined_dispatch_and_drain", fake_dispatch)
+
+    def test_skip_aggregate_screening_artifact_skips_writer_and_marks_manifest(
+        self, tmp_path, monkeypatch, capsys,
+    ):
+        v2 = _load_v2_module()
+        self._patch_single_ok_batch(v2, monkeypatch)
+
+        def fail_if_called(*_args, **_kwargs):
+            raise AssertionError("aggregate writer should not be called")
+
+        monkeypatch.setattr(v2, "write_aggregate_screening_artifact", fail_if_called)
+        repo, events_csv, units_path, out_dir, gate_path = (
+            _write_minimal_v2_run_inputs(tmp_path)
+        )
+
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--events-csv",
+                str(events_csv),
+                "--events-csv-hash",
+                "events_csv_hash",
+                "--lake-manifest-hash",
+                "explicit_lake_hash",
+                "--workers",
+                "1",
+                "--ready-gate-file",
+                str(gate_path),
+                "--skip-aggregate-screening-artifact",
+            ],
+        )
+
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert "Skipping aggregate screening artifact" in captured.out
+        manifest = json.loads(
+            (out_dir / "paid_screen_run_manifest.json").read_text(encoding="utf-8")
+        )
+        assert manifest["status"] == "complete"
+        assert manifest["aggregate_status"] == "skipped"
+        assert manifest["aggregate_path"] is None
+        assert manifest["aggregate_started_at_utc"] is not None
+        assert manifest["aggregate_finished_at_utc"] is not None
+        assert manifest["aggregate_elapsed_seconds"] >= 0.0
+
+    def test_default_aggregate_runs_before_terminal_manifest(
+        self, tmp_path, monkeypatch,
+    ):
+        v2 = _load_v2_module()
+        self._patch_single_ok_batch(v2, monkeypatch)
+        repo, events_csv, units_path, out_dir, gate_path = (
+            _write_minimal_v2_run_inputs(tmp_path)
+        )
+        aggregate_calls: list[tuple[Path, list[dict], str]] = []
+        manifest_during_aggregate: dict[str, object] = {}
+        aggregate_path = out_dir / "screening_artifact.json"
+
+        def fake_aggregate(out_arg, rows, *, finished_at_utc=None):
+            aggregate_calls.append((Path(out_arg), list(rows), str(finished_at_utc)))
+            manifest_during_aggregate.update(
+                json.loads(
+                    (Path(out_arg) / "paid_screen_run_manifest.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+            )
+            return str(aggregate_path)
+
+        monkeypatch.setattr(v2, "write_aggregate_screening_artifact", fake_aggregate)
+
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--events-csv",
+                str(events_csv),
+                "--events-csv-hash",
+                "events_csv_hash",
+                "--lake-manifest-hash",
+                "explicit_lake_hash",
+                "--workers",
+                "1",
+                "--ready-gate-file",
+                str(gate_path),
+            ],
+        )
+
+        assert rc == 0
+        assert len(aggregate_calls) == 1
+        assert aggregate_calls[0][0] == out_dir
+        assert aggregate_calls[0][1][0]["unit_id"] == "u0"
+        assert manifest_during_aggregate["status"] == "running"
+        assert manifest_during_aggregate["aggregate_status"] == "not_started"
+        manifest = json.loads(
+            (out_dir / "paid_screen_run_manifest.json").read_text(encoding="utf-8")
+        )
+        assert manifest["status"] == "complete"
+        assert manifest["aggregate_status"] == "written"
+        assert manifest["aggregate_path"] == str(aggregate_path)
+        assert manifest["aggregate_started_at_utc"] is not None
+        assert manifest["aggregate_finished_at_utc"] is not None
+        assert manifest["aggregate_elapsed_seconds"] >= 0.0
+
     def test_orchestrator_main_exits_after_drain(self, tmp_path, monkeypatch):
         """main() must terminate promptly after drain+shutdown (mocked 128 workers)."""
         v2 = _load_v2_module()
