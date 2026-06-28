@@ -8,6 +8,7 @@ closed when the family surface is incomplete.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -81,6 +82,18 @@ class MeasuredRow:
     profit_factor_missing: bool
     max_drawdown: float
     trade_count: int
+
+
+@dataclass
+class ScreeningEvidence:
+    artifact: dict[str, Any]
+    source_path: str
+    promoted_count: int
+    promoted_by_id: dict[str, Mapping[str, Any]]
+    promoted_measured: dict[str, MeasuredRow]
+    family_rows: dict[tuple[str, str, str, str, str], list[MeasuredRow]]
+    row_skip_reasons: Counter[str]
+    diagnostic_only_source: bool
 
 
 def _compact_json(payload: Mapping[str, Any]) -> str:
@@ -598,6 +611,136 @@ def _source_path(path: Path, source_root: Path | None) -> str:
         return str(resolved)
 
 
+def _collect_artifact_rows(
+    artifact: Mapping[str, Any],
+    *,
+    promoted_by_id: dict[str, Mapping[str, Any]],
+    promoted_measured: dict[str, MeasuredRow],
+    family_rows: dict[tuple[str, str, str, str, str], list[MeasuredRow]],
+    row_skip_reasons: Counter[str],
+) -> int:
+    promoted_rows = [row for row in artifact.get("promoted", []) if isinstance(row, Mapping)]
+    rejected_rows = [row for row in artifact.get("rejected", []) if isinstance(row, Mapping)]
+    for row in promoted_rows:
+        candidate_id = str(row.get("candidate_id") or "")
+        if not candidate_id:
+            continue
+        if candidate_id in promoted_by_id:
+            raise ValueError(f"duplicate_promoted_candidate_id_across_artifacts:{candidate_id}")
+        promoted_by_id[candidate_id] = row
+
+    for row in [*promoted_rows, *rejected_rows]:
+        measured, reason = _extract_measured_row(row)
+        if measured is None:
+            if reason == "family_key_missing":
+                candidate_id = str(row.get("candidate_id") or "unknown_candidate")
+                raise ValueError(f"family_key_missing:{candidate_id}")
+            row_skip_reasons[str(reason or "row_unusable")] += 1
+            continue
+        family_rows[measured.family_key].append(measured)
+
+    for row in promoted_rows:
+        measured, _reason = _extract_measured_row(row)
+        if measured is not None:
+            promoted_measured[measured.candidate_id] = measured
+    return len(promoted_rows)
+
+
+def _artifact_identity_hash(artifact: Mapping[str, Any]) -> str:
+    value = artifact.get("screening_artifact_hash")
+    if value:
+        return str(value)
+    return hashlib.sha256(_compact_json(artifact).encode("utf-8")).hexdigest()
+
+
+def _unit_artifact_set_hash(records: list[dict[str, str]]) -> str:
+    return hashlib.sha256(
+        _compact_json(
+            {
+                "schema": "hft3_unit_screening_artifact_set_v1",
+                "artifacts": records,
+            }
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _load_screening_evidence(
+    *,
+    screening_artifact_path: Path | None,
+    screening_artifact_dir: Path | None,
+    source_root: Path | None,
+) -> ScreeningEvidence:
+    if (screening_artifact_path is None) == (screening_artifact_dir is None):
+        raise ValueError("provide_exactly_one_screening_artifact_source")
+
+    promoted_by_id: dict[str, Mapping[str, Any]] = {}
+    promoted_measured: dict[str, MeasuredRow] = {}
+    family_rows: dict[tuple[str, str, str, str, str], list[MeasuredRow]] = defaultdict(list)
+    row_skip_reasons: Counter[str] = Counter()
+
+    if screening_artifact_path is not None:
+        artifact = _load_json_object(screening_artifact_path, "screening_artifact")
+        validate_screening_artifact(artifact)
+        promoted_count = _collect_artifact_rows(
+            artifact,
+            promoted_by_id=promoted_by_id,
+            promoted_measured=promoted_measured,
+            family_rows=family_rows,
+            row_skip_reasons=row_skip_reasons,
+        )
+        return ScreeningEvidence(
+            artifact=artifact,
+            source_path=_source_path(screening_artifact_path, source_root),
+            promoted_count=promoted_count,
+            promoted_by_id=promoted_by_id,
+            promoted_measured=promoted_measured,
+            family_rows=family_rows,
+            row_skip_reasons=row_skip_reasons,
+            diagnostic_only_source=False,
+        )
+
+    assert screening_artifact_dir is not None
+    artifact_paths = sorted(screening_artifact_dir.glob("**/screening_artifact.json"))
+    if not artifact_paths:
+        raise ValueError(f"screening_artifact_dir_empty:{screening_artifact_dir}")
+
+    artifact_records: list[dict[str, str]] = []
+    promoted_count = 0
+    for artifact_path in artifact_paths:
+        artifact = _load_json_object(artifact_path, "screening_artifact")
+        validate_screening_artifact(artifact)
+        artifact_records.append(
+            {
+                "path": _source_path(artifact_path, source_root),
+                "screening_artifact_hash": _artifact_identity_hash(artifact),
+            }
+        )
+        promoted_count += _collect_artifact_rows(
+            artifact,
+            promoted_by_id=promoted_by_id,
+            promoted_measured=promoted_measured,
+            family_rows=family_rows,
+            row_skip_reasons=row_skip_reasons,
+        )
+
+    artifact_set_hash = _unit_artifact_set_hash(artifact_records)
+    return ScreeningEvidence(
+        artifact={
+            "screening_artifact_hash": artifact_set_hash,
+            "screening_artifact_source": "unit_artifact_directory",
+            "unit_artifact_count": len(artifact_paths),
+            "unit_artifact_set_hash": artifact_set_hash,
+        },
+        source_path=_source_path(screening_artifact_dir, source_root),
+        promoted_count=promoted_count,
+        promoted_by_id=promoted_by_id,
+        promoted_measured=promoted_measured,
+        family_rows=family_rows,
+        row_skip_reasons=row_skip_reasons,
+        diagnostic_only_source=True,
+    )
+
+
 def _build_wfc_rows(
     *,
     rows_by_pair: dict[tuple[date, str], MeasuredRow],
@@ -910,7 +1053,7 @@ def _build_sensitivity_report(
     source_path: str,
     artifact: Mapping[str, Any],
     selected_surface_policy: str,
-    promoted_rows: list[Mapping[str, Any]],
+    promoted_count: int,
     family_reports: list[dict[str, Any]],
     row_skip_reasons: Mapping[str, int],
     family_skips: Mapping[str, str],
@@ -936,7 +1079,7 @@ def _build_sensitivity_report(
         else set()
     )
     summary = {
-        "vectorbt_promoted_count": len(promoted_rows),
+        "vectorbt_promoted_count": promoted_count,
         "model_family_count": len(family_reports),
         "packaging_eligible_family_count": sum(
             1 for report in family_reports if report.get("packaging_eligible") is True
@@ -976,6 +1119,9 @@ def _build_sensitivity_report(
         "schema": SENSITIVITY_REPORT_SCHEMA,
         "screening_artifact": source_path,
         "screening_artifact_hash": artifact.get("screening_artifact_hash"),
+        "screening_artifact_source": artifact.get("screening_artifact_source", "single_artifact"),
+        "unit_artifact_count": artifact.get("unit_artifact_count"),
+        "unit_artifact_set_hash": artifact.get("unit_artifact_set_hash"),
         "selected_surface_policy": selected_surface_policy,
         "baseline_surface_policy": "current_first_event",
         "summary": summary,
@@ -988,7 +1134,7 @@ def _build_sensitivity_report(
             "candidate_skip_sample": _sample_mapping(candidate_skips),
         },
         "attrition": {
-            "vectorbt_promoted_candidates": len(promoted_rows),
+            "vectorbt_promoted_candidates": promoted_count,
             "model_families": len(family_reports),
             "families_with_enough_events_cells_trades_data": summary[
                 "packaging_eligible_family_count"
@@ -1006,7 +1152,8 @@ def _build_sensitivity_report(
 
 def build_robustness_raw_inputs_from_screening(
     *,
-    screening_artifact_path: Path,
+    screening_artifact_path: Path | None,
+    screening_artifact_dir: Path | None = None,
     out_path: Path,
     source_root: Path | None,
     folds: int,
@@ -1023,7 +1170,8 @@ def build_robustness_raw_inputs_from_screening(
     if surface_policy not in SURFACE_POLICIES:
         raise ValueError(f"unsupported_surface_policy:{surface_policy}")
     diagnostic_only_policy = surface_policy != "current_first_event"
-    if diagnostic_only_policy and sensitivity_report_out is None:
+    diagnostic_only_source = screening_artifact_dir is not None
+    if (diagnostic_only_policy or diagnostic_only_source) and sensitivity_report_out is None:
         sensitivity_report_out = DEFAULT_SENSITIVITY_REPORT_OUT
     if min_packaged < 0:
         raise ValueError("min_packaged_must_be_non_negative")
@@ -1035,34 +1183,22 @@ def build_robustness_raw_inputs_from_screening(
         raise ValueError("min_parameter_combinations_must_be_positive")
     if not (0.0 < min_completeness <= 1.0):
         raise ValueError("min_completeness_must_be_in_(0,1]")
-    if screening_artifact_path.resolve() == out_path.resolve():
+    if screening_artifact_path is not None and screening_artifact_path.resolve() == out_path.resolve():
         raise ValueError("out_must_not_overwrite_screening_artifact")
-    artifact = _load_json_object(screening_artifact_path, "screening_artifact")
-    validate_screening_artifact(artifact)
+    evidence = _load_screening_evidence(
+        screening_artifact_path=screening_artifact_path,
+        screening_artifact_dir=screening_artifact_dir,
+        source_root=source_root,
+    )
+    artifact = evidence.artifact
+    source_path = evidence.source_path
+    diagnostic_only_source = evidence.diagnostic_only_source
+    diagnostic_only = diagnostic_only_policy or diagnostic_only_source
+    family_rows = evidence.family_rows
+    row_skip_reasons = evidence.row_skip_reasons
+    promoted_by_id = evidence.promoted_by_id
+    promoted_measured = evidence.promoted_measured
 
-    promoted_rows = [row for row in artifact.get("promoted", []) if isinstance(row, Mapping)]
-    rejected_rows = [row for row in artifact.get("rejected", []) if isinstance(row, Mapping)]
-    promoted_by_id = {str(row.get("candidate_id")): row for row in promoted_rows if row.get("candidate_id")}
-
-    family_rows: dict[tuple[str, str, str, str, str], list[MeasuredRow]] = defaultdict(list)
-    row_skip_reasons: Counter[str] = Counter()
-    for row in promoted_rows + rejected_rows:
-        measured, reason = _extract_measured_row(row)
-        if measured is None:
-            if reason == "family_key_missing":
-                candidate_id = str(row.get("candidate_id") or "unknown_candidate")
-                raise ValueError(f"family_key_missing:{candidate_id}")
-            row_skip_reasons[str(reason or "row_unusable")] += 1
-            continue
-        family_rows[measured.family_key].append(measured)
-
-    promoted_measured: dict[str, MeasuredRow] = {}
-    for row in promoted_rows:
-        measured, _reason = _extract_measured_row(row)
-        if measured is not None:
-            promoted_measured[measured.candidate_id] = measured
-
-    source_path = _source_path(screening_artifact_path, source_root)
     family_payloads: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
     family_skips: dict[str, str] = {}
     family_reports: list[dict[str, Any]] = []
@@ -1096,8 +1232,15 @@ def build_robustness_raw_inputs_from_screening(
     for candidate_id, measured in sorted(promoted_measured.items()):
         if candidate_id not in promoted_by_id:
             continue
-        if diagnostic_only_policy:
-            candidate_skips[candidate_id] = f"diagnostic_only_surface_policy:{surface_policy}"
+        if diagnostic_only:
+            if diagnostic_only_source:
+                candidate_skips[candidate_id] = (
+                    f"diagnostic_only_screening_artifact_dir:{surface_policy}"
+                )
+            else:
+                candidate_skips[candidate_id] = (
+                    f"diagnostic_only_surface_policy:{surface_policy}"
+                )
             continue
         if not stress_ready:
             candidate_skips[candidate_id] = "stress_decomposition_missing"
@@ -1161,7 +1304,7 @@ def build_robustness_raw_inputs_from_screening(
                 source_path=source_path,
                 artifact=artifact,
                 selected_surface_policy=surface_policy,
-                promoted_rows=promoted_rows,
+                promoted_count=evidence.promoted_count,
                 family_reports=family_reports,
                 row_skip_reasons=row_skip_reasons,
                 family_skips=family_skips,
@@ -1171,10 +1314,11 @@ def build_robustness_raw_inputs_from_screening(
             ),
         )
 
-    if diagnostic_only_policy:
+    if diagnostic_only:
         return {
             "status": "diagnostic_only",
             "surface_policy": surface_policy,
+            "source_mode": "screening_artifact_dir" if diagnostic_only_source else "screening_artifact",
             "sensitivity_report_out": str(sensitivity_report_out),
             "packaged_count": 0,
             "packaged_candidate_ids": [],
@@ -1240,7 +1384,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Build hft3 raw robustness inputs from complete VectorBT screening surfaces.",
     )
-    parser.add_argument("--screening-artifact", required=True, type=Path)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--screening-artifact", type=Path)
+    source.add_argument(
+        "--screening-artifact-dir",
+        type=Path,
+        help=(
+            "Directory containing per-unit screening_artifact.json files. "
+            "Directory mode is diagnostic-only and never writes raw replay inputs."
+        ),
+    )
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--source-root", type=Path, default=None)
     parser.add_argument("--folds", type=int, default=3)
@@ -1271,6 +1424,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         receipt = build_robustness_raw_inputs_from_screening(
             screening_artifact_path=args.screening_artifact,
+            screening_artifact_dir=args.screening_artifact_dir,
             out_path=args.out,
             source_root=args.source_root,
             folds=args.folds,
