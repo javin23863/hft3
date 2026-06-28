@@ -401,6 +401,19 @@ def test_screening_artifact_dir_empty_fails_closed_without_output(tmp_path: Path
     assert not (tmp_path / "raw_robustness_inputs.json").exists()
 
 
+def test_screening_artifact_dir_rejects_stale_raw_output_path(tmp_path: Path) -> None:
+    artifact = _complete_surface_artifact()
+    unit_dir = _write_event_unit_artifacts(tmp_path / "units", artifact)
+    stale_out = tmp_path / "raw_robustness_inputs.json"
+    stale_out.write_text('{"schema":"stale"}\n', encoding="utf-8")
+
+    result = _run_dir_script(tmp_path, unit_dir)
+
+    assert result.returncode != 0
+    assert "diagnostic_out_must_not_already_exist" in result.stderr
+    assert stale_out.read_text(encoding="utf-8") == '{"schema":"stale"}\n'
+
+
 def test_first_event_fail_can_pass_pooled_train_event_policy_in_report_only(tmp_path: Path) -> None:
     artifact = _first_event_fail_artifact()
     report_path = tmp_path / "pooled" / "sensitivity.json"

@@ -1185,6 +1185,8 @@ def build_robustness_raw_inputs_from_screening(
         raise ValueError("min_completeness_must_be_in_(0,1]")
     if screening_artifact_path is not None and screening_artifact_path.resolve() == out_path.resolve():
         raise ValueError("out_must_not_overwrite_screening_artifact")
+    if screening_artifact_dir is not None and out_path.exists():
+        raise ValueError(f"diagnostic_out_must_not_already_exist:{out_path}")
     evidence = _load_screening_evidence(
         screening_artifact_path=screening_artifact_path,
         screening_artifact_dir=screening_artifact_dir,
