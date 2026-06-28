@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from backtest_pipeline.src.vectorbt_adapter import (
-    _parameter_values_hash,
     compute_screening_artifact_hash,
     validate_screening_artifact,
 )
-from hft_screening_fixtures import replay_eligible_promoted_candidate, screening_artifact_shell
+from scripts.apply_robustness_evidence_to_screening import apply_robustness_evidence
 from scripts.build_robustness_raw_inputs_from_screening import _load_screening_evidence
+from test_apply_robustness_evidence_to_screening import _passing_evidence, _screening_artifact
 from test_build_robustness_raw_inputs_from_screening import (
     _complete_surface_artifact,
     _first_event_fail_artifact,
@@ -92,38 +92,35 @@ def _family_map(model_id: str, symbol: str, research_clock: str = "scheduled_eve
     }
 
 
-def _eligible_unit_artifact(candidate_id: str = "eligible_fixture") -> dict[str, Any]:
-    params = {"signal_threshold": 0.15}
-    row = replay_eligible_promoted_candidate(candidate_id)
-    row.update(
-        {
-            "model_id": "ELIGIBLE_MODEL",
-            "hypothesis_id": "ELIGIBLE_MODEL",
-            "symbol": "MES",
-            "parameter_values": params,
-            "param_values": params,
-            "parameter_values_hash": _parameter_values_hash(params),
-            "feature_recipe_hash": "sha256:eligible-feature-recipe",
-            "base_candidate_id": f"ELIGIBLE_MODEL|MES.v.0|CPI_2020_01_14_TIGHT|10",
-            "base_candidate_metadata": {
-                "event_id": "CPI_2020_01_14_TIGHT",
-                "target_event_id": "CPI_2020_01_14_TIGHT",
-                "event_type": "CPI",
-                "symbol": "MES",
-                "research_clock": "event_window_pilot",
-                "context_set_id": "target_only",
-                "allowed_context_set_id": "target_only",
-                "feature_recipe_hash": "sha256:eligible-feature-recipe",
-            },
-        }
+def _eligible_unit_artifact(tmp_path: Path, candidate_id: str = "eligible_fixture") -> dict[str, Any]:
+    source = _screening_artifact(candidate_id)
+    row = source["promoted"][0]
+    row["base_candidate_id"] = f"HYP_5|MES.v.0|CPI_2020_01_14_TIGHT|10"
+    row["base_candidate_metadata"] = {
+        "event_id": "CPI_2020_01_14_TIGHT",
+        "target_event_id": "CPI_2020_01_14_TIGHT",
+        "event_type": "CPI",
+        "symbol": "MES",
+        "research_clock": "event_window_pilot",
+        "context_set_id": "target_only",
+        "allowed_context_set_id": "target_only",
+        "feature_recipe_hash": row["feature_recipe_hash"],
+    }
+    source["screening_artifact_hash"] = compute_screening_artifact_hash(source)
+    validate_screening_artifact(source)
+    screening_path = tmp_path / "eligible_source_screening_artifact.json"
+    evidence_path = tmp_path / "eligible_robustness_evidence.json"
+    out_path = tmp_path / "eligible_screening_artifact.json"
+    _write_json(screening_path, source)
+    _write_json(evidence_path, _passing_evidence(source, candidate_id))
+    apply_robustness_evidence(
+        screening_artifact_path=screening_path,
+        robustness_evidence_path=evidence_path,
+        out_path=out_path,
+        candidate_ids=None,
+        min_eligible=1,
     )
-    artifact = screening_artifact_shell(
-        "eligible_fixture_run",
-        candidate_id,
-        promoted=[row],
-        parameter_space_hash="sha256:eligible-parameter-space",
-        code_commit="test",
-    )
+    artifact = json.loads(out_path.read_text(encoding="utf-8"))
     validate_screening_artifact(artifact)
     return artifact
 
@@ -230,7 +227,7 @@ def _write_sensitivity_report(path: Path, unit_dir: Path, tmp_path: Path) -> dic
                 missing_cells=1,
             ),
             _family_report(
-                model_id="ELIGIBLE_MODEL",
+                model_id="HYP_5",
                 symbol="MES",
                 packaging_eligible=True,
                 current_pass=True,
@@ -264,7 +261,7 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     )
     _write_event_unit_artifacts(unit_dir / "robust_fail", robust_fail)
     _write_event_unit_artifacts(unit_dir / "incomplete", incomplete)
-    _write_json(unit_dir / "eligible" / "screening_artifact.json", _eligible_unit_artifact())
+    _write_json(unit_dir / "eligible" / "screening_artifact.json", _eligible_unit_artifact(tmp_path))
     report_path = tmp_path / "sensitivity.json"
     _write_sensitivity_report(report_path, unit_dir, tmp_path)
 
@@ -319,7 +316,7 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
         "surface_incomplete_missing_cells"
     )
     assert families_by_model["INCOMPLETE_MODEL"]["surface_completeness_ratio"] == 0.9375
-    assert families_by_model["ELIGIBLE_MODEL"]["classification_bucket"] == (
+    assert families_by_model["HYP_5"]["classification_bucket"] == (
         "hftbacktest_eligible_derived"
     )
 
