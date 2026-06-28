@@ -278,6 +278,8 @@ _VECTORBT_BUDGET_ARGS = {
     "max_wall_clock_seconds": "vectorbt_max_wall_clock_seconds",
     "max_peak_memory_mb_or_null": "vectorbt_max_peak_memory_mb",
 }
+_LEGACY_VECTORBT_ACTIVE_ENV = "HFT3_ENABLE_LEGACY_VECTORBT_ACTIVE"
+_HFTBACKTEST_ONLY_PLAN = "docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md"
 _PIPELINE_RESULT_MARKER = "HFT3_PIPELINE_RESULT="
 _LOG_HANDLER_ATTR = "_hft3_pipeline_run_handler"
 logger = logging.getLogger("hft3.research_pipeline.run_pipeline")
@@ -301,6 +303,19 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def _legacy_vectorbt_active_enabled() -> bool:
+    return os.environ.get(_LEGACY_VECTORBT_ACTIVE_ENV) == "1"
+
+
+def _vectorbt_active_path_error() -> str:
+    return (
+        "VectorBT active path is frozen by "
+        f"{_HFTBACKTEST_ONLY_PLAN}. Use HftBacktest-only data validation/run "
+        "entrypoints for active work; set "
+        f"{_LEGACY_VECTORBT_ACTIVE_ENV}=1 only for historical diagnostics."
+    )
 
 
 def _deep_merge(base: dict[str, Any], updates: Mapping[str, Any]) -> dict[str, Any]:
@@ -1969,11 +1984,21 @@ def _main_impl(
     parser.add_argument("--min-tail-ratio", type=float, default=None, help="Minimum tail ratio gate")
     parser.add_argument("--max-cvar-95", type=float, default=None, help="Maximum CVaR 95 loss gate")
     parser.add_argument("--max-cvar-99", type=float, default=None, help="Maximum CVaR 99 loss gate")
-    parser.add_argument("--vectorbt", action="store_true", help="Enable VectorBT pre-filter before HftBacktest")
+    parser.add_argument(
+        "--vectorbt",
+        action="store_true",
+        help=(
+            "Legacy diagnostic VectorBT pre-filter; frozen from the active path unless "
+            f"{_LEGACY_VECTORBT_ACTIVE_ENV}=1"
+        ),
+    )
     parser.add_argument(
         "--vectorbt-only",
         action="store_true",
-        help="Run VectorBT filter only and stop before the downstream realism handoff",
+        help=(
+            "Legacy diagnostic VectorBT-only run; frozen from the active path unless "
+            f"{_LEGACY_VECTORBT_ACTIVE_ENV}=1"
+        ),
     )
     parser.add_argument(
         "--vectorbt-scope",
@@ -1993,7 +2018,7 @@ def _main_impl(
             "all_models",
         ],
         default=None,
-        help="VectorBT screening scope; all non-pilot broad/refine/paid scopes require the Rust engine",
+        help="Legacy VectorBT screening scope; non-pilot diagnostic scopes still require the Rust engine",
     )
     parser.add_argument("--vectorbt-max-trials", type=int, default=None)
     parser.add_argument("--vectorbt-max-models", type=int, default=None)
@@ -2023,7 +2048,7 @@ def _main_impl(
         "--candidate-search-method",
         choices=sorted(SUPPORTED_SEARCH_METHODS),
         default=None,
-        help="Candidate parameter search method before VectorBT screening",
+        help="Candidate parameter search method before the legacy VectorBT diagnostic screen",
     )
     parser.add_argument(
         "--candidate-search-seed",
@@ -2112,6 +2137,10 @@ def _main_impl(
         help="Abort on first unit failure (CI mode). Default: continue past failures for multi-event runs.",
     )
     args = parser.parse_args(argv)
+
+    if (args.vectorbt or args.vectorbt_only) and not _legacy_vectorbt_active_enabled():
+        print(f"Error: {_vectorbt_active_path_error()}", file=sys.stderr)
+        return 2
 
     try:
         runtime_config = load_pipeline_runtime_config(args.pipeline_config)
@@ -2212,13 +2241,17 @@ def _main_impl(
         return 2
     if args.hftbacktest_realism and not args.vectorbt:
         print(
-            "Error: --hftbacktest-realism requires --vectorbt so the handoff has a terminal screening_artifact.json.",
+            "Error: --hftbacktest-realism is not wired as a HftBacktest-only run_pipeline path yet; "
+            "do not add VectorBT for active work. Use the HftBacktest-only plan and adapter/runner "
+            "slice, or set "
+            f"{_LEGACY_VECTORBT_ACTIVE_ENV}=1 for the historical VectorBT handoff diagnostic.",
             file=sys.stderr,
         )
         return 2
     if args.doc and not args.dry_run and not (args.vectorbt or args.vectorbt_only):
         print(
-            "Error: --doc without --vectorbt/--vectorbt-only is dry-run only; add --dry-run or use the VectorBT/HftBacktest handoff.",
+            "Error: --doc without a wired HftBacktest-only run path is dry-run only; "
+            "add --dry-run or continue the HftBacktest-only adapter/runner slice.",
             file=sys.stderr,
         )
         return 2
@@ -2470,7 +2503,7 @@ def _main_impl(
             logger.info("skip_bad_units", extra={"payload": {"skipped": dropped, "total_skip_set": len(skip_set)}})
 
     if args.vectorbt or args.vectorbt_only:
-        print(f"Running VectorBT filter on {len(candidates)} candidates x grid...")
+        print(f"Running legacy VectorBT diagnostic filter on {len(candidates)} candidates x grid...")
         source_meta = {c.candidate_id: dict(c.metadata) for c in candidates}
         vbt_gates = PromotionGate(
             min_oos_expectancy=0.0,
@@ -2551,7 +2584,7 @@ def _main_impl(
                 for p in filter_result.promoted
             ]
         else:
-            print("No candidates survived VectorBT filter.")
+            print("No candidates survived legacy VectorBT diagnostic filter.")
             candidates = []
             if idea_packet:
                 mark_queued_ideas_without_candidates_failed(idea_packet, [])

@@ -13,6 +13,11 @@ REPO = Path(__file__).resolve().parents[1]
 PDF = REPO / "docs" / "references" / "dev_instructions.pdf"
 
 
+@pytest.fixture(autouse=True)
+def _enable_legacy_vectorbt_active_for_existing_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HFT3_ENABLE_LEGACY_VECTORBT_ACTIVE", "1")
+
+
 def _last_json_object(stdout: str) -> dict:
     start = stdout.rfind("\n{")
     if start == -1:
@@ -42,7 +47,40 @@ def test_hftbacktest_realism_preflight_requires_source_lock_and_native_evidence(
     ]
 
 
-def test_run_pipeline_hftbacktest_realism_requires_vectorbt(monkeypatch, capsys):
+@pytest.mark.parametrize("flag", ["--vectorbt", "--vectorbt-only"])
+def test_run_pipeline_vectorbt_active_path_frozen_by_default(
+    flag: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    monkeypatch.delenv("HFT3_ENABLE_LEGACY_VECTORBT_ACTIVE", raising=False)
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_request",
+        lambda **kwargs: pytest.fail("frozen VectorBT active path wrote artifacts"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Fade CPI blowout",
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--no-llm",
+        flag,
+    ])
+
+    assert run_pipeline.main() == 2
+    stderr = capsys.readouterr().err
+    assert "VectorBT active path is frozen" in stderr
+    assert "HFT3_ENABLE_LEGACY_VECTORBT_ACTIVE=1" in stderr
+    assert "HFTBACKTEST_ONLY_PIPELINE_PLAN.md" in stderr
+
+
+def test_run_pipeline_hftbacktest_realism_without_vectorbt_is_not_wired_yet(monkeypatch, capsys):
     import sys
 
     import scripts.run_pipeline as run_pipeline
@@ -63,7 +101,10 @@ def test_run_pipeline_hftbacktest_realism_requires_vectorbt(monkeypatch, capsys)
     ])
 
     assert run_pipeline.main() == 2
-    assert "--hftbacktest-realism requires --vectorbt" in capsys.readouterr().err
+    stderr = capsys.readouterr().err
+    assert "--hftbacktest-realism is not wired as a HftBacktest-only run_pipeline path yet" in stderr
+    assert "do not add VectorBT for active work" in stderr
+    assert "HFT3_ENABLE_LEGACY_VECTORBT_ACTIVE=1" in stderr
 
 
 def test_run_pipeline_hftbacktest_realism_rejects_vectorbt_only(monkeypatch, capsys):
@@ -113,7 +154,9 @@ def test_run_pipeline_doc_without_vectorbt_is_dry_run_only(monkeypatch, capsys):
     ])
 
     assert run_pipeline.main() == 2
-    assert "--doc without --vectorbt/--vectorbt-only is dry-run only" in capsys.readouterr().err
+    stderr = capsys.readouterr().err
+    assert "--doc without a wired HftBacktest-only run path is dry-run only" in stderr
+    assert "HftBacktest-only adapter/runner slice" in stderr
 
 
 @pytest.mark.parametrize(
