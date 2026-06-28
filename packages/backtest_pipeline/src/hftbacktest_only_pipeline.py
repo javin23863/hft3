@@ -13,6 +13,7 @@ import json
 import math
 import os
 import subprocess
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,7 +26,7 @@ PLAN_PATH = "docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md"
 UPSTREAM_REPO_URL = "https://github.com/nkaz001/hftbacktest"
 UPSTREAM_DOCS_URL = "https://hftbacktest.readthedocs.io/en/latest/"
 EXPECTED_EVENT_FIELDS = ("ev", "exch_ts", "local_ts", "px", "qty", "order_id", "ival", "fval")
-_NS_2026_UTC = 1_767_225_600_000_000_000
+_FUTURE_DATA_GRACE_NS = 86_400 * 1_000_000_000
 
 
 class HftBacktestOnlyPipelineError(ValueError):
@@ -151,8 +152,12 @@ def validate_hftbacktest_only_input(config: HftBacktestOnlyRunConfig) -> dict[st
                 min_feed_latency_ns = int(local_minus_exch.min())
             if row_count and bool((local_minus_exch < 0).any()):
                 reasons.append("NEGATIVE_FEED_LATENCY_UNCORRECTED")
-            if row_count and _looks_like_epoch_ns(events["exch_ts"]) and int(events["exch_ts"].max()) >= _NS_2026_UTC:
-                reasons.append("FUTURE_DATA_BLOCKED_2026")
+            if (
+                row_count
+                and _looks_like_epoch_ns(events["exch_ts"])
+                and int(events["exch_ts"].max()) > _future_data_cutoff_ns()
+            ):
+                reasons.append("FUTURE_DATA_AFTER_VALIDATION_CLOCK")
 
             constants = _event_constants()
             if constants:
@@ -440,6 +445,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         reasons.append("strategy_submitted_no_orders")
     if submit_ret not in (0, None):
         reasons.append("order_submit_failed")
+    # hftbacktest v2 return codes: 0 = success, 3 = WaitCanceled timeout for passive orders.
     if response_ret not in (0, 3, None):
         reasons.append("order_response_failed")
     if submitted and not order_snapshot:
@@ -447,6 +453,11 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     gross_pnl = _float_field(final_state, "balance") + _float_field(final_state, "fee")
     net_pnl = _float_field(final_state, "balance")
     fills_count = len(fills)
+    orders_intended = 1
+    orders_submitted = 1 if submitted and submit_ret == 0 else 0
+    orders_acknowledged = 1 if response_ret in (0, 3) else 0
+    filled_orders = 1 if fills_count else 0
+    fill_rate = filled_orders / orders_submitted if orders_submitted else 0.0
     replay = {
         "schema_version": "hft3_hftbacktest_only_official_replay_v1",
         "official_hftbacktest_replay_status": "pass" if not reasons else "fail",
@@ -461,14 +472,14 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "fills": fills,
         "position_timeseries": positions,
         "equity_curve": equity,
-        "orders_intended": 1,
-        "orders_submitted": 1 if submitted and submit_ret == 0 else 0,
-        "orders_acknowledged": 1 if response_ret in (0, 3) else 0,
+        "orders_intended": orders_intended,
+        "orders_submitted": orders_submitted,
+        "orders_acknowledged": orders_acknowledged,
         "orders_cancelled": 1 if cancel_ret == 0 else 0,
         "fills_count": fills_count,
         "partial_fills_count": _partial_fill_count(fills, quantity),
         "unfilled_count": 1 if submitted and not fills else 0,
-        "fill_rate": fills_count / 1.0,
+        "fill_rate": fill_rate,
         "gross_pnl": gross_pnl,
         "net_pnl": net_pnl,
         "total_fees": _float_field(final_state, "fee"),
@@ -791,6 +802,10 @@ def _looks_like_epoch_ns(values: Any) -> bool:
     except Exception:
         return False
     return max_value > 1_000_000_000_000_000_000
+
+
+def _future_data_cutoff_ns() -> int:
+    return time.time_ns() + _FUTURE_DATA_GRACE_NS
 
 
 def _advance_hbt(hbt: Any, interval_ns: int) -> tuple[int, str]:

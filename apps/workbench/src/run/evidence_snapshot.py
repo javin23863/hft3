@@ -3373,6 +3373,4 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
 def default_source(repo: Path) -> str:
     if _latest_hbt_run_dir(repo) is not None:
         return "hbt_runs"
-    if _active_run_path(repo).is_file():
-        return "all_lanes"
     return "all_lanes"

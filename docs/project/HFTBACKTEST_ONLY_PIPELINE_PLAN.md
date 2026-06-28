@@ -61,7 +61,7 @@ Pre-HftBacktest rejection is allowed only for admissibility failures:
 - invalid timestamp order or timestamp unit;
 - missing or mismatched snapshot;
 - wrong symbol, contract, tick, lot, or contract metadata;
-- future-data contamination, including 2026 data while the project block remains active;
+- future-data contamination beyond the validation clock plus ingestion grace;
 - strategy compile failure;
 - runtime failure.
 
@@ -170,7 +170,7 @@ Required checks before any strategy run:
 7. MBO/L3 rows preserve required order_id values.
 8. tick_size, lot_size, and contract_size are verified.
 9. Initial snapshot exists and matches symbol, contract, and window.
-10. No future-data leakage, including 2026 data while blocked.
+10. No future-data leakage beyond the validation clock plus ingestion grace.
 ```
 
 Use official HftBacktest validation and correction utilities where applicable,
@@ -438,7 +438,7 @@ works across multiple event dates
 works across latency regimes
 works across partial/no-partial fill assumptions
 works across walk-forward partitions
-does not rely on 2026 or future data
+does not rely on data beyond the validation clock
 ```
 
 ## Workbench Direction
@@ -619,7 +619,7 @@ This plan does not:
 
 - delete VectorBT code;
 - claim existing HftBacktest campaign modules already satisfy the new active path;
-- relax no-lookahead, walk-forward, data-order, or 2026/future-data blocks;
+- relax no-lookahead, walk-forward, data-order, or future-data blocks;
 - allow workstation Python replay to claim production execution realism;
 - route live or paper data/orders through the workstation;
 - promote a model without HftBacktest artifacts, robustness evidence, and the

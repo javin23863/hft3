@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 import sys
 from pathlib import Path
@@ -43,13 +44,13 @@ def _event_contract() -> tuple[np.dtype, dict[str, int]]:
     return dtype, constants
 
 
-def _write_valid_l3_npz(path: Path) -> Path:
+def _write_valid_l3_npz(path: Path, *, base_exch_ts: int = 1_000_000_000) -> Path:
     dtype, constants = _event_contract()
     rows = [
         {
             "ev": constants["ADD_ORDER_EVENT"] | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
-            "exch_ts": 1_000_000_000,
-            "local_ts": 1_000_000_100,
+            "exch_ts": base_exch_ts,
+            "local_ts": base_exch_ts + 100,
             "px": 5000.0,
             "qty": 1.0,
             "order_id": 1001,
@@ -58,8 +59,8 @@ def _write_valid_l3_npz(path: Path) -> Path:
         },
         {
             "ev": constants["ADD_ORDER_EVENT"] | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
-            "exch_ts": 1_000_000_500,
-            "local_ts": 1_000_000_600,
+            "exch_ts": base_exch_ts + 500,
+            "local_ts": base_exch_ts + 600,
             "px": 5000.25,
             "qty": 1.0,
             "order_id": 1002,
@@ -271,3 +272,41 @@ def test_validation_records_l3_hftbacktest_contract(
     assert validation["timestamp_units"] == "nanoseconds"
     assert validation["official_validate_event_order_status"] == "pass"
     assert validation["l2_l3_classification"] == "l3_mbo"
+
+
+def test_validation_allows_current_year_epoch_data_before_validation_clock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import backtest_pipeline.src.hftbacktest_only_pipeline as pipeline
+
+    _install_fake_hftbacktest(monkeypatch)
+    now_ns = int(datetime(2026, 6, 29, tzinfo=timezone.utc).timestamp() * 1_000_000_000)
+    june_2026_ns = int(datetime(2026, 6, 1, tzinfo=timezone.utc).timestamp() * 1_000_000_000)
+    monkeypatch.setattr(pipeline.time, "time_ns", lambda: now_ns)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3_2026.npz", base_exch_ts=june_2026_ns)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "snapshot_2026.npz", base_exch_ts=june_2026_ns)
+
+    validation = validate_hftbacktest_only_input(_config(tmp_path, data_path, snapshot_path))
+
+    assert validation["data_validation_status"] == "pass"
+    assert "FUTURE_DATA_AFTER_VALIDATION_CLOCK" not in validation["fail_closed_reasons"]
+
+
+def test_validation_blocks_epoch_data_after_validation_clock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import backtest_pipeline.src.hftbacktest_only_pipeline as pipeline
+
+    _install_fake_hftbacktest(monkeypatch)
+    now_ns = int(datetime(2026, 6, 29, tzinfo=timezone.utc).timestamp() * 1_000_000_000)
+    future_ns = now_ns + pipeline._FUTURE_DATA_GRACE_NS + 1_000_000_000
+    monkeypatch.setattr(pipeline.time, "time_ns", lambda: now_ns)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3_future.npz", base_exch_ts=future_ns)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "snapshot_future.npz", base_exch_ts=now_ns)
+
+    validation = validate_hftbacktest_only_input(_config(tmp_path, data_path, snapshot_path))
+
+    assert validation["data_validation_status"] == "fail"
+    assert "FUTURE_DATA_AFTER_VALIDATION_CLOCK" in validation["fail_closed_reasons"]
