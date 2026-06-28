@@ -135,16 +135,22 @@ def _family_report(
     research_clock: str = "scheduled_event",
     parameter_cells: int = 16,
     missing_cells: int = 0,
+    insufficient_trade_cells: int = 0,
 ) -> dict[str, Any]:
     rejected_events = []
-    if missing_cells:
+    if missing_cells or insufficient_trade_cells:
+        reasons = []
+        if missing_cells:
+            reasons.append("missing_surface")
+        if insufficient_trade_cells:
+            reasons.append("insufficient_trades")
         rejected_events.append(
             {
                 "event_id": "CPI_2020_04_10_TIGHT",
                 "event_date": "2020-04-10",
-                "reasons": ["missing_surface"],
+                "reasons": reasons,
                 "missing_parameter_cell_count": missing_cells,
-                "insufficient_trade_cell_count": 0,
+                "insufficient_trade_cell_count": insufficient_trade_cells,
             }
         )
     return {
@@ -225,6 +231,7 @@ def _write_sensitivity_report(path: Path, unit_dir: Path, tmp_path: Path) -> dic
                 reason="incomplete_event_parameter_surface:0.937500<1.000000",
                 parameter_cells=15,
                 missing_cells=1,
+                insufficient_trade_cells=1,
             ),
             _family_report(
                 model_id="HYP_5",

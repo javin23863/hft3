@@ -389,10 +389,10 @@ def _classify_family(
     if report.get("packaging_eligible") is not True:
         if _reason_contains(reason, ADAPTER_REASON_MARKERS):
             return "adapter_contract_failure", reason, secondary
-        if _reason_contains(reason, DATA_REASON_MARKERS) or _has_rejected_trade_quality(report):
-            return "data_quality_failure", reason, secondary
         if _reason_contains(reason, SURFACE_REASON_MARKERS):
             return "surface_incomplete_missing_cells", reason, secondary
+        if _reason_contains(reason, DATA_REASON_MARKERS) or _has_rejected_trade_quality(report):
+            return "data_quality_failure", reason, secondary
         return "surface_incomplete_missing_cells", reason, secondary
 
     if not _selected_policy_pass(report, selected_surface_policy):
