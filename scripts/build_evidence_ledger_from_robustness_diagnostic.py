@@ -684,6 +684,38 @@ def _family_rejected_events(family_report: Mapping[str, Any]) -> list[dict[str, 
     return [dict(event) for event in events if isinstance(event, Mapping)]
 
 
+def _cell_count(value: Any) -> int:
+    number = _number(value)
+    if number is None:
+        return 0
+    return max(0, int(number))
+
+
+def _rejected_event_cell_summary(events: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    rejected_event_count = 0
+    events_with_missing_parameter_cells = 0
+    events_with_insufficient_trade_cells = 0
+    missing_parameter_cells = 0
+    insufficient_trade_cells = 0
+    for event in events:
+        rejected_event_count += 1
+        missing = _cell_count(event.get("missing_parameter_cell_count"))
+        insufficient = _cell_count(event.get("insufficient_trade_cell_count"))
+        missing_parameter_cells += missing
+        insufficient_trade_cells += insufficient
+        if missing:
+            events_with_missing_parameter_cells += 1
+        if insufficient:
+            events_with_insufficient_trade_cells += 1
+    return {
+        "rejected_event_count": rejected_event_count,
+        "missing_parameter_cells": missing_parameter_cells,
+        "insufficient_trade_cells": insufficient_trade_cells,
+        "events_with_missing_parameter_cells": events_with_missing_parameter_cells,
+        "events_with_insufficient_trade_cells": events_with_insufficient_trade_cells,
+    }
+
+
 def _family_audit_reasons(
     family_row: Mapping[str, Any],
     family_report: Mapping[str, Any],
@@ -744,6 +776,49 @@ def _data_vs_pipeline_explanation(label: str) -> str:
     return "Unclassified diagnostic state."
 
 
+def _measurement_gate_subdiagnosis(
+    *,
+    label: str,
+    measurement_or_gate_evidence: bool,
+    cell_summary: Mapping[str, int],
+) -> str:
+    insufficient = int(cell_summary.get("insufficient_trade_cells") or 0)
+    missing = int(cell_summary.get("missing_parameter_cells") or 0)
+    if insufficient and missing:
+        return "insufficient_trade_cells_with_missing_parameter_cells"
+    if insufficient:
+        return "zero_or_insufficient_trade_cells"
+    if missing and label == "fix_pipeline_measurement_or_gate":
+        return "missing_parameter_cells_with_measurement_gate_context"
+    if measurement_or_gate_evidence:
+        return "measured_metrics_missing_or_gate_contract"
+    if missing:
+        return "missing_parameter_cells_only"
+    return "not_applicable"
+
+
+def _data_vs_pipeline_action_detail(
+    *,
+    label: str,
+    subdiagnosis: str,
+    cell_summary: Mapping[str, int],
+) -> str:
+    missing = int(cell_summary.get("missing_parameter_cells") or 0)
+    insufficient = int(cell_summary.get("insufficient_trade_cells") or 0)
+    if label == "fix_pipeline_measurement_or_gate" and insufficient:
+        return (
+            "Do not download data first. Inspect signal density, official VectorBT stats "
+            f"nulls, and zero/insufficient closed-trade gate semantics; insufficient-trade "
+            f"cells={insufficient}, missing-parameter cells={missing}."
+        )
+    if label == "fix_pipeline_measurement_or_gate" and missing:
+        return (
+            "Inspect why parameter cells are absent from measured rows before rerunning; "
+            f"missing-parameter cells={missing}, insufficient-trade cells={insufficient}."
+        )
+    return _data_vs_pipeline_explanation(label)
+
+
 def _build_data_vs_pipeline_audit(
     *,
     run_id: str,
@@ -764,6 +839,8 @@ def _build_data_vs_pipeline_audit(
         family_id = str(family_row["family_id"])
         family_report = family_report_by_id.get(family_id, {})
         family_candidates = candidates_by_family.get(family_id, [])
+        rejected_events = _family_rejected_events(family_report)
+        cell_summary = _rejected_event_cell_summary(rejected_events)
         reasons = _family_audit_reasons(family_row, family_report, family_candidates)
         measured_rows = measured_rows_by_family_id.get(family_id, [])
         zero_or_insufficient_trade_evidence = any(
@@ -780,6 +857,11 @@ def _build_data_vs_pipeline_audit(
             PIPELINE_MEASUREMENT_REASON_MARKERS,
         )
         label = _data_vs_pipeline_label(family_row, reasons)
+        measurement_gate_subdiagnosis = _measurement_gate_subdiagnosis(
+            label=label,
+            measurement_or_gate_evidence=measurement_or_gate_evidence,
+            cell_summary=cell_summary,
+        )
         audit_rows.append(
             {
                 "family_id": family_id,
@@ -791,12 +873,19 @@ def _build_data_vs_pipeline_audit(
                 "family_classification_bucket": family_row.get("classification_bucket"),
                 "primary_failure_reason": family_row.get("primary_failure_reason"),
                 "secondary_failure_reasons": family_row.get("secondary_failure_reasons") or [],
-                "rejected_events": _family_rejected_events(family_report),
+                "rejected_events": rejected_events,
+                "measurement_gate_subdiagnosis": measurement_gate_subdiagnosis,
+                "measurement_gate_cell_summary": cell_summary,
                 "zero_or_insufficient_trade_evidence": zero_or_insufficient_trade_evidence,
                 "missing_data_evidence": missing_data_evidence,
                 "surface_shape_evidence": surface_shape_evidence,
                 "measurement_or_gate_evidence": measurement_or_gate_evidence,
                 "recommended_next_action": family_row.get("recommended_next_action"),
+                "recommended_next_action_detail": _data_vs_pipeline_action_detail(
+                    label=label,
+                    subdiagnosis=measurement_gate_subdiagnosis,
+                    cell_summary=cell_summary,
+                ),
                 "readiness_context": {
                     "vectorbt_promoted_rows": family_row.get("vectorbt_promoted_rows"),
                     "event_count": family_row.get("event_count"),
@@ -872,15 +961,23 @@ def _build_data_vs_pipeline_markdown(audit: Mapping[str, Any]) -> str:
     if not rows:
         lines.extend(["None.", ""])
         return "\n".join(lines).rstrip() + "\n"
-    lines.append("| Final diagnosis | Family | Bucket | Primary reason |")
-    lines.append("|---|---|---|---|")
+    lines.append(
+        "| Final diagnosis | Subdiagnosis | Family | Bucket | Primary reason | Missing parameter cells | Insufficient-trade cells |"
+    )
+    lines.append("|---|---|---|---|---|---:|---:|")
     for row in rows:
+        cell_summary = row.get("measurement_gate_cell_summary")
+        if not isinstance(cell_summary, Mapping):
+            cell_summary = {}
         lines.append(
-            "| {label} | {family} | {bucket} | {reason} |".format(
+            "| {label} | {subdiagnosis} | {family} | {bucket} | {reason} | {missing} | {insufficient} |".format(
                 label=_markdown_cell(row.get("final_diagnosis_label")),
+                subdiagnosis=_markdown_cell(row.get("measurement_gate_subdiagnosis")),
                 family=_markdown_cell(row.get("family_id")),
                 bucket=_markdown_cell(row.get("family_classification_bucket")),
                 reason=_markdown_cell(row.get("primary_failure_reason")),
+                missing=_markdown_cell(cell_summary.get("missing_parameter_cells")),
+                insufficient=_markdown_cell(cell_summary.get("insufficient_trade_cells")),
             )
         )
     return "\n".join(lines).rstrip() + "\n"

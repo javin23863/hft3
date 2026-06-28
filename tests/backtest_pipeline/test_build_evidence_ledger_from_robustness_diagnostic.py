@@ -462,6 +462,22 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     )
     assert audit_by_model["INCOMPLETE_MODEL"]["zero_or_insufficient_trade_evidence"] is True
     assert audit_by_model["INCOMPLETE_MODEL"]["measurement_or_gate_evidence"] is True
+    incomplete_cell_summary = audit_by_model["INCOMPLETE_MODEL"][
+        "measurement_gate_cell_summary"
+    ]
+    assert incomplete_cell_summary == {
+        "events_with_insufficient_trade_cells": 1,
+        "events_with_missing_parameter_cells": 1,
+        "insufficient_trade_cells": 1,
+        "missing_parameter_cells": 1,
+        "rejected_event_count": 1,
+    }
+    assert audit_by_model["INCOMPLETE_MODEL"]["measurement_gate_subdiagnosis"] == (
+        "insufficient_trade_cells_with_missing_parameter_cells"
+    )
+    assert "Do not download data first" in audit_by_model["INCOMPLETE_MODEL"][
+        "recommended_next_action_detail"
+    ]
     assert audit_by_model["SURFACE_ONLY_MODEL"]["final_diagnosis_label"] == (
         "rerun_vectorbt_surface_shape"
     )
@@ -491,6 +507,9 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     audit_report = (out_dir / "data_vs_pipeline_audit.md").read_text(encoding="utf-8")
     assert "diagnostic-only" in audit_report
     assert "download_or_build_missing_data" in audit_report
+    assert "Insufficient-trade cells" in audit_report
+    assert "| fix_pipeline_measurement_or_gate | insufficient_trade_cells_with_missing_parameter_cells |" in audit_report
+    assert "| 1 | 1 |" in audit_report
 
 
 def test_number_rejects_non_finite_values() -> None:
