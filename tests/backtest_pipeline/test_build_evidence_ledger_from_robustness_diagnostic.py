@@ -21,6 +21,7 @@ from test_build_robustness_raw_inputs_from_screening import (
 )
 from scripts.build_evidence_ledger_from_robustness_diagnostic import (
     _classify_family,
+    _coverage_policy_calibration,
     _data_vs_pipeline_label,
     _number,
 )
@@ -472,6 +473,22 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
         "missing_parameter_cells": 1,
         "rejected_event_count": 1,
     }
+    incomplete_coverage = audit_by_model["INCOMPLETE_MODEL"]["coverage_policy_calibration"]
+    assert incomplete_coverage == {
+        "candidate_count": 1,
+        "diagnostic_only": True,
+        "expected_cells_est": 16,
+        "hftbacktest_route_allowed": False,
+        "insufficient_trade_cells": 1,
+        "insufficient_trade_ratio": 0.0625,
+        "measured_row_count": 15,
+        "missing_parameter_cells": 1,
+        "observed_surface_cells": 15,
+        "recommendation": "targeted_backfill_or_policy_review",
+        "schema": "hft3_coverage_policy_calibration_v1",
+        "usable_cells_est": 14,
+        "usable_ratio": 0.875,
+    }
     assert audit_by_model["INCOMPLETE_MODEL"]["measurement_gate_subdiagnosis"] == (
         "insufficient_trade_cells_with_missing_parameter_cells"
     )
@@ -500,6 +517,10 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
         "reject_model_family": 1,
         "rerun_vectorbt_surface_shape": 1,
     }
+    assert audit["summary"]["families_by_coverage_policy_recommendation"] == {
+        "not_applicable": 5,
+        "targeted_backfill_or_policy_review": 1,
+    }
 
     report = (out_dir / "robustness_bridge_readiness_report.md").read_text(encoding="utf-8")
     assert "## Seven Questions" in report
@@ -507,8 +528,13 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     audit_report = (out_dir / "data_vs_pipeline_audit.md").read_text(encoding="utf-8")
     assert "diagnostic-only" in audit_report
     assert "download_or_build_missing_data" in audit_report
+    assert "Coverage calibration" in audit_report
+    assert "targeted_backfill_or_policy_review" in audit_report
     assert "Insufficient-trade cells" in audit_report
-    assert "| fix_pipeline_measurement_or_gate | insufficient_trade_cells_with_missing_parameter_cells |" in audit_report
+    assert (
+        "| fix_pipeline_measurement_or_gate | insufficient_trade_cells_with_missing_parameter_cells | targeted_backfill_or_policy_review |"
+        in audit_report
+    )
     assert "| 1 | 1 |" in audit_report
 
 
@@ -524,6 +550,49 @@ def test_data_vs_pipeline_missing_data_precedes_model_rejection() -> None:
     assert _data_vs_pipeline_label(family_row, ["artifact_missing"]) == (
         "download_or_build_missing_data"
     )
+
+
+def test_coverage_policy_calibration_is_diagnostic_only() -> None:
+    high_coverage = _coverage_policy_calibration(
+        label="fix_pipeline_measurement_or_gate",
+        candidate_count=640,
+        observed_surface_cells=8304,
+        measured_row_count=8304,
+        cell_summary={
+            "missing_parameter_cells": 144,
+            "insufficient_trade_cells": 384,
+        },
+    )
+    assert high_coverage["recommendation"] == "policy_review_candidate"
+    assert high_coverage["usable_ratio"] == 0.9375
+    assert high_coverage["hftbacktest_route_allowed"] is False
+
+    borderline = _coverage_policy_calibration(
+        label="fix_pipeline_measurement_or_gate",
+        candidate_count=1632,
+        observed_surface_cells=10000,
+        measured_row_count=10000,
+        cell_summary={
+            "missing_parameter_cells": 496,
+            "insufficient_trade_cells": 1472,
+        },
+    )
+    assert borderline["recommendation"] == "targeted_backfill_or_policy_review"
+    assert borderline["usable_ratio"] == 0.8125
+    assert borderline["hftbacktest_route_allowed"] is False
+
+    no_candidates = _coverage_policy_calibration(
+        label="fix_pipeline_measurement_or_gate",
+        candidate_count=0,
+        observed_surface_cells=11712,
+        measured_row_count=11712,
+        cell_summary={
+            "missing_parameter_cells": 64,
+            "insufficient_trade_cells": 11520,
+        },
+    )
+    assert no_candidates["recommendation"] == "reject_or_retune_signal_density"
+    assert no_candidates["hftbacktest_route_allowed"] is False
 
 
 def test_sensitivity_report_binding_fails_closed_when_hash_missing(tmp_path: Path) -> None:
