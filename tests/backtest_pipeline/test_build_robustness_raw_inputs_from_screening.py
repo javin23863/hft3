@@ -12,7 +12,10 @@ from backtest_pipeline.src.vectorbt_adapter import (
     compute_screening_artifact_hash,
     validate_screening_artifact,
 )
-from scripts.build_robustness_raw_inputs_from_screening import _extract_measured_row
+from scripts.build_robustness_raw_inputs_from_screening import (
+    _extract_measured_row,
+    _load_screening_evidence,
+)
 from test_apply_robustness_evidence_to_screening import _screening_artifact, _write_json
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -161,6 +164,50 @@ def _complete_surface_artifact(*, omit_last_cell: bool = False) -> dict[str, Any
     return base
 
 
+def _row_event_id(row: dict[str, Any]) -> str:
+    metadata = row.get("base_candidate_metadata")
+    assert isinstance(metadata, dict)
+    return str(metadata.get("event_id") or metadata.get("target_event_id"))
+
+
+def _write_event_unit_artifacts(root: Path, artifact: dict[str, Any]) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    reason_by_id = dict(artifact.get("candidate_reasons", {}))
+    for event_id in _event_ids():
+        unit = copy.deepcopy(artifact)
+        unit["promoted"] = [
+            row for row in artifact["promoted"] if _row_event_id(row) == event_id
+        ]
+        unit["rejected"] = [
+            row for row in artifact["rejected"] if _row_event_id(row) == event_id
+        ]
+        unit["promoted_ids"] = [row["candidate_id"] for row in unit["promoted"]]
+        unit["rejected_ids"] = [row["candidate_id"] for row in unit["rejected"]]
+        unit["candidate_ids"] = unit["promoted_ids"] + unit["rejected_ids"]
+        unit["promoted_reasons"] = {
+            candidate_id: reason_by_id.get(candidate_id, "vectorbt_simulated")
+            for candidate_id in unit["promoted_ids"]
+        }
+        unit["rejected_reasons"] = {
+            candidate_id: reason_by_id.get(candidate_id, "promotion_gate_failed")
+            for candidate_id in unit["rejected_ids"]
+        }
+        unit["candidate_reasons"] = {
+            **unit["promoted_reasons"],
+            **unit["rejected_reasons"],
+        }
+        unit["promoted_count"] = len(unit["promoted"])
+        unit["rejected_count"] = len(unit["rejected"])
+        unit["trials_run"] = len(unit["candidate_ids"])
+        unit["max_total_trials"] = len(unit["candidate_ids"])
+        unit["screening_artifact_hash"] = compute_screening_artifact_hash(unit)
+        validate_screening_artifact(unit)
+        unit_path = root / event_id / "screening_artifact.json"
+        unit_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_json(unit_path, unit)
+    return root
+
+
 def _rewrite_metric(row: dict[str, Any], *, net_return: float, expectancy: float) -> None:
     row["gross_return"] = net_return
     row["net_return"] = net_return
@@ -209,6 +256,34 @@ def _run_script(tmp_path: Path, artifact: dict[str, Any], *extra: str) -> subpro
             str(SCRIPT),
             "--screening-artifact",
             str(screening_path),
+            "--source-root",
+            str(tmp_path),
+            "--out",
+            str(out_path),
+            "--folds",
+            "3",
+            "--min-events",
+            "4",
+            "--min-parameter-combinations",
+            "4",
+            *extra,
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def _run_dir_script(tmp_path: Path, artifact_dir: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    out_path = tmp_path / "raw_robustness_inputs.json"
+    return subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--screening-artifact-dir",
+            str(artifact_dir),
             "--source-root",
             str(tmp_path),
             "--out",
@@ -280,6 +355,98 @@ def test_current_first_event_surface_policy_reproduces_default_payload(tmp_path:
         (tmp_path / "explicit" / "raw_robustness_inputs.json").read_text(encoding="utf-8")
     )
     assert explicit_payload == default_payload
+
+
+def test_screening_artifact_dir_is_diagnostic_only_even_for_current_policy(tmp_path: Path) -> None:
+    artifact = _complete_surface_artifact()
+    unit_dir = _write_event_unit_artifacts(tmp_path / "units", artifact)
+    report_path = tmp_path / "sensitivity.json"
+    result = _run_dir_script(
+        tmp_path,
+        unit_dir,
+        "--fee-per-rt",
+        "0.001",
+        "--tick-value",
+        "0.01",
+        "--sensitivity-report-out",
+        str(report_path),
+    )
+
+    assert result.returncode == 0, result.stderr
+    receipt = json.loads(result.stdout)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert receipt["status"] == "diagnostic_only"
+    assert receipt["source_mode"] == "screening_artifact_dir"
+    assert receipt["packaged_count"] == 0
+    assert not (tmp_path / "raw_robustness_inputs.json").exists()
+    assert report["screening_artifact"] == "units"
+    assert report["screening_artifact_source"] == "unit_artifact_directory"
+    assert report["unit_artifact_count"] == len(_event_ids())
+    assert report["unit_artifact_set_hash"] == report["screening_artifact_hash"]
+    assert report["summary"]["vectorbt_promoted_count"] == 1
+    assert report["summary"]["candidates_passing_current_first_event"] == 1
+    assert report["summary"]["packaged_count"] == 0
+    assert report["assembler_diagnostics"]["candidate_skip_counts"] == {
+        "diagnostic_only_screening_artifact_dir:current_first_event": 1
+    }
+    assert receipt["skipped"]["candidate_skip_counts"] == {
+        "diagnostic_only_screening_artifact_dir:current_first_event": 1
+    }
+
+
+def test_screening_artifact_dir_hash_is_source_root_independent(tmp_path: Path) -> None:
+    artifact = _complete_surface_artifact()
+    unit_dir = _write_event_unit_artifacts(tmp_path / "units", artifact)
+
+    from_workspace_root = _load_screening_evidence(
+        screening_artifact_path=None,
+        screening_artifact_dir=unit_dir,
+        source_root=tmp_path,
+    )
+    from_unit_root = _load_screening_evidence(
+        screening_artifact_path=None,
+        screening_artifact_dir=unit_dir,
+        source_root=unit_dir,
+    )
+
+    assert (
+        from_workspace_root.artifact["unit_artifact_set_hash"]
+        == from_unit_root.artifact["unit_artifact_set_hash"]
+    )
+    assert (
+        from_workspace_root.artifact["screening_artifact_hash"]
+        == from_unit_root.artifact["screening_artifact_hash"]
+    )
+    assert from_workspace_root.source_path != from_unit_root.source_path
+
+    candidate_id = next(iter(from_workspace_root.promoted_by_id))
+    assert (
+        from_workspace_root.artifact_sources_by_candidate[candidate_id]
+        != from_unit_root.artifact_sources_by_candidate[candidate_id]
+    )
+
+
+def test_screening_artifact_dir_empty_fails_closed_without_output(tmp_path: Path) -> None:
+    empty_dir = tmp_path / "empty_units"
+    empty_dir.mkdir()
+    result = _run_dir_script(tmp_path, empty_dir)
+
+    assert result.returncode != 0
+    assert "screening_artifact_dir_empty" in result.stderr
+    assert not (tmp_path / "raw_robustness_inputs.json").exists()
+
+
+def test_screening_artifact_dir_rejects_stale_raw_output_path(tmp_path: Path) -> None:
+    artifact = _complete_surface_artifact()
+    unit_dir = _write_event_unit_artifacts(tmp_path / "units", artifact)
+    stale_out = tmp_path / "raw_robustness_inputs.json"
+    stale_out.write_text('{"schema":"stale"}\n', encoding="utf-8")
+
+    result = _run_dir_script(tmp_path, unit_dir)
+
+    assert result.returncode != 0
+    assert "diagnostic_out_must_not_already_exist" in result.stderr
+    assert stale_out.read_text(encoding="utf-8") == '{"schema":"stale"}\n'
 
 
 def test_first_event_fail_can_pass_pooled_train_event_policy_in_report_only(tmp_path: Path) -> None:

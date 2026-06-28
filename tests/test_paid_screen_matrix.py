@@ -609,6 +609,62 @@ class TestRunVectorbtSimulationMatrix:
             assert "Expectancy" in stats
             assert prom.vectorbt_results["gate_metric_authority"] == "official_vectorbt_portfolio_stats"
 
+    def test_zero_trade_missing_gate_stats_rejections_keep_diagnostic_metrics(
+        self, monkeypatch, tmp_path
+    ):
+        """Missing official gate stats still leave measured diagnostics on rejected rows."""
+
+        class MissingExpectancyPortfolio(FakeMatrixPortfolio):
+            def stats(self, column=None, **kwargs):
+                stats = super().stats(column=column, **kwargs)
+                stats.pop("Expectancy", None)
+                return stats
+
+        def from_signals(close, entries, exits, **kwargs):
+            return MissingExpectancyPortfolio(close, entries, exits)
+
+        _install_fake_vectorbt(monkeypatch, from_signals)
+        ohlcv = _synthetic_ohlcv(40)
+        cand = _mock_candidate("HYP_5", 0.15)
+        grid = {
+            "signal_threshold": [0.15],
+            "holding_period_bars": [15],
+            "stop_loss_pct": [None],
+            "take_profit_pct": [None],
+        }
+
+        result = run_vectorbt_simulation_matrix(
+            ohlcv,
+            [cand],
+            parsed=None,
+            grid=grid,
+            repo_root=tmp_path,
+            signal_computer=lambda *_: (
+                np.zeros(len(ohlcv)),
+                np.zeros(len(ohlcv)),
+            ),
+            chunk_size=4,
+        )
+
+        artifact = result.to_dict()
+        validate_screening_artifact(artifact)
+        assert artifact["promoted"] == []
+        rejected = artifact["rejected"][0]
+        assert rejected["rejection_reason_or_null"] == "vectorbt_stats_missing_gate_fields"
+        assert rejected["screening_status"] == "rejected"
+        assert rejected["replay_eligibility_status"] == "not_eligible"
+        assert rejected["trade_count"] == 0
+        assert rejected["net_return"] == 0.0
+        assert rejected["max_drawdown"] == 0.0
+        assert rejected["metric_values"]["missing_vectorbt_stats_fields"] == ["Expectancy"]
+        assert rejected["metric_values"]["gate_metric_authority"] == "official_vectorbt_portfolio_stats"
+        assert rejected["metric_values"]["diagnostic_metric_authority"] == "auxiliary_numpy_metrics"
+        assert (
+            rejected["metric_values"]["diagnostic_metric_status"]
+            == "diagnostic_only_not_used_for_gate_or_replay_eligibility"
+        )
+        assert "sharpe" not in rejected["metric_values"]
+
     def test_candidate_id_matches_loop_mode(self, monkeypatch, tmp_path):
         """Per-trial candidate IDs are identical to loop mode."""
         ohlcv, grid = self._setup(monkeypatch)

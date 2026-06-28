@@ -20,6 +20,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from scripts.build_robustness_raw_inputs_from_screening import _extract_measured_row
 from backtest_pipeline.src.promotion_gate import (
     PromotedCandidate,
     PromotionGate,
@@ -2378,7 +2379,7 @@ class TestFilterCandidates:
         assert promoted["sortino"]["status"] == "not_run"
         assert promoted["vectorbt_results"]["profit_factor"]["status"] == "not_run"
 
-    def test_missing_expectancy_rejects_even_when_total_trades_zero(self, monkeypatch, tmp_path):
+    def test_missing_gate_stats_rejection_keeps_diagnostic_metrics(self, monkeypatch, tmp_path):
         import sys
         from types import SimpleNamespace
 
@@ -2386,7 +2387,7 @@ class TestFilterCandidates:
 
         class FakePortfolio:
             def stats(self):
-                stats = _complete_vbt_stats(total_trades=0)
+                stats = _complete_vbt_stats(total_return_pct=0.2, total_trades=1)
                 stats.pop("Expectancy")
                 return stats
 
@@ -2400,11 +2401,17 @@ class TestFilterCandidates:
 
         close = 100.0 + np.arange(80, dtype=float) * 0.1
         ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+        candidate = _mock_candidate("HYP_5", 0.15)
+        candidate.metadata.update({
+            "event_id": "CPI_2024_09_11_TIGHT",
+            "event_type": "CPI",
+            "context_set_id": "ctx_macro_cpi",
+        })
 
         result = filter_candidates(
-            candidates=[_mock_candidate("HYP_5", 0.15)],
+            candidates=[candidate],
             parsed=None,
-            event_id="SYNTHETIC",
+            event_id="CPI_2024_09_11_TIGHT",
             repo_root=tmp_path,
             gates=PromotionGate(
                 min_oos_expectancy=-1.0,
@@ -2431,6 +2438,23 @@ class TestFilterCandidates:
         rejected = artifact["rejected"][0]
         assert rejected["rejection_reason_or_null"] == "vectorbt_stats_missing_gate_fields"
         assert rejected["metric_values"]["missing_vectorbt_stats_fields"] == ["Expectancy"]
+        assert rejected["screening_status"] == "rejected"
+        assert rejected["replay_eligibility_status"] == "not_eligible"
+        assert rejected["trade_count"] == 1
+        assert rejected["net_return"] > 0.0
+        assert rejected["expectancy_per_trade"] > 0.0
+        assert rejected["max_drawdown"] <= 0.0
+        assert rejected["metric_values"]["diagnostic_metric_authority"] == "auxiliary_numpy_metrics"
+        assert (
+            rejected["metric_values"]["diagnostic_metric_status"]
+            == "diagnostic_only_not_used_for_gate_or_replay_eligibility"
+        )
+        assert "sharpe" not in rejected["metric_values"]
+        measured, reason = _extract_measured_row(rejected)
+        assert reason is None
+        assert measured is not None
+        assert measured.trade_count == 1
+        assert measured.sharpe == 0.8
 
     def test_trial_candidate_ids_include_symbol_context(self, monkeypatch, tmp_path):
         import sys
