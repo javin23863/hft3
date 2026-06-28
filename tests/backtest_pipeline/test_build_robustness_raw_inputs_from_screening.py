@@ -12,7 +12,10 @@ from backtest_pipeline.src.vectorbt_adapter import (
     compute_screening_artifact_hash,
     validate_screening_artifact,
 )
-from scripts.build_robustness_raw_inputs_from_screening import _extract_measured_row
+from scripts.build_robustness_raw_inputs_from_screening import (
+    _extract_measured_row,
+    _load_screening_evidence,
+)
 from test_apply_robustness_evidence_to_screening import _screening_artifact, _write_json
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -389,6 +392,38 @@ def test_screening_artifact_dir_is_diagnostic_only_even_for_current_policy(tmp_p
     assert receipt["skipped"]["candidate_skip_counts"] == {
         "diagnostic_only_screening_artifact_dir:current_first_event": 1
     }
+
+
+def test_screening_artifact_dir_hash_is_source_root_independent(tmp_path: Path) -> None:
+    artifact = _complete_surface_artifact()
+    unit_dir = _write_event_unit_artifacts(tmp_path / "units", artifact)
+
+    from_workspace_root = _load_screening_evidence(
+        screening_artifact_path=None,
+        screening_artifact_dir=unit_dir,
+        source_root=tmp_path,
+    )
+    from_unit_root = _load_screening_evidence(
+        screening_artifact_path=None,
+        screening_artifact_dir=unit_dir,
+        source_root=unit_dir,
+    )
+
+    assert (
+        from_workspace_root.artifact["unit_artifact_set_hash"]
+        == from_unit_root.artifact["unit_artifact_set_hash"]
+    )
+    assert (
+        from_workspace_root.artifact["screening_artifact_hash"]
+        == from_unit_root.artifact["screening_artifact_hash"]
+    )
+    assert from_workspace_root.source_path != from_unit_root.source_path
+
+    candidate_id = next(iter(from_workspace_root.promoted_by_id))
+    assert (
+        from_workspace_root.artifact_sources_by_candidate[candidate_id]
+        != from_unit_root.artifact_sources_by_candidate[candidate_id]
+    )
 
 
 def test_screening_artifact_dir_empty_fails_closed_without_output(tmp_path: Path) -> None:

@@ -613,6 +613,13 @@ def _source_path(path: Path, source_root: Path | None) -> str:
         return str(resolved)
 
 
+def _unit_artifact_record_path(artifact_path: Path, artifact_dir: Path) -> str:
+    try:
+        return artifact_path.resolve().relative_to(artifact_dir.resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError(f"unit_artifact_outside_dir:{artifact_path}") from exc
+
+
 def _collect_artifact_rows(
     artifact: Mapping[str, Any],
     *,
@@ -729,7 +736,7 @@ def _load_screening_evidence(
         source_path = _source_path(artifact_path, source_root)
         artifact_records.append(
             {
-                "path": source_path,
+                "path": _unit_artifact_record_path(artifact_path, screening_artifact_dir),
                 "screening_artifact_hash": _artifact_identity_hash(artifact),
             }
         )
