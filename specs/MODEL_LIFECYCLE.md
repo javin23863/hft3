@@ -19,8 +19,9 @@ BUILT + tested (90 tests) + safe-by-default — the loop is now end-to-end wired
 - **Job worker** `lifecycle_orchestrator.src.worker` — claims pending jobs and runs
   them; routes materialize REAL `run_event_universe --from-stage-a <stub>` commands
   (no placeholders) when the model's cell metadata is present. **Historical M6 path**
-  only — current VectorBT prefilter uses `run_paid_screen.py` on Vast;
-  HftBacktest follows promoted screening artifacts.
+  only. The active research pipeline now uses HftBacktest-only runs under
+  `artifacts/hbt_runs/<run_id>/`; VectorBT paid-screen artifacts are inactive
+  diagnostics unless explicitly re-enabled.
 - **Scheduler** `scripts/orchestrator_nightly.ps1` + `register_orchestrator_task.ps1`
   (`HFT3ModelMaintenanceNightly`, 05:50, DRY-RUN default).
 - **Scratch-registry hook** in `get_active_hypotheses()` (env `HFT3_SCRATCH_HYP_REGISTRY`,
@@ -104,7 +105,11 @@ AUTONOMY_FROZEN / audit-chain-break. Emergency controls: `POST /api/control/auto
 (always allowed — trips breaker), `/unfreeze` (gated + confirm).
 
 Pipeline zone (`/api/pipeline`) surfaces:
-- **VectorBT paid-screen tracking** — `vectorbt_paid_screen_tracking` reads
+- **HftBacktest-only active runs** — Workbench reads
+  `artifacts/hbt_runs/<run_id>/` and treats `run_manifest.json`,
+  `recorder_result.npz`, `stats_summary.json`, and `promotion_decision.json` as
+  the current active backtest truth.
+- **VectorBT paid-screen tracking (inactive diagnostic)** — `vectorbt_paid_screen_tracking` reads
   `runtime/reports/vbt_full_run_declaration.json`, units JSONL, and the latest
   `research_cards/pipeline_runs/*/paid_screen_run_manifest.json` (artifact-discovered
   run id; never hardcoded). Workers, expected/completed units, research split
@@ -112,10 +117,10 @@ Pipeline zone (`/api/pipeline`) surfaces:
   or orchestrator log disagree.
 - **Stage A (historical M6)** — labeled explicitly; not a VectorBT full-screen
   prerequisite per `docs/project/VBT_PAID_SCREEN_UNIT_SCOPE.md`.
-- **Promote stage** — prefers VectorBT `screening_promoted_count`; Stage A
-  survivor count is historical fallback only.
+- **Promote stage** — active decisions prefer HftBacktest `promotion_decision.json`.
+  VectorBT promoted counts and Stage A survivor counts are historical diagnostics.
 
-## Research prefilter → realism handoff (current workflow)
+## Research run → realism handoff (current workflow)
 
 Authority: vault `library/14 Model Lifecycle and Governance.md`, `library/System Implications.md`, repo [UNIFIED_RESEARCH_PIPELINE.md](../docs/vault/UNIFIED_RESEARCH_PIPELINE.md) (chronological stages 0–7).
 
@@ -123,20 +128,21 @@ Code stage registry: `packages/backtest_pipeline/src/research_pipeline_stages.py
 
 | Step | Role | Location |
 |------|------|----------|
-| VectorBT paid screen (Vast) | Broad cheap prefilter: `events.csv × active model registry × discovery_confirmation` | `scripts/run_paid_screen.py`, Vast launch scripts |
-| Robust gates (DSR/PBO/CSCV/WFC) | Must pass on promoted rows before LIVE eligibility | `screening_artifact.json`, `PromotionGate` |
-| `feature_recipe_hash` equality | Fail-closed handoff from VectorBT promoted row → `HftReplayScenario` | `packages/backtest_pipeline/src/recipe_hash_gate.py` |
-| HftBacktest realism | Heavier execution replay on promoted outputs only | `research_cards/hftbacktest_realism/` |
+| HftBacktest data validation | Admit only valid HBT event data + matching snapshot | `packages/backtest_pipeline/src/hftbacktest_only_pipeline.py` |
+| HftBacktest strategy run | Active execution/economic evidence; no VectorBT prefilter | `scripts/run_hftbacktest_only.py`, `artifacts/hbt_runs/<run_id>/` |
+| Post-HBT decision | Generated only after recorder + stats exist | `promotion_decision.json` |
+| Legacy VectorBT paid screen (Vast) | Inactive diagnostic, not an active HBT prerequisite | `scripts/run_paid_screen.py`, Vast launch scripts |
 | M6 `run_event_universe` | Historical gauntlet path (`--from-stage-a`); parallel, not prerequisite | `research_cards/universe_M6_*` |
 
-**No local Stage A survivor file is required** for the Vast VectorBT full screen.
+**No local Stage A survivor file, VectorBT paid unit, or `screening_artifact.json`
+is required for active HftBacktest-only runs.**
 
 ## Inventory, lineage, and enforcement
 
 | Concern | Requirement | Location |
 |---------|-------------|----------|
 | Canonical slug + `hyp_id` lineage | Every model has registry slug; lifecycle record carries `hypothesis_id` when applicable | `features_engine` registry, `model_lifecycle.json` |
-| `feature_recipe_hash` | Must match across VectorBT promotion → HftBacktest handoff | `recipe_hash_gate.py`, screening artifacts |
+| HBT run identity | Active Workbench evidence must bind to a real `artifacts/hbt_runs/<run_id>/` folder | `run_manifest.json`, `stats_summary.json`, `promotion_decision.json` |
 | Submit-gate (degraded lifecycle) | DEGRADED-RED / QUARANTINED / PAUSED / RETIRED → REJECT in pre-trade path | `submit_gate.py` → `trade_manager/risk_layer._static_reject` |
 | Trading kill-switch | Book-level halt; separate from autonomy global kill | `trade_manager/kill_switch.py` |
 | Autonomy kill | Stops maintenance loop only (`HFT3_AUTONOMY_KILL`); never the book | `packages/autonomy/` |

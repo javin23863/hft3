@@ -1,6 +1,8 @@
 # Autoresearch Pipeline Upgrade Plan
 
-Status: implementation plan for the latest pipeline-upgrade PR.
+Status: historical / superseded for active HftBacktest-only routing. This was
+the implementation plan for an older pipeline-upgrade PR. Active HBT work follows
+[HFTBACKTEST_ONLY_PIPELINE_PLAN.md](HFTBACKTEST_ONLY_PIPELINE_PLAN.md).
 
 Authority: `docs/research/AUTORESEARCH_PIPELINE.md`, `docs/project/VBT_PAID_SCREEN_RUNBOOK.md`, `docs/project/ROBUSTNESS_PIPELINE_SOURCE_OF_TRUTH.md`, vault `wiki/hot.md`, and `operations/2026-06-23 Pre-VastAI smoke handoff.md`.
 
@@ -19,7 +21,8 @@ The upgrade is intentionally narrow:
 
 ## Non-Negotiable Boundaries
 
-- Do not change the canonical engine order: VectorBT / Vector VT screen, then robustness evidence, then strict HftBacktest/HFB replay.
+- Historical boundary for this PR: do not change its then-current engine order.
+  Current active engine order is HftBacktest-only.
 - Do not launch HftBacktest or VastAI from a VectorBT artifact until `apply_robustness_evidence_to_screening.py --min-eligible 1` passes.
 - Do not duplicate `scripts/run_vectorbt_paid_screen_v2.py`; that lane already owns long-lived workers, batching, cache keys, resume, and high-worker execution.
 - Do not run Python workers on the MSI workstation. Verification and performance measurement run on CHI404 or Vast.

@@ -22,9 +22,9 @@ Each step lists: **purpose**, **canonical document**, **primary code**, **config
 5. Synchronization and PIT
 6. Feature recipes and candidates
 7. Model registry
-8. VectorBT screening
-9. Robustness gates
-10. HftBacktest realism
+8. HftBacktest data validation
+9. HftBacktest strategy run
+10. Post-HBT evaluation
 11. Autonomous learning
 12. Artifacts and cockpit
 13. Local unit tests
@@ -142,67 +142,69 @@ Each step lists: **purpose**, **canonical document**, **primary code**, **config
 | **Tests** | `tests/test_model_registry_slugs.py`, `tests/test_workbench/test_model_event_binding.py` |
 | **Inputs** | Model slug, symbol, event_id |
 | **Outputs** | Resolved model_id, composition, parameter bounds |
-| **Next** | Step 8 — VectorBT |
+| **Next** | Step 8 — HftBacktest data validation |
 
 ---
 
-## 8. VectorBT screening
+## 8. HftBacktest Data Validation
 
 | Field | Value |
 |-------|-------|
-| **Purpose** | Fast screen with honest feature-plane labeling; emit terminal `screening_artifact.json` |
-| **Document** | [../project/VECTORBT_SCREENING_ENGINE_SPEC.md](../project/VECTORBT_SCREENING_ENGINE_SPEC.md), [../human/VECTORBT_PIPELINE.md](VECTORBT_PIPELINE.md) |
-| **Code** | `packages/backtest_pipeline/src/vectorbt_adapter.py`, `scripts/run_pipeline.py --vectorbt` |
-| **Config** | `bar_construction_id`, `screening_scope`, rust engine requirement for broad scope |
-| **Tests** | `tests/test_vectorbt_adapter.py`, `tests/test_vectorbt_paid_screen_gate.py` |
-| **Inputs** | Frozen candidate manifest, OHLCV or fs_v1 row loop data |
-| **Outputs** | `research_cards/pipeline_runs/<run_id>/screening_artifact.json`, `feature_plane_status` |
-| **Next** | Step 9 — robustness |
+| **Purpose** | Normalize and validate HftBacktest-compatible event data before any economics gate |
+| **Document** | [../project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md](../project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md), [../project/HFTBACKTEST_REALISM_ENGINE_SPEC.md](../project/HFTBACKTEST_REALISM_ENGINE_SPEC.md) |
+| **Code** | `packages/backtest_pipeline/src/hftbacktest_only_pipeline.py`, `scripts/run_hftbacktest_only.py` |
+| **Config** | normalized NPZ, initial snapshot, symbol/contract metadata, tick/lot/contract size |
+| **Tests** | `tests/backtest_pipeline/test_hftbacktest_only_pipeline.py` |
+| **Inputs** | HftBacktest event NPZ + initial snapshot |
+| **Outputs** | `artifacts/hbt_runs/<run_id>/data_validation.json`, `data_manifest.json`, `normalized_input_manifest.json` |
+| **Next** | Step 9 — HftBacktest strategy run |
 
 ```bash
-python scripts/run_pipeline.py --thesis "..." --event-id CPI_2024_09_11_TIGHT --vectorbt --no-llm
+python scripts/run_hftbacktest_only.py \
+  --run-id hbt_smoke \
+  --symbol MES \
+  --contract MESH6 \
+  --event-id CPI_2024_09_11_TIGHT \
+  --normalized-npz data/hbt/normalized/MES/2024-09-11/CPI_2024_09_11_TIGHT_l3.npz \
+  --initial-snapshot data/hbt/snapshots/MES/2024-09-11/CPI_2024_09_11_TIGHT_initial_snapshot.npz
 ```
 
-**Default path status:** auto-selects `fs_v1_row_loop_from_feature_store` when feature-store NPZ exists for `(symbol, event_id)`; otherwise falls back to `bar_stub_research_only` (Phase 5).
+VectorBT, Stage A survivor cells, and `screening_artifact.json` are inactive for
+this active path. They remain historical diagnostics unless explicitly
+re-enabled by the owner.
 
 ---
 
-## 9. Robustness gates
+## 9. HftBacktest Strategy Run
 
 | Field | Value |
 |-------|-------|
-| **Purpose** | Walk-forward / WFC validation on **frozen** screened parameters |
-| **Document** | [../project/ROBUSTNESS_TESTING_SPEC.md](../project/ROBUSTNESS_TESTING_SPEC.md) |
-| **Code** | `packages/backtest_pipeline/src/robustness_bridge.py`, `apps/workbench/src/run/campaign_runner.py` |
-| **Config** | `walk_forward.yaml`, `wfc_gate.yaml` |
-| **Tests** | `tests/backtest_pipeline/test_robustness_bridge.py`, workbench WFC tests |
-| **Inputs** | Promoted candidates from screening artifact |
-| **Outputs** | Campaign dir `summary.json`, WFC status PASS/FAIL |
-| **Next** | Step 10 — HftBacktest |
+| **Purpose** | Run one strategy through official HftBacktest semantics and write execution artifacts |
+| **Document** | [../project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md](../project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md) |
+| **Code** | `packages/backtest_pipeline/src/hftbacktest_only_pipeline.py`, `scripts/run_hftbacktest_only.py` |
+| **Config** | strategy id/params, latency model, fee model, exchange fill model, queue model |
+| **Tests** | `tests/backtest_pipeline/test_hftbacktest_only_pipeline.py`, `tests/backtest_pipeline/test_hftbacktest_realism_hbt*.py` |
+| **Inputs** | Valid HBT event data, initial snapshot, explicit run config |
+| **Outputs** | `recorder_result.npz`, `stats_summary.json`, `orders.parquet`, `fills.parquet`, `latency_report.json`, `fill_quality_report.json`, `queue_diagnostics.json` |
+| **Next** | Step 10 — post-HBT evaluation |
 
 ---
 
-## 10. HftBacktest realism
+## 10. Post-HBT Evaluation
 
 | Field | Value |
 |-------|-------|
-| **Purpose** | Queue, latency, fill realism; same recipe identity as VectorBT |
-| **Document** | [../project/HFTBACKTEST_REALISM_ENGINE_SPEC.md](../project/HFTBACKTEST_REALISM_ENGINE_SPEC.md), [../project/VECTORBT_TO_HFTBACKTEST_HANDOFF.md](../project/VECTORBT_TO_HFTBACKTEST_HANDOFF.md) |
-| **Code** | `packages/backtest_pipeline/src/hftbacktest_realism.py`, `hft_campaign/runner.py` |
-| **Config** | Validated NPZ, latency model JSON, fill queue model, upstream ref |
-| **Tests** | `tests/backtest_pipeline/hft_campaign/`, `tests/backtest_pipeline/test_hftbacktest_realism_hbt0.py` |
-| **Inputs** | Terminal screening artifact (rust pass), native hot-path evidence |
-| **Outputs** | HBT-0..4 artifacts, campaign manifests |
+| **Purpose** | Evaluate only after HftBacktest output exists; do not pre-promote or pre-reject for economics |
+| **Document** | [../project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md](../project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md), [../vault/BACKTESTER_CERTIFICATION.md](../vault/BACKTESTER_CERTIFICATION.md) |
+| **Code** | `packages/backtest_pipeline/src/hftbacktest_only_pipeline.py`, `apps/workbench/src/run/evidence_snapshot.py` |
+| **Config** | promotion decision gates, robustness/certification tier policy |
+| **Tests** | `tests/backtest_pipeline/test_hftbacktest_only_pipeline.py`, `tests/test_workbench/test_evidence_snapshot.py` |
+| **Inputs** | `recorder_result.npz` + `stats_summary.json` from `artifacts/hbt_runs/<run_id>/` |
+| **Outputs** | `promotion_decision.json`, Workbench `hbt_runs` source, Plan Drift Review receipts |
 | **Next** | Step 11 — learning |
 
-```bash
-python scripts/run_pipeline.py ... --vectorbt --hftbacktest-realism \
-  --hftbacktest-data-npz <npz> --hftbacktest-latency-model <json> \
-  --hftbacktest-fill-queue-model <json> --hftbacktest-upstream-ref v2.4.2 \
-  --native-hot-path-evidence <path>#sha256:<digest>
-```
-
-**Phase 6 gate:** `vectorbt feature_recipe_hash == hftbacktest feature_recipe_hash` — enforced in `hft_campaign/validation.py` (implemented).
+`promotion_decision.json` may be generated only after HftBacktest recorder and
+stats artifacts exist.
 
 ---
 
@@ -242,10 +244,10 @@ python scripts/run_pipeline.py --autoresearch --thesis "..." --event-id CPI_2024
 
 | Artifact | Location |
 |----------|----------|
-| VectorBT screen | `research_cards/pipeline_runs/<run_id>/screening_artifact.json` |
+| HBT active run | `artifacts/hbt_runs/<run_id>/` |
 | Autoresearch campaign | `research_cards/autoresearch/<campaign_id>/` |
 | Workbench robustness | `research_cards/workbench_runs/<campaign_id>/` |
-| HBT campaign | `research_cards/autoresearch/.../hft_campaign/` or realism run dir |
+| Legacy HBT campaign | `research_cards/autoresearch/.../hft_campaign/` or realism run dir |
 | Feature-family status | `docs/project/FEATURE_FAMILY_STATUS_MANIFEST.yaml` |
 
 ---
@@ -285,20 +287,20 @@ python -m pytest tests/backtest_pipeline/test_feature_plane.py tests/research_pi
 
 ---
 
-## 15. Paid-compute readiness
+## 15. HftBacktest Campaign Readiness
 
 | Field | Value |
 |-------|-------|
-| **Purpose** | Block rented workers until pilot proves feature-family coverage |
-| **Document** | [../project/VBT_PAID_SCREEN_RUNBOOK.md](../project/VBT_PAID_SCREEN_RUNBOOK.md), [../project/VBT_PAID_SCREEN_UNIT_SCOPE.md](../project/VBT_PAID_SCREEN_UNIT_SCOPE.md) |
-| **Code** | `scripts/run_paid_screen.py`, `packages/backtest_pipeline/src/feature_family_status.py` |
-| **Config** | `paid_screen_gate` in [FEATURE_FAMILY_STATUS_MANIFEST.yaml](../project/FEATURE_FAMILY_STATUS_MANIFEST.yaml) |
-| **Tests** | `tests/test_vectorbt_paid_screen_gate.py`, `tests/backtest_pipeline/test_feature_family_paid_gate.py` |
-| **Inputs** | Pilot artifact with all family statuses + PIT proof |
-| **Outputs** | Paid unit JSONL, per-unit screening artifacts |
+| **Purpose** | Block campaign/rented work until one local HBT-only run proves data, strategy, and artifact contracts |
+| **Document** | [../project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md](../project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md), [../project/HFTBACKTEST_CAMPAIGN_ARCHITECTURE.md](../project/HFTBACKTEST_CAMPAIGN_ARCHITECTURE.md) |
+| **Code** | `scripts/run_hftbacktest_only.py`, `packages/backtest_pipeline/src/hftbacktest_only_pipeline.py` |
+| **Config** | HBT run manifest, validated NPZ/snapshot manifests, explicit latency/fill/queue assumptions |
+| **Tests** | `tests/backtest_pipeline/test_hftbacktest_only_pipeline.py`, `tests/backtest_pipeline/test_hftbacktest_realism_hbt*.py` |
+| **Inputs** | Local HBT run artifact with recorder, stats, diagnostics, and post-HBT decision |
+| **Outputs** | Campaign-ready HBT manifest set; no VectorBT or Stage A prerequisite |
 | **Next** | Step 16 — full campaign |
 
-**Gate:** `paid_screen_gate.allowed: false` until Phase A pilot passes and an operator sets `allowed: true`. Evaluator: `evaluate_feature_family_paid_gate` in `feature_family_status.py`.
+Legacy VectorBT paid-screen runbooks remain historical diagnostics only.
 
 ---
 
@@ -306,13 +308,13 @@ python -m pytest tests/backtest_pipeline/test_feature_plane.py tests/research_pi
 
 | Field | Value |
 |-------|-------|
-| **Purpose** | Production-scale screen → robustness → HBT campaign |
+| **Purpose** | Production-scale HBT campaign after local HBT-only contract is green |
 | **Document** | [../project/HFTBACKTEST_CAMPAIGN_ARCHITECTURE.md](../project/HFTBACKTEST_CAMPAIGN_ARCHITECTURE.md), [../operations/VAST_HFT_CAMPAIGN.md](../operations/VAST_HFT_CAMPAIGN.md) |
-| **Code** | `scripts/hft_run_campaign.py`, `hft_campaign/runner.py`, paid VectorBT |
+| **Code** | `scripts/run_hftbacktest_only.py`, campaign runner adapters around HBT artifacts |
 | **Config** | Campaign manifest, worker isolation spec |
 | **Tests** | `tests/backtest_pipeline/hft_campaign/test_hft_campaign_integration.py` |
 | **Inputs** | Validated manifests, checkpoint/resume |
-| **Outputs** | Full campaign artifact tree under `research_cards/` |
+| **Outputs** | Full HBT campaign artifact tree and Workbench `hbt_runs` visibility |
 | **Next** | Update [FEATURE_FAMILY_STATUS_MANIFEST.yaml](../project/FEATURE_FAMILY_STATUS_MANIFEST.yaml); append vault decision |
 
 ---
@@ -330,31 +332,27 @@ python -m pytest tests/backtester_validation/fast -q
 # 2. Event catalog
 python -m economic_event_universe.cli validate
 
-# 3. Single-shot VectorBT screen (fs_v1 when feature store present; else bar stub)
-python scripts/run_pipeline.py \
-  --thesis "Fade spread blowout after CPI surprise on MES" \
-  --event-id CPI_2024_09_11_TIGHT \
+# 3. Single-shot HftBacktest-only run
+python scripts/run_hftbacktest_only.py \
+  --run-id hbt_smoke \
   --symbol MES \
-  --vectorbt --no-llm
+  --contract MESH6 \
+  --event-id CPI_2024_09_11_TIGHT \
+  --normalized-npz <validated_hftbacktest_l3_npz> \
+  --initial-snapshot <matching_initial_snapshot_npz>
 
-# 4. Inspect feature plane on artifact
-# research_cards/pipeline_runs/<run_id>/screening_artifact.json
-#   → feature_plane_status, feature_usage_manifest
+# 4. Inspect active artifact
+# artifacts/hbt_runs/<run_id>/
+#   -> run_manifest.json, data_validation.json, recorder_result.npz,
+#      stats_summary.json, promotion_decision.json
 
 # 5. Optional autoresearch smoke (3 generations, no LLM)
 python scripts/run_pipeline.py \
   --autoresearch --thesis "Fade spread blowout" \
   --event-id CPI_2024_09_11_TIGHT --no-llm --max-generations 3
 
-# 6. HBT handoff (when validated NPZ + latency models exist)
-python scripts/run_pipeline.py ... --vectorbt --hftbacktest-realism \
-  --hftbacktest-data-npz <npz> \
-  --hftbacktest-latency-model <latency.json> \
-  --hftbacktest-fill-queue-model <fill.json> \
-  --hftbacktest-upstream-ref v2.4.2 \
-  --native-hot-path-evidence <evidence>#sha256:<digest>
-
-# 7. Do NOT run paid screen until FEATURE_FAMILY_STATUS_MANIFEST paid_screen_gate allows
+# 6. Open Workbench active HBT run source
+streamlit run apps/workbench/ui/app.py
 ```
 
 ---

@@ -2,8 +2,10 @@
 
 # HftBacktest Realism Engine Spec
 
-Status: planning-control specification for the execution-realism implementation
-that follows the VectorBT screening engine.
+Status: historical / legacy realism-layer specification. It remains the
+authority for the older VectorBT-to-HftBacktest handoff implementation, but the
+active pipeline is now HftBacktest-only per
+`docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md`.
 
 This document defines how hft3 must use official HftBacktest as the source of
 truth for tick/order-book replay, latency modeling, order/fill simulation, queue
@@ -12,16 +14,19 @@ backtester from being built inside hft3.
 
 ## Scope
 
-HftBacktest is the downstream execution-realism engine. It consumes only
-validated VectorBT screen-passed candidates and answers:
+For the legacy handoff path, HftBacktest is the downstream execution-realism
+engine and consumes only validated VectorBT screen-passed candidates. For the
+active path, HftBacktest receives validated HftBacktest-compatible event data
+directly and answers:
 
 ```text
 Given the actual replay feed, fee model, latency model, queue/fill model,
 order behavior, and hft3 risk constraints, does this candidate still survive?
 ```
 
-It does not discover the full model universe. It does not replace VectorBT
-screening. It does not prove live readiness by itself. It replaces the
+It does not discover the full model universe. In the active path, it replaces
+VectorBT screening as the first economic/execution evaluation point. It does
+not prove live readiness by itself. It replaces the
 repo-local replay universe path for this implementation. The retired hft3
 entrypoints `run_event_universe.py`, `replay_matrix.py`, `ReplaySession`, and
 `run_event_replay.py` must not be used, extended, or treated as fallback paths
@@ -138,7 +143,7 @@ Rules:
   `native_cpp_hot_path_evidence_unrecognized`; regenerate or package them into a
   C-lane receipt artifact before strict replay eligibility.
 
-## VectorBT Handoff Gate
+## Legacy VectorBT Handoff Gate (inactive for active path)
 
 Before HftBacktest replay can be considered eligible evidence, the selected
 candidate row from `screening_artifact.json` must satisfy the VectorBT handoff

@@ -2,7 +2,8 @@
 
 # Opportunity Research Feature-Plane Execution Plan
 
-Status: subordinate execution plan, not a new canonical scope document.
+Status: historical / inactive for active HftBacktest-only routing. Subordinate
+execution plan, not a new canonical scope document.
 
 This plan consolidates the current feature-plane brainstorming into one
 followable workflow. It is controlled by:

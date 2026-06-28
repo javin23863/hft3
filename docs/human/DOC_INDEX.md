@@ -5,7 +5,7 @@ Chronological onboarding for human developers. AI agents: [../ai/ONBOARDING.md](
 | Step | Document | Why read it |
 |------|----------|-------------|
 | 0 | [../REPO_STATE.md](../REPO_STATE.md) | Canonical path (`C:\Users\MSI\repos\hft3`), active `main`, branch map, clean-tree checks |
-| **0a** | **[RESEARCH_SYSTEM_EXECUTION_ORDER.md](RESEARCH_SYSTEM_EXECUTION_ORDER.md)** | **Chronological research path: data → features → families → VectorBT → robustness → HBT → learning → artifacts** |
+| **0a** | **[RESEARCH_SYSTEM_EXECUTION_ORDER.md](RESEARCH_SYSTEM_EXECUTION_ORDER.md)** | **Chronological research path: data → features → families → HftBacktest-only run → post-HBT evaluation → learning → artifacts** |
 | **0b** | **[../project/FEATURE_FAMILY_IMPLEMENTATION_AUDIT.md](../project/FEATURE_FAMILY_IMPLEMENTATION_AUDIT.md)** | **Feature-family inventory, canonical vs obsolete paths, status manifest** |
 | **0c** | **[../project/FEATURE_FAMILY_RESEARCH_SYSTEM_PROMPT.md](../project/FEATURE_FAMILY_RESEARCH_SYSTEM_PROMPT.md)** | **Active workstream phases 0–9 (integration + ordering)** |
 | 1 | [GETTING_STARTED.md](GETTING_STARTED.md) | Clone, setup, lanes, verification |

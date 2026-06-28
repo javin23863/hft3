@@ -1,6 +1,7 @@
 # Paid-Screen Redesign — Operational Commands
 
-Status: **Operational reference.** Example commands for every operational
+Status: **Historical / inactive for active HftBacktest-only routing.**
+Operational reference with example commands for every legacy operational
 scenario of the v2 paid-screen path
 (`scripts/run_vectorbt_paid_screen_v2.py` and the redesigned execution model).
 

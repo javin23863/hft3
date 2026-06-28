@@ -1,11 +1,16 @@
 ---
-status: active
+status: historical-superseded
 replaces: all prior autoresearch pipeline prompts
 repo: javin23863/hft3
 date: 2026-06-20
 ---
 
 # Mandatory Developer Assignment: Complete the Autonomous Research Pipeline with Two Walk-Forward Gates and External PR AI GrepLoop
+
+Supersession: this prompt is historical for active HftBacktest-only routing.
+Follow `docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md` for current active
+pipeline work. The VectorBT-before-HftBacktest sequence below is not an active
+HBT prerequisite unless an owner explicitly re-enables the legacy path.
 
 This prompt replaces all previous prompts for this work.
 Follow it literally.
@@ -855,7 +860,8 @@ packages/backtest_pipeline/src/hftbacktest_realism.py
 packages/backtest_pipeline/src/hft_backtest_builder.py
 ```
 
-Only candidates that passed all prior gates may enter HftBacktest.
+In this historical path, only candidates that passed all prior gates entered
+HftBacktest. Do not reuse that as an active HBT-only prerequisite.
 Do not generate the HFT scenario manifest from every VectorBT promotion if some failed robustness.
 
 Require exact equality of:

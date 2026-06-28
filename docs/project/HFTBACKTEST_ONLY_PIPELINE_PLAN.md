@@ -2,14 +2,14 @@
 
 # HftBacktest-Only Active Pipeline Plan
 
-Status: accepted planning-control decision, implementation in progress.
+Status: accepted planning-control decision, implemented locally pending review-surface GrepLoop.
 Date: 2026-06-29.
 
 This document records the active direction: HftBacktest becomes the source of
 truth for the current backtesting path. VectorBT is frozen as inactive
-infrastructure for this plan. The repo now has an initial HftBacktest-only
-active-path slice; remaining workbench and historical-doc reclassification work
-is still tracked below.
+infrastructure for this plan. The repo now has an HftBacktest-only active-path
+slice, Workbench HBT run visibility, and historical VectorBT/Stage A doc
+reclassification.
 
 ## Authority And Supersession
 
@@ -487,7 +487,10 @@ Implementation progress as of 2026-06-29:
 - Steps 2-4 initial active-path slice landed in
   `packages/backtest_pipeline/src/hftbacktest_only_pipeline.py` and
   `scripts/run_hftbacktest_only.py`.
-- Step 5 and Step 6 remain open.
+- Step 5 Workbench active truth now uses the `hbt_runs` source backed by
+  `artifacts/hbt_runs/<run_id>/`.
+- Step 6 historical VectorBT/Stage A docs are reclassified as legacy or
+  inactive where they previously described active-path prerequisites.
 
 ### Step 1: Freeze VectorBT Active Path
 

@@ -200,7 +200,8 @@ def _render_vbt_paid_status(repo: Path) -> None:
     progress = None
     if expected is not None and expected > 0 and accounted is not None:
         progress = min(1.0, max(0.0, accounted / expected))
-    with st.expander("VectorBT paid screen (Vast)", expanded=state == "running"):
+    with st.expander("VectorBT paid screen (inactive diagnostic)", expanded=False):
+        st.caption("Inactive legacy telemetry: active pipeline truth is HftBacktest-only runs under artifacts/hbt_runs.")
         cols = st.columns(7)
         cols[0].metric("state", display_state)
         cols[1].metric("workers", _display(workers))

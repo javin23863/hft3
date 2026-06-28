@@ -1,11 +1,9 @@
 # VectorBT paid screen model ontology
 
-Status: binding only for model identity and paid-screen interpretation. It is
-not the full research-product authority. The canonical product authority is
-[OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md),
-[VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md),
-[MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md](../cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md),
-and [FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](FEATURE_LITERATURE_TRACEABILITY_MATRIX.md).
+Status: historical / inactive for active HftBacktest-only pipeline routing.
+Binding only for model identity and legacy paid-screen interpretation. Active
+HBT runs follow [HFTBACKTEST_ONLY_PIPELINE_PLAN.md](HFTBACKTEST_ONLY_PIPELINE_PLAN.md)
+and do not require Stage A survivor cells or VectorBT screening artifacts.
 
 Authority chain (do not invent parallel processes):
 
