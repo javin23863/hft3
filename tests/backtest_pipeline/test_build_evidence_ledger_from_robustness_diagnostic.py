@@ -19,7 +19,11 @@ from test_build_robustness_raw_inputs_from_screening import (
     _first_event_fail_artifact,
     _write_event_unit_artifacts,
 )
-from scripts.build_evidence_ledger_from_robustness_diagnostic import _classify_family, _number
+from scripts.build_evidence_ledger_from_robustness_diagnostic import (
+    _classify_family,
+    _data_vs_pipeline_label,
+    _number,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "build_evidence_ledger_from_robustness_diagnostic.py"
@@ -138,10 +142,11 @@ def _family_report(
     parameter_cells: int = 16,
     missing_cells: int = 0,
     insufficient_trade_cells: int = 0,
+    rejected_reasons: list[str] | None = None,
 ) -> dict[str, Any]:
     rejected_events = []
-    if missing_cells or insufficient_trade_cells:
-        reasons = []
+    if missing_cells or insufficient_trade_cells or rejected_reasons:
+        reasons = list(rejected_reasons or [])
         if missing_cells:
             reasons.append("missing_surface")
         if insufficient_trade_cells:
@@ -212,7 +217,7 @@ def _write_sensitivity_report(path: Path, unit_dir: Path, tmp_path: Path) -> dic
         "baseline_surface_policy": "current_first_event",
         "summary": {
             "vectorbt_promoted_count": evidence.promoted_count,
-            "model_family_count": 4,
+            "model_family_count": 6,
             "packaging_eligible_family_count": 3,
             "packaged_count": 0,
             "min_packaged": 1,
@@ -234,6 +239,23 @@ def _write_sensitivity_report(path: Path, unit_dir: Path, tmp_path: Path) -> dic
                 parameter_cells=15,
                 missing_cells=1,
                 insufficient_trade_cells=1,
+            ),
+            _family_report(
+                model_id="SURFACE_ONLY_MODEL",
+                symbol="RTY",
+                packaging_eligible=False,
+                current_pass=False,
+                reason="incomplete_event_parameter_surface:0.937500<1.000000",
+                parameter_cells=15,
+                missing_cells=1,
+            ),
+            _family_report(
+                model_id="DATA_MISSING_MODEL",
+                symbol="ZB",
+                packaging_eligible=False,
+                current_pass=False,
+                reason="bad_npz:source_data_missing",
+                rejected_reasons=["source_data_missing"],
             ),
             _family_report(
                 model_id="HYP_5",
@@ -356,6 +378,8 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     assert result.returncode == 0, result.stderr
     for filename in (
         "candidate_evidence.jsonl",
+        "data_vs_pipeline_audit.json",
+        "data_vs_pipeline_audit.md",
         "family_readiness.jsonl",
         "gate_summary.json",
         "robustness_bridge_readiness_report.md",
@@ -380,6 +404,10 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
         assert (tmp_path / ref).exists()
     assert families_by_model["INCOMPLETE_MODEL"]["classification_bucket"] == "data_quality_failure"
     assert families_by_model["INCOMPLETE_MODEL"]["surface_completeness_ratio"] == 0.9375
+    assert families_by_model["SURFACE_ONLY_MODEL"]["classification_bucket"] == (
+        "surface_incomplete_missing_cells"
+    )
+    assert families_by_model["DATA_MISSING_MODEL"]["classification_bucket"] == "data_quality_failure"
     assert families_by_model["HYP_5"]["classification_bucket"] == (
         "hftbacktest_eligible_derived"
     )
@@ -413,13 +441,56 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     assert summary["any_hftbacktest_eligible_derived"] is True
     assert summary["families_by_bucket"]["robustness_fail_complete_evidence"] == 1
     assert summary["families_by_bucket"]["robustness_pass_needs_evidence_apply"] == 1
-    assert summary["families_by_bucket"]["surface_incomplete_missing_cells"] == 0
-    assert summary["families_by_bucket"]["data_quality_failure"] == 1
+    assert summary["families_by_bucket"]["surface_incomplete_missing_cells"] == 1
+    assert summary["families_by_bucket"]["data_quality_failure"] == 2
     assert summary["families_by_bucket"]["hftbacktest_eligible_derived"] == 1
+
+    audit = json.loads((out_dir / "data_vs_pipeline_audit.json").read_text(encoding="utf-8"))
+    audit_by_model = {row["model_family"]["model_id"]: row for row in audit["families"]}
+    assert audit["schema"] == "hft3_data_vs_pipeline_audit_v1"
+    assert audit["summary"]["hftbacktest_route_created"] is False
+    assert audit_by_model["ROBUST_FAIL_MODEL"]["final_diagnosis_label"] == "reject_model_family"
+    assert audit_by_model["ROBUST_FAIL_MODEL"]["final_diagnosis"] == "reject_model_family"
+    assert audit_by_model["ROBUST_FAIL_MODEL"]["classification_bucket"] == (
+        "robustness_fail_complete_evidence"
+    )
+    assert audit_by_model["ROBUST_FAIL_MODEL"]["recommended_next_action"].startswith(
+        "Review robustness sensitivity diagnostics"
+    )
+    assert audit_by_model["INCOMPLETE_MODEL"]["final_diagnosis_label"] == (
+        "fix_pipeline_measurement_or_gate"
+    )
+    assert audit_by_model["INCOMPLETE_MODEL"]["zero_or_insufficient_trade_evidence"] is True
+    assert audit_by_model["INCOMPLETE_MODEL"]["measurement_or_gate_evidence"] is True
+    assert audit_by_model["SURFACE_ONLY_MODEL"]["final_diagnosis_label"] == (
+        "rerun_vectorbt_surface_shape"
+    )
+    assert audit_by_model["SURFACE_ONLY_MODEL"]["surface_shape_evidence"] is True
+    assert audit_by_model["DATA_MISSING_MODEL"]["final_diagnosis_label"] == (
+        "download_or_build_missing_data"
+    )
+    assert audit_by_model["DATA_MISSING_MODEL"]["missing_data_evidence"] is True
+    assert audit_by_model["HYP_5"]["final_diagnosis_label"] == (
+        "ready_for_hftbacktest_decision"
+    )
+    assert audit_by_model["ROBUST_PASS_NEEDS_APPLY"]["final_diagnosis_label"] == (
+        "apply_robustness_evidence_first"
+    )
+    assert audit["summary"]["families_by_final_diagnosis"] == {
+        "apply_robustness_evidence_first": 1,
+        "download_or_build_missing_data": 1,
+        "fix_pipeline_measurement_or_gate": 1,
+        "ready_for_hftbacktest_decision": 1,
+        "reject_model_family": 1,
+        "rerun_vectorbt_surface_shape": 1,
+    }
 
     report = (out_dir / "robustness_bridge_readiness_report.md").read_text(encoding="utf-8")
     assert "## Seven Questions" in report
     assert "Any HftBacktest-derived eligible candidates: true" in report
+    audit_report = (out_dir / "data_vs_pipeline_audit.md").read_text(encoding="utf-8")
+    assert "diagnostic-only" in audit_report
+    assert "download_or_build_missing_data" in audit_report
 
 
 def test_number_rejects_non_finite_values() -> None:
@@ -427,6 +498,13 @@ def test_number_rejects_non_finite_values() -> None:
     assert _number("-inf") is None
     assert _number("nan") is None
     assert _number("1.25") == 1.25
+
+
+def test_data_vs_pipeline_missing_data_precedes_model_rejection() -> None:
+    family_row = {"classification_bucket": "robustness_fail_complete_evidence"}
+    assert _data_vs_pipeline_label(family_row, ["artifact_missing"]) == (
+        "download_or_build_missing_data"
+    )
 
 
 def test_sensitivity_report_binding_fails_closed_when_hash_missing(tmp_path: Path) -> None:

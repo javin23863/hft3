@@ -462,6 +462,94 @@ The report must answer:
 7. If none, what exact next action is required?
 ```
 
+## Fable/Ponytail Calibration Correction
+
+The next step is not more abstract bridge work. The bridge must explicitly
+decide whether the operator should shape the data, shape the VectorBT run, shape
+the pipeline/gate, or reject the model family.
+
+Every blocked family must receive exactly one final diagnosis:
+
+```text
+download_or_build_missing_data
+rerun_vectorbt_surface_shape
+fix_pipeline_measurement_or_gate
+reject_model_family
+apply_robustness_evidence_first
+ready_for_hftbacktest_decision
+```
+
+Interpretation:
+
+```text
+download_or_build_missing_data
+  The NPZ, feature store, artifact, source receipt, or hash-bound source data is
+  actually missing or corrupt. Do not write substitute code; download, build, or
+  restore the data.
+
+rerun_vectorbt_surface_shape
+  The raw data exists, but the broad VectorBT discovery run did not produce the
+  event x parameter coverage required by robustness. Run a targeted surface
+  backfill, not a full restart.
+
+fix_pipeline_measurement_or_gate
+  Rows or unit artifacts exist, but measured metrics are missing, official stats
+  are unavailable, or zero/insufficient-trade handling prevents a valid
+  robustness cell. Diagnose instrumentation and gate semantics before rerunning
+  data.
+
+reject_model_family
+  The family has complete enough evidence and fails robustness. Treat this as a
+  model/hypothesis failure unless a separate sensitivity diagnostic justifies a
+  gate-policy change.
+
+apply_robustness_evidence_first
+  Robustness appears to pass, but the explicit evidence applicator has not
+  stamped strict replay eligibility. Apply evidence before any HftBacktest
+  routing.
+
+ready_for_hftbacktest_decision
+  Strict derived HftBacktest eligibility is true. The operator may decide
+  whether to spend replay compute.
+```
+
+The ledger must write:
+
+```text
+runtime/evidence_ledger/<run_id>/data_vs_pipeline_audit.json
+runtime/evidence_ledger/<run_id>/data_vs_pipeline_audit.md
+```
+
+The audit must summarize counts by final diagnosis and list each family with:
+
+```text
+family_id
+model_family
+classification_bucket
+primary_failure_reason
+secondary_failure_reasons
+zero_or_insufficient_trade_evidence
+missing_data_evidence
+surface_shape_evidence
+recommended_next_action
+final_diagnosis
+```
+
+### HftBacktest Boundary
+
+This slice does not route any failed, data-quality, or control candidate to
+HftBacktest. The production promotion gate remains fail-closed:
+
+```text
+replay_eligibility_status=eligible
+robustness_evidence_receipt present
+validate_candidate_replay_eligibility() clean
+```
+
+If the operator later authorizes a separate HftBacktest calibration experiment,
+it must be planned as a new diagnostic lane with its own explicit waiver and
+must not change this evidence-ledger gate.
+
 ## Acceptance Criteria
 
 - No full-pipeline restart is required to produce the ledger from existing
@@ -469,8 +557,11 @@ The report must answer:
 - The ledger separates packaging failures from robustness failures.
 - Incomplete surfaces are not reported as alpha failures.
 - Diagnostic gates write raw diagnostic evidence for every fail decision.
+- The data-vs-pipeline audit classifies every blocked family into one concrete
+  next-action diagnosis.
 - HftBacktest routing remains fail-closed until strict eligibility appears in
   the ledger.
+- This slice does not create a pre-eligibility HftBacktest calibration route.
 - The readiness report gives exact next actions by family.
 
 ## Non-Goals

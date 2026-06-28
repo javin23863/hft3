@@ -40,7 +40,9 @@ from scripts.build_robustness_raw_inputs_from_screening import (
 LEDGER_SCHEMA = "hft3_diagnostic_evidence_ledger_v1"
 FAMILY_READINESS_SCHEMA = "hft3_family_readiness_diagnostic_v1"
 GATE_SUMMARY_SCHEMA = "hft3_evidence_ledger_gate_summary_v1"
+DATA_VS_PIPELINE_AUDIT_SCHEMA = "hft3_data_vs_pipeline_audit_v1"
 REPORT_NAME = "robustness_bridge_readiness_report.md"
+DATA_VS_PIPELINE_AUDIT_REPORT_NAME = "data_vs_pipeline_audit.md"
 FAMILY_ID_FIELDS = ("model_id", "symbol", "event_type", "research_clock", "context_set_id")
 BUCKETS = (
     "robustness_pass_needs_evidence_apply",
@@ -49,6 +51,14 @@ BUCKETS = (
     "adapter_contract_failure",
     "data_quality_failure",
     "hftbacktest_eligible_derived",
+)
+DATA_VS_PIPELINE_LABELS = (
+    "download_or_build_missing_data",
+    "rerun_vectorbt_surface_shape",
+    "fix_pipeline_measurement_or_gate",
+    "reject_model_family",
+    "ready_for_hftbacktest_decision",
+    "apply_robustness_evidence_first",
 )
 SURFACE_REASON_MARKERS = (
     "incomplete_event_parameter_surface",
@@ -73,6 +83,31 @@ DATA_REASON_MARKERS = (
     "insufficient_trade",
     "bad_npz",
     "hash_mismatch",
+)
+MISSING_DATA_REASON_MARKERS = (
+    "bad_npz",
+    "artifact_missing",
+    "artifact missing",
+    "hash_mismatch",
+    "hash mismatch",
+    "source_data_missing",
+    "source data missing",
+    "source data unavailable",
+)
+PIPELINE_MEASUREMENT_REASON_MARKERS = (
+    "zero_trade",
+    "zero trades",
+    "0 trades",
+    "insufficient_trade",
+    "insufficient trades",
+    "measured_metrics_missing",
+)
+TRADE_QUALITY_REASON_MARKERS = (
+    "zero_trade",
+    "zero trades",
+    "0 trades",
+    "insufficient_trade",
+    "insufficient trades",
 )
 
 
@@ -312,6 +347,10 @@ def _has_rejected_trade_quality(report: Mapping[str, Any]) -> bool:
 def _reason_contains(reason: str, markers: tuple[str, ...]) -> bool:
     lowered = reason.lower()
     return any(marker in lowered for marker in markers)
+
+
+def _reason_list_contains(reasons: Iterable[Any], markers: tuple[str, ...]) -> bool:
+    return any(_reason_contains(str(reason), markers) for reason in reasons)
 
 
 def _selected_policy_pass(report: Mapping[str, Any], selected_surface_policy: str) -> bool:
@@ -638,6 +677,215 @@ def _report_section_lines(
     return lines
 
 
+def _family_rejected_events(family_report: Mapping[str, Any]) -> list[dict[str, Any]]:
+    events = family_report.get("rejected_events")
+    if not isinstance(events, list):
+        return []
+    return [dict(event) for event in events if isinstance(event, Mapping)]
+
+
+def _family_audit_reasons(
+    family_row: Mapping[str, Any],
+    family_report: Mapping[str, Any],
+    candidate_rows: list[Mapping[str, Any]],
+) -> list[str]:
+    reasons: list[str] = []
+    for field in ("primary_failure_reason",):
+        value = family_row.get(field)
+        if value:
+            reasons.append(str(value))
+    for value in family_row.get("secondary_failure_reasons") or []:
+        reasons.append(str(value))
+    for event in _family_rejected_events(family_report):
+        for value in event.get("reasons") or []:
+            reasons.append(str(value))
+    for row in candidate_rows:
+        for value in row.get("validator_reasons") or []:
+            reasons.append(str(value))
+    return reasons
+
+
+def _data_vs_pipeline_label(
+    family_row: Mapping[str, Any],
+    reasons: Iterable[Any],
+) -> str:
+    bucket = str(family_row.get("classification_bucket") or "")
+    if _reason_list_contains(reasons, MISSING_DATA_REASON_MARKERS):
+        return "download_or_build_missing_data"
+    if bucket == "robustness_fail_complete_evidence":
+        return "reject_model_family"
+    if bucket == "hftbacktest_eligible_derived":
+        return "ready_for_hftbacktest_decision"
+    if bucket == "robustness_pass_needs_evidence_apply":
+        return "apply_robustness_evidence_first"
+    if _reason_list_contains(reasons, PIPELINE_MEASUREMENT_REASON_MARKERS):
+        return "fix_pipeline_measurement_or_gate"
+    if bucket == "surface_incomplete_missing_cells" or _reason_list_contains(
+        reasons,
+        SURFACE_REASON_MARKERS,
+    ):
+        return "rerun_vectorbt_surface_shape"
+    return "fix_pipeline_measurement_or_gate"
+
+
+def _data_vs_pipeline_explanation(label: str) -> str:
+    if label == "download_or_build_missing_data":
+        return "Source data or bound artifacts are missing, corrupt, or hash-mismatched; rebuild or download data before rerunning diagnostics."
+    if label == "rerun_vectorbt_surface_shape":
+        return "The family lacks complete event-parameter surface shape evidence without data-quality markers; backfill the VectorBT surface shape."
+    if label == "fix_pipeline_measurement_or_gate":
+        return "The evidence points to zero/insufficient trades, missing measured metrics, or a pipeline/gate contract issue."
+    if label == "reject_model_family":
+        return "The family has complete robustness evidence and failed robustness; reject it unless the research thesis changes."
+    if label == "ready_for_hftbacktest_decision":
+        return "The existing strict replay contract derived HftBacktest eligibility; the operator can decide whether to spend replay compute."
+    if label == "apply_robustness_evidence_first":
+        return "The family passed robustness but still needs explicit robustness evidence application before any replay decision."
+    return "Unclassified diagnostic state."
+
+
+def _build_data_vs_pipeline_audit(
+    *,
+    run_id: str,
+    created_at_utc: str,
+    source_report: str,
+    screening_artifact_dir: str,
+    family_rows: list[Mapping[str, Any]],
+    family_report_by_id: Mapping[str, Mapping[str, Any]],
+    candidate_rows: list[Mapping[str, Any]],
+    measured_rows_by_family_id: Mapping[str, list[MeasuredRow]],
+) -> dict[str, Any]:
+    candidates_by_family: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for row in candidate_rows:
+        candidates_by_family[str(row.get("family_id") or "")].append(row)
+
+    audit_rows: list[dict[str, Any]] = []
+    for family_row in family_rows:
+        family_id = str(family_row["family_id"])
+        family_report = family_report_by_id.get(family_id, {})
+        family_candidates = candidates_by_family.get(family_id, [])
+        reasons = _family_audit_reasons(family_row, family_report, family_candidates)
+        measured_rows = measured_rows_by_family_id.get(family_id, [])
+        zero_or_insufficient_trade_evidence = any(
+            row.trade_count <= 0 for row in measured_rows
+        ) or _reason_list_contains(reasons, TRADE_QUALITY_REASON_MARKERS)
+        if zero_or_insufficient_trade_evidence:
+            reasons.append("zero_trades")
+        missing_data_evidence = _reason_list_contains(reasons, MISSING_DATA_REASON_MARKERS)
+        surface_shape_evidence = str(family_row.get("classification_bucket") or "") == (
+            "surface_incomplete_missing_cells"
+        ) or _reason_list_contains(reasons, SURFACE_REASON_MARKERS)
+        measurement_or_gate_evidence = _reason_list_contains(
+            reasons,
+            PIPELINE_MEASUREMENT_REASON_MARKERS,
+        )
+        label = _data_vs_pipeline_label(family_row, reasons)
+        audit_rows.append(
+            {
+                "family_id": family_id,
+                "model_family": family_row.get("model_family"),
+                "final_diagnosis": label,
+                "final_diagnosis_label": label,
+                "diagnosis_explanation": _data_vs_pipeline_explanation(label),
+                "classification_bucket": family_row.get("classification_bucket"),
+                "family_classification_bucket": family_row.get("classification_bucket"),
+                "primary_failure_reason": family_row.get("primary_failure_reason"),
+                "secondary_failure_reasons": family_row.get("secondary_failure_reasons") or [],
+                "rejected_events": _family_rejected_events(family_report),
+                "zero_or_insufficient_trade_evidence": zero_or_insufficient_trade_evidence,
+                "missing_data_evidence": missing_data_evidence,
+                "surface_shape_evidence": surface_shape_evidence,
+                "measurement_or_gate_evidence": measurement_or_gate_evidence,
+                "recommended_next_action": family_row.get("recommended_next_action"),
+                "readiness_context": {
+                    "vectorbt_promoted_rows": family_row.get("vectorbt_promoted_rows"),
+                    "event_count": family_row.get("event_count"),
+                    "parameter_cell_count": family_row.get("parameter_cell_count"),
+                    "expected_surface_cells": family_row.get("expected_surface_cells"),
+                    "observed_surface_cells": family_row.get("observed_surface_cells"),
+                    "surface_completeness_ratio": family_row.get("surface_completeness_ratio"),
+                    "robustness_gate_status": family_row.get("robustness_gate_status"),
+                    "packaging_gate_status": family_row.get("packaging_gate_status"),
+                    "replay_eligibility_status": family_row.get("replay_eligibility_status"),
+                    "robustness_evidence_receipt_status": family_row.get(
+                        "robustness_evidence_receipt_status"
+                    ),
+                    "hftbacktest_eligible_derived": family_row.get("hftbacktest_eligible_derived"),
+                    "hftbacktest_eligible_candidate_count_derived": family_row.get(
+                        "hftbacktest_eligible_candidate_count_derived"
+                    ),
+                },
+                "diagnostic_row_context": {
+                    "candidate_count": len(family_candidates),
+                    "candidate_ids": [row.get("candidate_id") for row in family_candidates],
+                    "candidate_validator_reasons": sorted(
+                        {
+                            str(reason)
+                            for row in family_candidates
+                            for reason in row.get("validator_reasons") or []
+                        }
+                    ),
+                    "measured_row_count": len(measured_rows),
+                    "measured_trade_counts": [
+                        row.trade_count for row in measured_rows if row.trade_count is not None
+                    ],
+                },
+            }
+        )
+
+    counts = Counter(str(row["final_diagnosis_label"]) for row in audit_rows)
+    for label in DATA_VS_PIPELINE_LABELS:
+        counts.setdefault(label, 0)
+    return {
+        "schema": DATA_VS_PIPELINE_AUDIT_SCHEMA,
+        "run_id": run_id,
+        "created_at_utc": created_at_utc,
+        "source_sensitivity_report": source_report,
+        "screening_artifact_dir": screening_artifact_dir,
+        "summary": {
+            "family_count": len(audit_rows),
+            "families_by_final_diagnosis": dict(sorted(counts.items())),
+            "hftbacktest_route_created": False,
+        },
+        "families": audit_rows,
+    }
+
+
+def _markdown_cell(value: Any) -> str:
+    return str(value or "").replace("|", "\\|").replace("\n", " ")
+
+
+def _build_data_vs_pipeline_markdown(audit: Mapping[str, Any]) -> str:
+    rows = audit.get("families") if isinstance(audit.get("families"), list) else []
+    counts = ((audit.get("summary") or {}).get("families_by_final_diagnosis") or {})
+    lines = [
+        f"# Data vs Pipeline Audit - {audit['run_id']}",
+        "",
+        "This audit is diagnostic-only and does not route any family to HftBacktest.",
+        "",
+        "## Summary",
+        "",
+    ]
+    for label in DATA_VS_PIPELINE_LABELS:
+        lines.append(f"- {label}: {counts.get(label, 0)} families")
+    lines.extend(["", "## Families", ""])
+    if not rows:
+        lines.extend(["None.", ""])
+        return "\n".join(lines).rstrip() + "\n"
+    lines.append("| Final diagnosis | Family | Bucket | Primary reason |")
+    lines.append("|---|---|---|---|")
+    for row in rows:
+        lines.append(
+            "| {label} | {family} | {bucket} | {reason} |".format(
+                label=_markdown_cell(row.get("final_diagnosis_label")),
+                family=_markdown_cell(row.get("family_id")),
+                bucket=_markdown_cell(row.get("family_classification_bucket")),
+                reason=_markdown_cell(row.get("primary_failure_reason")),
+            )
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _build_markdown_report(
     *,
     run_id: str,
@@ -919,10 +1167,11 @@ def build_evidence_ledger(
         for row in candidate_rows
         if row.get("hftbacktest_eligible_derived") is True
     ]
+    created_at_utc = _utc_now()
     summary = {
         "schema": GATE_SUMMARY_SCHEMA,
         "run_id": run_id,
-        "created_at_utc": _utc_now(),
+        "created_at_utc": created_at_utc,
         "source_sensitivity_report": source_report,
         "screening_artifact_dir": _source_path(screening_artifact_dir, source_root),
         "screening_artifact_hash": evidence.artifact.get("screening_artifact_hash"),
@@ -935,11 +1184,26 @@ def build_evidence_ledger(
         "hftbacktest_eligible_candidate_ids": eligible_candidate_ids,
         "hftbacktest_eligible_candidate_count": len(eligible_candidate_ids),
     }
+    data_vs_pipeline_audit = _build_data_vs_pipeline_audit(
+        run_id=run_id,
+        created_at_utc=created_at_utc,
+        source_report=source_report,
+        screening_artifact_dir=_source_path(screening_artifact_dir, source_root),
+        family_rows=family_readiness,
+        family_report_by_id=family_report_by_id,
+        candidate_rows=candidate_rows,
+        measured_rows_by_family_id=measured_rows_by_family_id,
+    )
 
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_jsonl(out_dir / "candidate_evidence.jsonl", candidate_rows)
     _write_jsonl(out_dir / "family_readiness.jsonl", family_readiness)
     _write_json(out_dir / "gate_summary.json", summary)
+    _write_json(out_dir / "data_vs_pipeline_audit.json", data_vs_pipeline_audit)
+    (out_dir / DATA_VS_PIPELINE_AUDIT_REPORT_NAME).write_text(
+        _build_data_vs_pipeline_markdown(data_vs_pipeline_audit),
+        encoding="utf-8",
+    )
     (out_dir / REPORT_NAME).write_text(
         _build_markdown_report(
             run_id=run_id,
