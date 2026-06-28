@@ -386,6 +386,9 @@ def test_screening_artifact_dir_is_diagnostic_only_even_for_current_policy(tmp_p
     assert report["assembler_diagnostics"]["candidate_skip_counts"] == {
         "diagnostic_only_screening_artifact_dir:current_first_event": 1
     }
+    assert receipt["skipped"]["candidate_skip_counts"] == {
+        "diagnostic_only_screening_artifact_dir:current_first_event": 1
+    }
 
 
 def test_screening_artifact_dir_empty_fails_closed_without_output(tmp_path: Path) -> None:

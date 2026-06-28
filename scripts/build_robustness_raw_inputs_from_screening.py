@@ -1315,6 +1315,19 @@ def build_robustness_raw_inputs_from_screening(
         )
 
     if diagnostic_only:
+        candidate_skip_payload = (
+            _sample_mapping(candidate_skips)
+            if diagnostic_only_source
+            else candidate_skips
+        )
+        skipped: dict[str, Any] = {
+            "rows": dict(row_skip_reasons),
+            "families": family_skips,
+            "candidates": candidate_skip_payload,
+        }
+        if diagnostic_only_source:
+            skipped["candidate_skip_counts"] = _value_counts(candidate_skips)
+            skipped["candidate_skip_sample"] = _sample_mapping(candidate_skips)
         return {
             "status": "diagnostic_only",
             "surface_policy": surface_policy,
@@ -1322,11 +1335,7 @@ def build_robustness_raw_inputs_from_screening(
             "sensitivity_report_out": str(sensitivity_report_out),
             "packaged_count": 0,
             "packaged_candidate_ids": [],
-            "skipped": {
-                "rows": dict(row_skip_reasons),
-                "families": family_skips,
-                "candidates": candidate_skips,
-            },
+            "skipped": skipped,
         }
 
     if len(candidates) < min_packaged:
