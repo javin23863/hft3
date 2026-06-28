@@ -94,6 +94,8 @@ class ScreeningEvidence:
     family_rows: dict[tuple[str, str, str, str, str], list[MeasuredRow]]
     row_skip_reasons: Counter[str]
     diagnostic_only_source: bool
+    artifacts_by_candidate: dict[str, Mapping[str, Any]]
+    artifact_sources_by_candidate: dict[str, str]
 
 
 def _compact_json(payload: Mapping[str, Any]) -> str:
@@ -614,13 +616,17 @@ def _source_path(path: Path, source_root: Path | None) -> str:
 def _collect_artifact_rows(
     artifact: Mapping[str, Any],
     *,
+    artifact_source: str,
     promoted_by_id: dict[str, Mapping[str, Any]],
     promoted_measured: dict[str, MeasuredRow],
     family_rows: dict[tuple[str, str, str, str, str], list[MeasuredRow]],
     row_skip_reasons: Counter[str],
+    artifacts_by_candidate: dict[str, Mapping[str, Any]],
+    artifact_sources_by_candidate: dict[str, str],
 ) -> int:
     promoted_rows = [row for row in artifact.get("promoted", []) if isinstance(row, Mapping)]
     rejected_rows = [row for row in artifact.get("rejected", []) if isinstance(row, Mapping)]
+    measured_by_candidate: dict[str, MeasuredRow] = {}
     for row in promoted_rows:
         candidate_id = str(row.get("candidate_id") or "")
         if not candidate_id:
@@ -628,6 +634,8 @@ def _collect_artifact_rows(
         if candidate_id in promoted_by_id:
             raise ValueError(f"duplicate_promoted_candidate_id_across_artifacts:{candidate_id}")
         promoted_by_id[candidate_id] = row
+        artifacts_by_candidate[candidate_id] = artifact
+        artifact_sources_by_candidate[candidate_id] = artifact_source
 
     for row in [*promoted_rows, *rejected_rows]:
         measured, reason = _extract_measured_row(row)
@@ -638,9 +646,10 @@ def _collect_artifact_rows(
             row_skip_reasons[str(reason or "row_unusable")] += 1
             continue
         family_rows[measured.family_key].append(measured)
+        measured_by_candidate[measured.candidate_id] = measured
 
     for row in promoted_rows:
-        measured, _reason = _extract_measured_row(row)
+        measured = measured_by_candidate.get(str(row.get("candidate_id") or ""))
         if measured is not None:
             promoted_measured[measured.candidate_id] = measured
     return len(promoted_rows)
@@ -677,26 +686,34 @@ def _load_screening_evidence(
     promoted_measured: dict[str, MeasuredRow] = {}
     family_rows: dict[tuple[str, str, str, str, str], list[MeasuredRow]] = defaultdict(list)
     row_skip_reasons: Counter[str] = Counter()
+    artifacts_by_candidate: dict[str, Mapping[str, Any]] = {}
+    artifact_sources_by_candidate: dict[str, str] = {}
 
     if screening_artifact_path is not None:
         artifact = _load_json_object(screening_artifact_path, "screening_artifact")
         validate_screening_artifact(artifact)
+        source_path = _source_path(screening_artifact_path, source_root)
         promoted_count = _collect_artifact_rows(
             artifact,
+            artifact_source=source_path,
             promoted_by_id=promoted_by_id,
             promoted_measured=promoted_measured,
             family_rows=family_rows,
             row_skip_reasons=row_skip_reasons,
+            artifacts_by_candidate=artifacts_by_candidate,
+            artifact_sources_by_candidate=artifact_sources_by_candidate,
         )
         return ScreeningEvidence(
             artifact=artifact,
-            source_path=_source_path(screening_artifact_path, source_root),
+            source_path=source_path,
             promoted_count=promoted_count,
             promoted_by_id=promoted_by_id,
             promoted_measured=promoted_measured,
             family_rows=family_rows,
             row_skip_reasons=row_skip_reasons,
             diagnostic_only_source=False,
+            artifacts_by_candidate=artifacts_by_candidate,
+            artifact_sources_by_candidate=artifact_sources_by_candidate,
         )
 
     assert screening_artifact_dir is not None
@@ -709,18 +726,22 @@ def _load_screening_evidence(
     for artifact_path in artifact_paths:
         artifact = _load_json_object(artifact_path, "screening_artifact")
         validate_screening_artifact(artifact)
+        source_path = _source_path(artifact_path, source_root)
         artifact_records.append(
             {
-                "path": _source_path(artifact_path, source_root),
+                "path": source_path,
                 "screening_artifact_hash": _artifact_identity_hash(artifact),
             }
         )
         promoted_count += _collect_artifact_rows(
             artifact,
+            artifact_source=source_path,
             promoted_by_id=promoted_by_id,
             promoted_measured=promoted_measured,
             family_rows=family_rows,
             row_skip_reasons=row_skip_reasons,
+            artifacts_by_candidate=artifacts_by_candidate,
+            artifact_sources_by_candidate=artifact_sources_by_candidate,
         )
 
     artifact_set_hash = _unit_artifact_set_hash(artifact_records)
@@ -738,6 +759,8 @@ def _load_screening_evidence(
         family_rows=family_rows,
         row_skip_reasons=row_skip_reasons,
         diagnostic_only_source=True,
+        artifacts_by_candidate=artifacts_by_candidate,
+        artifact_sources_by_candidate=artifact_sources_by_candidate,
     )
 
 

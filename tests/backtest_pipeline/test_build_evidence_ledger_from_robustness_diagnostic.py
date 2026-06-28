@@ -210,8 +210,8 @@ def _write_sensitivity_report(path: Path, unit_dir: Path, tmp_path: Path) -> dic
         "baseline_surface_policy": "current_first_event",
         "summary": {
             "vectorbt_promoted_count": evidence.promoted_count,
-            "model_family_count": 3,
-            "packaging_eligible_family_count": 2,
+            "model_family_count": 4,
+            "packaging_eligible_family_count": 3,
             "packaged_count": 0,
             "min_packaged": 1,
             "hftbacktest_eligible_candidates": 0,
@@ -239,6 +239,12 @@ def _write_sensitivity_report(path: Path, unit_dir: Path, tmp_path: Path) -> dic
                 packaging_eligible=True,
                 current_pass=True,
                 research_clock="event_window_pilot",
+            ),
+            _family_report(
+                model_id="ROBUST_PASS_NEEDS_APPLY",
+                symbol="YM",
+                packaging_eligible=True,
+                current_pass=True,
             ),
         ],
         "assembler_diagnostics": {
@@ -269,6 +275,13 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     _write_event_unit_artifacts(unit_dir / "robust_fail", robust_fail)
     _write_event_unit_artifacts(unit_dir / "incomplete", incomplete)
     _write_json(unit_dir / "eligible" / "screening_artifact.json", _eligible_unit_artifact(tmp_path))
+    robust_pass_needs_apply = _rewrite_artifact_family(
+        _complete_surface_artifact(),
+        prefix="needs_apply",
+        model_id="ROBUST_PASS_NEEDS_APPLY",
+        symbol="YM",
+    )
+    _write_event_unit_artifacts(unit_dir / "needs_apply", robust_pass_needs_apply)
     report_path = tmp_path / "sensitivity.json"
     _write_sensitivity_report(report_path, unit_dir, tmp_path)
 
@@ -326,6 +339,14 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     assert families_by_model["HYP_5"]["classification_bucket"] == (
         "hftbacktest_eligible_derived"
     )
+    assert families_by_model["ROBUST_PASS_NEEDS_APPLY"]["classification_bucket"] == (
+        "robustness_pass_needs_evidence_apply"
+    )
+    assert families_by_model["ROBUST_PASS_NEEDS_APPLY"]["packaging_gate_status"] == "pass"
+    assert families_by_model["ROBUST_PASS_NEEDS_APPLY"]["robustness_gate_status"] == "pass"
+    assert families_by_model["ROBUST_PASS_NEEDS_APPLY"]["recommended_next_action"].startswith(
+        "Run the explicit robustness evidence applicator"
+    )
 
     candidate_rows = [
         json.loads(line) for line in (out_dir / "candidate_evidence.jsonl").read_text(encoding="utf-8").splitlines()
@@ -340,6 +361,7 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     summary = json.loads((out_dir / "gate_summary.json").read_text(encoding="utf-8"))
     assert summary["any_hftbacktest_eligible_derived"] is True
     assert summary["families_by_bucket"]["robustness_fail_complete_evidence"] == 1
+    assert summary["families_by_bucket"]["robustness_pass_needs_evidence_apply"] == 1
     assert summary["families_by_bucket"]["surface_incomplete_missing_cells"] == 1
     assert summary["families_by_bucket"]["hftbacktest_eligible_derived"] == 1
 

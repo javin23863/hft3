@@ -26,7 +26,7 @@ from hft3_bootstrap import setup_repo_paths
 setup_repo_paths()
 
 from backtest_pipeline.src.hftbacktest_realism import validate_candidate_replay_eligibility
-from backtest_pipeline.src.vectorbt_adapter import screening_status_text, validate_screening_artifact
+from backtest_pipeline.src.vectorbt_adapter import screening_status_text
 from scripts.build_robustness_raw_inputs_from_screening import (
     SENSITIVITY_REPORT_SCHEMA,
     MeasuredRow,
@@ -42,6 +42,7 @@ GATE_SUMMARY_SCHEMA = "hft3_evidence_ledger_gate_summary_v1"
 REPORT_NAME = "robustness_bridge_readiness_report.md"
 FAMILY_ID_FIELDS = ("model_id", "symbol", "event_type", "research_clock", "context_set_id")
 BUCKETS = (
+    "robustness_pass_needs_evidence_apply",
     "robustness_fail_complete_evidence",
     "surface_incomplete_missing_cells",
     "adapter_contract_failure",
@@ -205,32 +206,6 @@ def _receipt_status(row: Mapping[str, Any]) -> str:
     return "present" if isinstance(row.get("robustness_evidence_receipt"), Mapping) else "missing"
 
 
-def _load_candidate_artifacts(
-    screening_artifact_dir: Path,
-    source_root: Path | None,
-) -> tuple[dict[str, Mapping[str, Any]], dict[str, str]]:
-    artifacts_by_candidate: dict[str, Mapping[str, Any]] = {}
-    source_by_candidate: dict[str, str] = {}
-    for artifact_path in sorted(screening_artifact_dir.glob("**/screening_artifact.json")):
-        artifact = _load_json_object(artifact_path, "screening_artifact")
-        validate_screening_artifact(artifact)
-        source_path = _source_path(artifact_path, source_root)
-        promoted = artifact.get("promoted")
-        if not isinstance(promoted, list):
-            continue
-        for row in promoted:
-            if not isinstance(row, Mapping):
-                continue
-            candidate_id = str(row.get("candidate_id") or "")
-            if not candidate_id:
-                continue
-            if candidate_id in artifacts_by_candidate:
-                raise ValueError(f"duplicate_promoted_candidate_id_across_artifacts:{candidate_id}")
-            artifacts_by_candidate[candidate_id] = artifact
-            source_by_candidate[candidate_id] = source_path
-    return artifacts_by_candidate, source_by_candidate
-
-
 def _validator_result(
     row: Mapping[str, Any],
     artifact: Mapping[str, Any] | None,
@@ -358,6 +333,8 @@ def _family_receipt_status(candidate_rows: list[Mapping[str, Any]]) -> str:
 def _recommended_action(bucket: str, reason: str) -> str:
     if bucket == "hftbacktest_eligible_derived":
         return "Candidate satisfies the existing strict HftBacktest handoff contract; operator may decide whether to spend replay compute."
+    if bucket == "robustness_pass_needs_evidence_apply":
+        return "Run the explicit robustness evidence applicator with min-eligible >= 1, then rebuild the ledger before HftBacktest."
     if bucket == "robustness_fail_complete_evidence":
         return "Review robustness sensitivity diagnostics before changing thresholds or rerunning VectorBT."
     if bucket == "surface_incomplete_missing_cells":
@@ -398,7 +375,7 @@ def _classify_family(
     if not _selected_policy_pass(report, selected_surface_policy):
         return "robustness_fail_complete_evidence", reason, secondary
 
-    return "adapter_contract_failure", "strict_replay_contract_not_satisfied", secondary
+    return "robustness_pass_needs_evidence_apply", "strict_replay_contract_not_satisfied", secondary
 
 
 def _family_readiness_row(
@@ -665,8 +642,10 @@ def _build_markdown_report(
     eligible_candidates = [
         row for row in candidate_rows if row.get("hftbacktest_eligible_derived") is True
     ]
-    complete = len(by_bucket["robustness_fail_complete_evidence"]) + len(
-        by_bucket["hftbacktest_eligible_derived"]
+    complete = (
+        len(by_bucket["robustness_pass_needs_evidence_apply"])
+        + len(by_bucket["robustness_fail_complete_evidence"])
+        + len(by_bucket["hftbacktest_eligible_derived"])
     )
     lines = [
         f"# Robustness Bridge Readiness Report - {run_id}",
@@ -675,7 +654,7 @@ def _build_markdown_report(
         "",
         f"1. Did VectorBT produce usable screening evidence? {'Yes' if summary['candidate_count'] else 'No'}; promoted candidates loaded: {summary['candidate_count']}.",
         f"2. Did the bridge have complete surfaces? Complete diagnostic families: {complete}/{summary['family_count']}.",
-        f"3. Which families failed due to real robustness weakness? {len(by_bucket['robustness_fail_complete_evidence'])} families; see bucket list below.",
+        f"3. Which families passed robustness but still need evidence application? {len(by_bucket['robustness_pass_needs_evidence_apply'])} families; see bucket list below.",
         f"4. Which families failed due to missing surface cells? {len(by_bucket['surface_incomplete_missing_cells'])} families; see bucket list below.",
         f"5. Which families failed due to adapter or data issues? {len(by_bucket['adapter_contract_failure'])} adapter families and {len(by_bucket['data_quality_failure'])} data-quality families.",
         f"6. Is any candidate eligible for HftBacktest? {'Yes' if eligible_candidates else 'No'}; derived eligible candidates: {len(eligible_candidates)}.",
@@ -699,6 +678,13 @@ def _build_markdown_report(
         _report_section_lines(
             "Robustness Failures With Complete Evidence",
             by_bucket["robustness_fail_complete_evidence"],
+            empty="None.",
+        )
+    )
+    lines.extend(
+        _report_section_lines(
+            "Robustness Pass / Evidence Apply Needed",
+            by_bucket["robustness_pass_needs_evidence_apply"],
             empty="None.",
         )
     )
@@ -740,10 +726,8 @@ def build_evidence_ledger(
         screening_artifact_dir=screening_artifact_dir,
         source_root=source_root,
     )
-    artifacts_by_candidate, artifact_sources = _load_candidate_artifacts(
-        screening_artifact_dir,
-        source_root,
-    )
+    artifacts_by_candidate = evidence.artifacts_by_candidate
+    artifact_sources = evidence.artifact_sources_by_candidate
     report_hash = report.get("screening_artifact_hash")
     evidence_hash = evidence.artifact.get("screening_artifact_hash")
     if not report_hash:
