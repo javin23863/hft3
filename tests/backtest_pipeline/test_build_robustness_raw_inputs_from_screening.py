@@ -199,7 +199,9 @@ def _write_event_unit_artifacts(root: Path, artifact: dict[str, Any]) -> Path:
         unit["max_total_trials"] = len(unit["candidate_ids"])
         unit["screening_artifact_hash"] = compute_screening_artifact_hash(unit)
         validate_screening_artifact(unit)
-        _write_json(root / event_id / "screening_artifact.json", unit)
+        unit_path = root / event_id / "screening_artifact.json"
+        unit_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_json(unit_path, unit)
     return root
 
 
