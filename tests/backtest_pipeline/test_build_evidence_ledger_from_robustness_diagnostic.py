@@ -19,6 +19,7 @@ from test_build_robustness_raw_inputs_from_screening import (
     _first_event_fail_artifact,
     _write_event_unit_artifacts,
 )
+from scripts.build_evidence_ledger_from_robustness_diagnostic import _number
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "build_evidence_ledger_from_robustness_diagnostic.py"
@@ -35,6 +36,7 @@ def _rewrite_artifact_family(
     prefix: str,
     model_id: str,
     symbol: str,
+    research_clock: str = "scheduled_event",
 ) -> dict[str, Any]:
     artifact = copy.deepcopy(artifact)
     reason_by_old_id = dict(artifact.get("candidate_reasons", {}))
@@ -49,7 +51,7 @@ def _rewrite_artifact_family(
         assert isinstance(metadata, dict)
         metadata["symbol"] = symbol
         metadata["event_type"] = "CPI"
-        metadata["research_clock"] = "scheduled_event"
+        metadata["research_clock"] = research_clock
         metadata["context_set_id"] = "target_only"
         metadata["allowed_context_set_id"] = "target_only"
         row["base_candidate_id"] = f"{model_id}|{symbol}.v.0|{metadata['event_id']}|10"
@@ -275,6 +277,14 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     _write_event_unit_artifacts(unit_dir / "robust_fail", robust_fail)
     _write_event_unit_artifacts(unit_dir / "incomplete", incomplete)
     _write_json(unit_dir / "eligible" / "screening_artifact.json", _eligible_unit_artifact(tmp_path))
+    mixed_eligible_sibling = _rewrite_artifact_family(
+        _complete_surface_artifact(),
+        prefix="eligible_sibling",
+        model_id="HYP_5",
+        symbol="MES",
+        research_clock="event_window_pilot",
+    )
+    _write_event_unit_artifacts(unit_dir / "eligible_sibling", mixed_eligible_sibling)
     robust_pass_needs_apply = _rewrite_artifact_family(
         _complete_surface_artifact(),
         prefix="needs_apply",
@@ -357,6 +367,13 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     assert eligible["validator_reasons"] == []
     assert eligible["hftbacktest_eligible_derived"] is True
     assert eligible["family_classification_bucket"] == "hftbacktest_eligible_derived"
+    sibling = next(
+        row
+        for row in candidate_rows
+        if str(row["candidate_id"]).startswith("eligible_sibling_prom_")
+    )
+    assert sibling["hftbacktest_eligible_derived"] is False
+    assert sibling["family_classification_bucket"] == "robustness_pass_needs_evidence_apply"
 
     summary = json.loads((out_dir / "gate_summary.json").read_text(encoding="utf-8"))
     assert summary["any_hftbacktest_eligible_derived"] is True
@@ -368,6 +385,13 @@ def test_builds_diagnostic_ledger_and_classifies_families(tmp_path: Path) -> Non
     report = (out_dir / "robustness_bridge_readiness_report.md").read_text(encoding="utf-8")
     assert "## Seven Questions" in report
     assert "Any HftBacktest-derived eligible candidates: true" in report
+
+
+def test_number_rejects_non_finite_values() -> None:
+    assert _number(float("inf")) is None
+    assert _number("-inf") is None
+    assert _number("nan") is None
+    assert _number("1.25") == 1.25
 
 
 def test_sensitivity_report_binding_fails_closed_when_hash_missing(tmp_path: Path) -> None:

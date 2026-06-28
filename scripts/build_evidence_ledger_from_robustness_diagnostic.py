@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -113,15 +114,17 @@ def _number(value: Any) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        return float(value)
+        number = float(value)
+        return number if math.isfinite(number) else None
     if isinstance(value, str):
         text = value.strip()
         if not text or text.lower() in {"nan", "none", "null", "not_run"}:
             return None
         try:
-            return float(text)
+            number = float(text)
         except ValueError:
             return None
+        return number if math.isfinite(number) else None
     return None
 
 
@@ -784,6 +787,7 @@ def build_evidence_ledger(
 
     family_readiness: list[dict[str, Any]] = []
     family_bucket_by_id: dict[str, str] = {}
+    family_pre_eligibility_bucket_by_id: dict[str, str] = {}
     family_report_by_id: dict[str, Mapping[str, Any]] = {}
     seen_family_ids: set[str] = set()
     measured_rows_by_family_id: dict[str, list[MeasuredRow]] = {
@@ -807,7 +811,13 @@ def build_evidence_ledger(
             selected_surface_policy=selected_surface_policy,
             has_hftbacktest_eligible_candidate=family_has_eligible.get(family_id, False),
         )
+        pre_eligibility_bucket, _pre_reason, _pre_secondary = _classify_family(
+            family_report,
+            selected_surface_policy=selected_surface_policy,
+            has_hftbacktest_eligible_candidate=False,
+        )
         family_bucket_by_id[family_id] = bucket
+        family_pre_eligibility_bucket_by_id[family_id] = pre_eligibility_bucket
         family_readiness.append(
             _family_readiness_row(
                 report=family_report,
@@ -831,6 +841,7 @@ def build_evidence_ledger(
             continue
         bucket = "adapter_contract_failure"
         family_bucket_by_id[family_id] = bucket
+        family_pre_eligibility_bucket_by_id[family_id] = bucket
         fallback_report = {
             "model_family": family_map,
             "vectorbt_promoted_count": sum(1 for row in rows if _status(row.screening_status) == "pass"),
@@ -875,11 +886,7 @@ def build_evidence_ledger(
         family_bucket = (
             "hftbacktest_eligible_derived"
             if derived
-            else (
-                "adapter_contract_failure"
-                if family_bucket_by_id.get(family_id) == "hftbacktest_eligible_derived"
-                else family_bucket_by_id.get(family_id, "adapter_contract_failure")
-            )
+            else family_pre_eligibility_bucket_by_id.get(family_id, "adapter_contract_failure")
         )
         candidate_rows.append(
             _candidate_row(
