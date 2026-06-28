@@ -1,0 +1,273 @@
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+
+import numpy as np
+import pytest
+
+from backtest_pipeline.src.hftbacktest_only_pipeline import (
+    HftBacktestOnlyPipelineError,
+    HftBacktestOnlyRunConfig,
+    run_hftbacktest_only,
+    validate_hftbacktest_only_input,
+    write_promotion_decision,
+)
+
+
+def _event_contract() -> tuple[np.dtype, dict[str, int]]:
+    dtype = np.dtype(
+        [
+            ("ev", np.uint32),
+            ("exch_ts", np.int64),
+            ("local_ts", np.int64),
+            ("px", np.float64),
+            ("qty", np.float64),
+            ("order_id", np.uint64),
+            ("ival", np.int64),
+            ("fval", np.float64),
+        ]
+    )
+    constants = {
+        "EXCH_EVENT": 1 << 8,
+        "LOCAL_EVENT": 1 << 9,
+        "ADD_ORDER_EVENT": 10,
+        "DEPTH_EVENT": 1,
+        "TRADE_EVENT": 2,
+        "CANCEL_ORDER_EVENT": 11,
+        "MODIFY_ORDER_EVENT": 12,
+        "FILL_EVENT": 13,
+    }
+    return dtype, constants
+
+
+def _write_valid_l3_npz(path: Path) -> Path:
+    dtype, constants = _event_contract()
+    rows = [
+        {
+            "ev": constants["ADD_ORDER_EVENT"] | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+            "exch_ts": 1_000_000_000,
+            "local_ts": 1_000_000_100,
+            "px": 5000.0,
+            "qty": 1.0,
+            "order_id": 1001,
+            "ival": 0,
+            "fval": 0.0,
+        },
+        {
+            "ev": constants["ADD_ORDER_EVENT"] | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+            "exch_ts": 1_000_000_500,
+            "local_ts": 1_000_000_600,
+            "px": 5000.25,
+            "qty": 1.0,
+            "order_id": 1002,
+            "ival": 0,
+            "fval": 0.0,
+        },
+    ]
+    events = np.zeros(len(rows), dtype=dtype)
+    for index, row in enumerate(rows):
+        for field, value in row.items():
+            events[index][field] = value
+    np.savez_compressed(path, data=events, timestamp_units="nanoseconds")
+    return path
+
+
+def _write_invalid_npz(path: Path) -> Path:
+    dtype, constants = _event_contract()
+    events = np.zeros(1, dtype=dtype)
+    events[0]["ev"] = constants["ADD_ORDER_EVENT"] | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"]
+    events[0]["exch_ts"] = 1_000_000_000
+    events[0]["local_ts"] = 999_999_999
+    events[0]["order_id"] = 1001
+    np.savez_compressed(path, data=events)
+    return path
+
+
+def _config(tmp_path: Path, data_path: Path, snapshot_path: Path) -> HftBacktestOnlyRunConfig:
+    return HftBacktestOnlyRunConfig(
+        run_id="hbt_only_test",
+        symbol="MES",
+        contract="MESH6",
+        event_id="CPI_2024_09_11_TIGHT",
+        normalized_npz=data_path,
+        initial_snapshot=snapshot_path,
+        strategy_id="smoke_limit_order",
+        strategy_params={"side": "BUY", "quantity": 1.0, "max_steps": 2},
+        tick_size=0.25,
+        lot_size=1.0,
+        contract_size=5.0,
+        maker_fee=0.47,
+        taker_fee=0.47,
+        entry_latency_ns=100_000,
+        response_latency_ns=100_000,
+    )
+
+
+def _install_fake_hftbacktest(monkeypatch: pytest.MonkeyPatch) -> None:
+    dtype, constants = _event_contract()
+
+    class RecordingAsset:
+        def data(self, _path: str) -> "RecordingAsset":
+            return self
+
+        def initial_snapshot(self, _path: str) -> "RecordingAsset":
+            return self
+
+        def linear_asset(self, _value: float) -> "RecordingAsset":
+            return self
+
+        def tick_size(self, _value: float) -> "RecordingAsset":
+            return self
+
+        def lot_size(self, _value: float) -> "RecordingAsset":
+            return self
+
+        def constant_order_latency(self, _entry: int, _response: int) -> "RecordingAsset":
+            return self
+
+        def no_partial_fill_exchange(self) -> "RecordingAsset":
+            return self
+
+        def l3_fifo_queue_model(self) -> "RecordingAsset":
+            return self
+
+        def trading_qty_fee_model(self, _maker: float, _taker: float) -> "RecordingAsset":
+            return self
+
+    class RecordingBacktest:
+        def __init__(self, _assets: list[RecordingAsset]) -> None:
+            self.steps = 0
+            self.order_id = 0
+
+        def elapse(self, _interval_ns: int) -> int:
+            self.steps += 1
+            return 0 if self.steps <= 2 else 1
+
+        def clear_inactive_orders(self, _asset_no: int) -> None:
+            return None
+
+        def depth(self, _asset_no: int) -> object:
+            return SimpleNamespace(best_bid=5000.0, best_ask=5000.25, tick_size=0.25)
+
+        def state_values(self, _asset_no: int) -> dict[str, float]:
+            return {"position": 0.0, "balance": 0.0, "fee": 0.0}
+
+        def submit_buy_order(self, _asset_no: int, order_id: int, *_args: object) -> int:
+            self.order_id = order_id
+            return 0
+
+        def submit_sell_order(self, _asset_no: int, order_id: int, *_args: object) -> int:
+            self.order_id = order_id
+            return 0
+
+        def wait_order_response(self, *_args: object) -> int:
+            return 0
+
+        def orders(self, _asset_no: int) -> dict[int, dict[str, object]]:
+            return {
+                self.order_id: {
+                    "status": 1,
+                    "qty": 1.0,
+                    "leaves_qty": 1.0,
+                    "exec_qty": 0.0,
+                    "price": 5000.0,
+                    "exec_price": 0.0,
+                    "exch_timestamp": 1_000_000_000,
+                    "local_timestamp": 1_000_000_100,
+                }
+            }
+
+        def cancel(self, *_args: object) -> int:
+            return 0
+
+    fake_data = ModuleType("hftbacktest.data")
+    fake_data.validate_event_order = lambda _events: None  # type: ignore[attr-defined]
+    fake_types = ModuleType("hftbacktest.types")
+    fake_types.event_dtype = dtype  # type: ignore[attr-defined]
+    for key, value in constants.items():
+        setattr(fake_types, key, value)
+    fake_order = ModuleType("hftbacktest.order")
+    fake_order.GTC = 0  # type: ignore[attr-defined]
+    fake_order.LIMIT = 0  # type: ignore[attr-defined]
+    fake_pkg = ModuleType("hftbacktest")
+    fake_pkg.__path__ = []  # type: ignore[attr-defined]
+    fake_pkg.BacktestAsset = RecordingAsset  # type: ignore[attr-defined]
+    fake_pkg.HashMapMarketDepthBacktest = RecordingBacktest  # type: ignore[attr-defined]
+    fake_pkg.data = fake_data  # type: ignore[attr-defined]
+    fake_pkg.types = fake_types  # type: ignore[attr-defined]
+    fake_pkg.order = fake_order  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "hftbacktest", fake_pkg)
+    monkeypatch.setitem(sys.modules, "hftbacktest.data", fake_data)
+    monkeypatch.setitem(sys.modules, "hftbacktest.types", fake_types)
+    monkeypatch.setitem(sys.modules, "hftbacktest.order", fake_order)
+
+
+def test_active_hftbacktest_only_run_writes_outputs_without_vectorbt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    sys.modules.pop("backtest_pipeline.src.vectorbt_adapter", None)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "hbt_only_test"
+
+    result = run_hftbacktest_only(_config(tmp_path, data_path, snapshot_path), out_dir=out_dir)
+
+    assert result["status"] == "completed"
+    assert (out_dir / "run_manifest.json").is_file()
+    assert (out_dir / "recorder_result.npz").is_file()
+    assert (out_dir / "stats_summary.json").is_file()
+    assert (out_dir / "promotion_decision.json").is_file()
+    manifest = json.loads((out_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    decision = json.loads((out_dir / "promotion_decision.json").read_text(encoding="utf-8"))
+    assert manifest["active_path"] == "hftbacktest_only"
+    assert manifest["vectorbt_dependency"] == "forbidden_active_path"
+    assert decision["promotion_allowed"] is False
+    assert "backtest_pipeline.src.vectorbt_adapter" not in sys.modules
+
+
+def test_invalid_data_does_not_write_promotion_decision(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_invalid_npz(tmp_path / "invalid_event.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "invalid"
+
+    result = run_hftbacktest_only(_config(tmp_path, data_path, snapshot_path), out_dir=out_dir)
+
+    assert result["status"] == "data_invalid"
+    assert (out_dir / "data_validation.json").is_file()
+    assert not (out_dir / "recorder_result.npz").exists()
+    assert not (out_dir / "stats_summary.json").exists()
+    assert not (out_dir / "promotion_decision.json").exists()
+    validation = json.loads((out_dir / "data_validation.json").read_text(encoding="utf-8"))
+    assert "TIMESTAMP_UNITS_UNPROVEN" in validation["fail_closed_reasons"]
+    assert "NEGATIVE_FEED_LATENCY_UNCORRECTED" in validation["fail_closed_reasons"]
+
+
+def test_promotion_decision_requires_hbt_outputs(tmp_path: Path) -> None:
+    with pytest.raises(HftBacktestOnlyPipelineError, match="promotion_decision_requires"):
+        write_promotion_decision(tmp_path)
+
+
+def test_validation_records_l3_hftbacktest_contract(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "snapshot.npz")
+
+    validation = validate_hftbacktest_only_input(_config(tmp_path, data_path, snapshot_path))
+
+    assert validation["data_validation_status"] == "pass"
+    assert validation["dtype_exact_match"] is True
+    assert validation["timestamp_units"] == "nanoseconds"
+    assert validation["official_validate_event_order_status"] == "pass"
+    assert validation["l2_l3_classification"] == "l3_mbo"
