@@ -52,6 +52,7 @@ from backtest_pipeline.src.vectorbt_adapter import (
     _build_run_budget,
     _candidate_id,
     _compute_metrics_for_params,
+    _diagnostic_metric_values_from_auxiliary_metrics,
     _establish_vectorbt_rust_runtime_proof,
     _grid_iter,
     _new_filter_result,
@@ -645,6 +646,9 @@ def run_vectorbt_simulation_matrix(
                     )
                     continue
 
+                auxiliary_metrics = _compute_metrics_for_params(
+                    ohlcv, entry_signal, exit_signal, stop_loss_f, take_profit_f,
+                )
                 gate_metrics, missing_gate_stats = _normalise_vectorbt_stats_for_gate(vbt_stats)
                 if missing_gate_stats:
                     result.rejected.append(
@@ -658,6 +662,7 @@ def run_vectorbt_simulation_matrix(
                                 "parameter_values": dict(merged),
                                 "param_values": dict(merged),
                                 "vbt_stats": vbt_stats,
+                                **_diagnostic_metric_values_from_auxiliary_metrics(auxiliary_metrics),
                                 "missing_vectorbt_stats_fields": list(missing_gate_stats),
                                 "gate_metric_authority": "official_vectorbt_portfolio_stats",
                             },
@@ -665,9 +670,6 @@ def run_vectorbt_simulation_matrix(
                     )
                     continue
 
-                auxiliary_metrics = _compute_metrics_for_params(
-                    ohlcv, entry_signal, exit_signal, stop_loss_f, take_profit_f,
-                )
                 wf = _simulate_walk_forward(ohlcv, entry_signal, exit_signal)
 
                 vectorbt_results = {

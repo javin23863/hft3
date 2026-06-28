@@ -2429,6 +2429,29 @@ def _optional_official_stats_or_not_run(
     return value
 
 
+def _diagnostic_metric_values_from_auxiliary_metrics(
+    auxiliary_metrics: Mapping[str, Any],
+) -> Dict[str, Any]:
+    net_return_pct = auxiliary_metrics["net_return_pct"]
+    net_return = round(float(net_return_pct) / 100.0, 8)
+    max_drawdown_pct = auxiliary_metrics["max_drawdown_pct"]
+    num_trades = int(auxiliary_metrics["num_trades"])
+    return {
+        "net_return_pct": net_return_pct,
+        "gross_return": net_return,
+        "net_return": net_return,
+        "expectancy": auxiliary_metrics["expectancy"],
+        "num_trades": num_trades,
+        "trade_count": num_trades,
+        "max_drawdown_pct": max_drawdown_pct,
+        "max_drawdown": max_drawdown_pct,
+        "auxiliary_numpy_metrics": dict(auxiliary_metrics),
+        "official_vectorbt_stats_status": "missing_required_gate_fields",
+        "diagnostic_metric_authority": "auxiliary_numpy_metrics",
+        "diagnostic_metric_status": "diagnostic_only_not_used_for_gate_or_replay_eligibility",
+    }
+
+
 def _normalise_vectorbt_stats_for_gate(vbt_stats: Mapping[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
     """Map official ``Portfolio.stats()`` fields to the pilot gate surface.
 
@@ -2791,6 +2814,9 @@ def _run_vectorbt_simulation(
                 ))
                 continue
 
+            auxiliary_metrics = _compute_metrics_for_params(
+                ohlcv, entry_signal, exit_signal, stop_loss_f, take_profit_f,
+            )
             gate_metrics, missing_gate_stats = _normalise_vectorbt_stats_for_gate(vbt_stats)
             if missing_gate_stats:
                 result.rejected.append(RejectedCandidate(
@@ -2803,15 +2829,13 @@ def _run_vectorbt_simulation(
                         "parameter_values": dict(merged),
                         "param_values": dict(merged),
                         "vbt_stats": vbt_stats,
+                        **_diagnostic_metric_values_from_auxiliary_metrics(auxiliary_metrics),
                         "missing_vectorbt_stats_fields": list(missing_gate_stats),
                         "gate_metric_authority": "official_vectorbt_portfolio_stats",
                     },
                 ))
                 continue
 
-            auxiliary_metrics = _compute_metrics_for_params(
-                ohlcv, entry_signal, exit_signal, stop_loss_f, take_profit_f,
-            )
             wf = _simulate_walk_forward(ohlcv, entry_signal, exit_signal)
 
             vectorbt_results = {
