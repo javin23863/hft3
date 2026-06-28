@@ -12,9 +12,9 @@ supports ``--resume`` (skip units whose artifact already validates).
 Compatibility flags from v1 (``--vectorbt-scope``, ``--workers``,
 ``--max-wall-clock-seconds``, ``--ready-gate-file``, ``--owner-waiver``,
 ``--dry-run``, ``--no-llm``, ``--repo-root``) are preserved. New v2 flags:
-``--max-batches-before-recycle``, ``--cache-memory-limit-mb``,
-``--cache-max-entries``, ``--events-csv-hash``, ``--lake-manifest-hash``,
-``--worker-affinity-cpus``.
+``--max-batches-before-recycle``, ``--max-units-per-batch``,
+``--cache-memory-limit-mb``, ``--cache-max-entries``, ``--events-csv-hash``,
+``--lake-manifest-hash``, ``--worker-affinity-cpus``.
 
 Launch hygiene: run **one** orchestrator per out-dir (``flock`` the manifest
 path on Linux, or a single tmux session on Vast). Duplicate launches leave
@@ -385,13 +385,14 @@ def _print_dry_run_plan(
     resume_check: str = "",
 ) -> None:
     groups = group_units_by_batch_key(units, grouping_ctx)
+    batches = _enumerate_bounded_batches(groups, args.max_units_per_batch)
     after_resume = str(len(units))
     resume_check_token = f"resume_check={resume_check} " if resume_check else ""
     print(
         f"DRY_RUN units={units_raw_count} "
         f"after_resume={after_resume} "
         f"{resume_check_token}"
-        f"batches={len(groups)} "
+        f"batches={len(batches)} "
         f"workers={args.workers} "
         f"scope={args.vectorbt_scope} "
         f"out={out_dir}"
@@ -406,6 +407,26 @@ def _print_dry_run_plan(
         }))
     if len(units) > 20:
         print(f"... and {len(units) - 20} more")
+
+
+def _enumerate_bounded_batches(
+    grouped_units: Dict[Any, List[PaidScreenUnit]],
+    max_units_per_batch: int,
+) -> List[Tuple[int, List[PaidScreenUnit]]]:
+    """Enumerate compatible groups, optionally chunked by unit count."""
+    if max_units_per_batch < 0:
+        raise ValueError("max_units_per_batch must be >= 0")
+
+    batches: List[Tuple[int, List[PaidScreenUnit]]] = []
+    for group_units in grouped_units.values():
+        if max_units_per_batch == 0:
+            batches.append((len(batches), group_units))
+            continue
+        for start in range(0, len(group_units), max_units_per_batch):
+            batches.append(
+                (len(batches), group_units[start:start + max_units_per_batch])
+            )
+    return batches
 
 
 def _load_skip_bad_units_file(path: Path) -> set[str]:
@@ -480,6 +501,7 @@ def _write_run_manifest(
         "units_jsonl": str(units_path),
         "vectorbt_scope": args.vectorbt_scope,
         "workers": args.workers,
+        "max_units_per_batch": int(getattr(args, "max_units_per_batch", 0)),
         "expected_work_units": units_raw_count,
         "completed_work_units": completed,
         "failed_work_units": failed,
@@ -1332,6 +1354,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--batch-timeout-seconds", type=float, default=1800.0,
                         help="Per-batch wall-clock timeout when draining results")
     parser.add_argument(
+        "--max-units-per-batch",
+        type=int,
+        default=0,
+        help="Split each compatible batch group into chunks of at most N units; 0 keeps unlimited grouping",
+    )
+    parser.add_argument(
         "--abort-on-failed-units",
         action="store_true",
         help="Stop dispatch after first batch with ERROR units (declaration abort_on_failed_units)",
@@ -1349,6 +1377,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    if args.max_units_per_batch < 0:
+        parser.error("--max-units-per-batch must be >= 0")
     try:
         args.worker_affinity_cpus = _parse_worker_affinity_cpus(
             args.worker_affinity_cpus
@@ -1548,9 +1578,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # Group units into compatible batches (full BatchingKey)
     groups = group_units_by_batch_key(units, grouping_ctx)
-    batches: List[Tuple[int, List[PaidScreenUnit]]] = [
-        (idx, batch_units) for idx, batch_units in enumerate(groups.values())
-    ]
+    batches = _enumerate_bounded_batches(groups, args.max_units_per_batch)
 
     resume_cached_results = [
         _resume_cached_unit_result(out_dir, uid) for uid in skipped_unit_ids

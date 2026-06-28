@@ -366,6 +366,70 @@ class TestWorkerAffinity:
         assert spawned[0].terminated is True
 
 
+class TestBoundedBatching:
+    def test_enumerate_bounded_batches_preserves_group_order_and_chunks(self):
+        v2 = _load_v2_module()
+        grouped = {
+            "group_a": [
+                _matching_paid_batch_unit(unit_id="u0"),
+                _matching_paid_batch_unit(unit_id="u1"),
+                _matching_paid_batch_unit(unit_id="u2"),
+            ],
+            "group_b": [
+                _matching_paid_batch_unit(unit_id="u3"),
+                _matching_paid_batch_unit(unit_id="u4"),
+            ],
+        }
+
+        batches = v2._enumerate_bounded_batches(grouped, 2)
+
+        assert [
+            (batch_idx, [unit.unit_id for unit in batch_units])
+            for batch_idx, batch_units in batches
+        ] == [
+            (0, ["u0", "u1"]),
+            (1, ["u2"]),
+            (2, ["u3", "u4"]),
+        ]
+
+    def test_enumerate_bounded_batches_zero_keeps_compatible_groups(self):
+        v2 = _load_v2_module()
+        grouped = {
+            "group_a": [
+                _matching_paid_batch_unit(unit_id="u0"),
+                _matching_paid_batch_unit(unit_id="u1"),
+            ],
+            "group_b": [_matching_paid_batch_unit(unit_id="u2")],
+        }
+
+        batches = v2._enumerate_bounded_batches(grouped, 0)
+
+        assert [
+            (batch_idx, [unit.unit_id for unit in batch_units])
+            for batch_idx, batch_units in batches
+        ] == [
+            (0, ["u0", "u1"]),
+            (1, ["u2"]),
+        ]
+
+    def test_main_rejects_negative_max_units_per_batch(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(tmp_path / "units.jsonl"),
+                "--out",
+                str(tmp_path / "out"),
+                "--max-units-per-batch",
+                "-1",
+            ],
+        )
+
+        assert rc == 2
+        assert "--max-units-per-batch must be >= 0" in capsys.readouterr().err
+
+
 class TestVastLauncherV2Only:
     def test_v2_provenance_flags_always_passed(self):
         text = _VAST_SCRIPT.read_text(encoding="utf-8")
@@ -1654,6 +1718,7 @@ class TestRunningManifestWrites:
         args = __import__("argparse").Namespace(
             vectorbt_scope="paid-compute",
             workers=4,
+            max_units_per_batch=3,
             resume=False,
             worker_affinity_cpus=[2, 3],
         )
@@ -1687,6 +1752,7 @@ class TestRunningManifestWrites:
         assert payload["completed_work_units"] == 2
         assert payload["finished_at_utc"] is None
         assert payload["worker_affinity_cpus"] == [2, 3]
+        assert payload["max_units_per_batch"] == 3
 
     def test_drain_callback_increments_collected_batches(self):
         v2 = _load_v2_module()
@@ -2191,6 +2257,8 @@ class TestOrchestratorMainExit:
                 str(gate_path),
                 "--batch-timeout-seconds",
                 "5",
+                "--max-units-per-batch",
+                "7",
             ],
         )
         elapsed = time.monotonic() - t0
@@ -2202,6 +2270,9 @@ class TestOrchestratorMainExit:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         assert manifest["status"] in {"complete", "partial", "aborted", "failed"}
         assert manifest["finished_at_utc"] is not None
+        assert manifest["expected_work_units"] == num_workers
+        assert manifest["expected_batches"] == 19
+        assert manifest["max_units_per_batch"] == 7
 
     def test_initial_worker_spawn_failure_writes_terminal_manifest(self, tmp_path, monkeypatch):
         v2 = _load_v2_module()

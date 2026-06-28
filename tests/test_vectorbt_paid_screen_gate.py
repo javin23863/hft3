@@ -502,7 +502,11 @@ def test_vast_launchers_do_not_auto_prefer_forensic_ready_gate() -> None:
     assert '"lake_manifest_hash", lake_hash' in launch_script
     assert "ready gate {name} missing" in launch_script
     assert "Ready gate OK:" in launch_script
-    assert "VBT_READY_GATE_FILE=$VBT_READY_GATE_FILE bash scripts/run_vbt_paid_screen_vast_full.sh" in ssh_script
+    assert 'VBT_MAX_UNITS_PER_BATCH="${VBT_MAX_UNITS_PER_BATCH-0}"' in ssh_script
+    assert '[[ ! "$VBT_MAX_UNITS_PER_BATCH" =~ ^[0-9]+$ ]]' in ssh_script
+    assert "ERROR: VBT_MAX_UNITS_PER_BATCH must be a non-negative integer" in ssh_script
+    assert 'printf -v REMOTE_VBT_MAX_UNITS_PER_BATCH "%q" "$VBT_MAX_UNITS_PER_BATCH"' in ssh_script
+    assert "VBT_READY_GATE_FILE=$VBT_READY_GATE_FILE VBT_MAX_UNITS_PER_BATCH=$REMOTE_VBT_MAX_UNITS_PER_BATCH bash scripts/run_vbt_paid_screen_vast_full.sh" in ssh_script
 
 
 def test_phase_b_smoke_does_not_depend_on_full_run_ready_gate() -> None:
@@ -2330,13 +2334,22 @@ def test_vast_full_script_requires_declaration_before_workers() -> None:
     assert "(( BATCH_TIMEOUT_SECONDS < 1 ))" in script
     assert "ERROR: VBT_BATCH_TIMEOUT_SECONDS must be a positive integer" in script
     assert "got '$BATCH_TIMEOUT_SECONDS'" in script
+    assert 'REQUESTED_VBT_MAX_UNITS_PER_BATCH_SET="${VBT_MAX_UNITS_PER_BATCH+x}"' in script
+    assert 'REQUESTED_VBT_MAX_UNITS_PER_BATCH="${VBT_MAX_UNITS_PER_BATCH:-}"' in script
+    assert 'VBT_MAX_UNITS_PER_BATCH="$REQUESTED_VBT_MAX_UNITS_PER_BATCH"' in script
+    assert 'MAX_UNITS_PER_BATCH="${VBT_MAX_UNITS_PER_BATCH-0}"' in script
+    assert '[[ ! "$MAX_UNITS_PER_BATCH" =~ ^[0-9]+$ ]]' in script
+    assert "ERROR: VBT_MAX_UNITS_PER_BATCH must be a non-negative integer" in script
+    assert "got '$MAX_UNITS_PER_BATCH'" in script
     assert '"stall_minutes": int(stall_minutes)' in script
     assert '"batch_timeout_seconds": int(batch_timeout_seconds)' in script
+    assert '"max_units_per_batch": int(max_units_per_batch)' in script
     assert 'DECL_ABORT_ON_FAILED_UNITS="${VBT_DECL_ABORT_ON_FAILED_UNITS:-true}"' in script
     assert 'payload.get("abort_on_failed_units") is not True' in script
     assert "abort_on_failed_units must be true;" in script
     assert 'expect_int("stall_minutes", int(stall_minutes))' in script
     assert 'expect_int("batch_timeout_seconds", int(batch_timeout_seconds))' in script
+    assert 'expect_int("max_units_per_batch", int(max_units_per_batch))' in script
     assert 'expect_int("stall_minutes", 30)' not in script
     assert 'expect_int("batch_timeout_seconds", 1800)' not in script
     assert "VBT_WRITE_DECLARATION_TEMPLATE" in script
@@ -2344,6 +2357,7 @@ def test_vast_full_script_requires_declaration_before_workers() -> None:
     assert "to regenerate the declaration template" in script
     assert "Declaration verified:" in script
     assert "--batch-timeout-seconds $BATCH_TIMEOUT_SECONDS" in script
+    assert "--max-units-per-batch $MAX_UNITS_PER_BATCH" in script
     assert "--abort-on-failed-units" in script
     assert "--research-split" in script
 

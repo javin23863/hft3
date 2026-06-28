@@ -7,6 +7,12 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
 VBT_READY_GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"
+VBT_MAX_UNITS_PER_BATCH="${VBT_MAX_UNITS_PER_BATCH-0}"
+if [[ ! "$VBT_MAX_UNITS_PER_BATCH" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: VBT_MAX_UNITS_PER_BATCH must be a non-negative integer (got '$VBT_MAX_UNITS_PER_BATCH')" >&2
+  exit 1
+fi
+printf -v REMOTE_VBT_MAX_UNITS_PER_BATCH "%q" "$VBT_MAX_UNITS_PER_BATCH"
 
 if [[ -n "${VAST_SSH_TARGET:-}" ]]; then
   VAST_SSH_HOST_ARG="$VAST_SSH_TARGET"
@@ -51,6 +57,6 @@ scp "${SCP_OPTS[@]}" "$VBT_READY_GATE_FILE" \
 
 echo "Launching remote full screen (230 workers on 256 vCPU) in tmux..."
 ssh "${SSH_OPTS[@]}" "$VAST_SSH_HOST_ARG" "cd $REMOTE_REPO && \
-  tmux new-session -d -s vbt_full 'VBT_READY_GATE_FILE=$VBT_READY_GATE_FILE bash scripts/run_vbt_paid_screen_vast_full.sh; exec bash'"
+  tmux new-session -d -s vbt_full 'VBT_READY_GATE_FILE=$VBT_READY_GATE_FILE VBT_MAX_UNITS_PER_BATCH=$REMOTE_VBT_MAX_UNITS_PER_BATCH bash scripts/run_vbt_paid_screen_vast_full.sh; exec bash'"
 
 echo "Attached logs: ssh ${SSH_OPTS[*]} $VAST_SSH_HOST_ARG -t tmux attach -t vbt_full"
