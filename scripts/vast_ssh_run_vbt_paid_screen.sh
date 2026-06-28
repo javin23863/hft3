@@ -7,6 +7,30 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
 VBT_READY_GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"
+if [[ -z "${VBT_MAX_UNITS_PER_BATCH+x}" ]]; then
+  VBT_MAX_UNITS_PER_BATCH="0"
+fi
+if [[ ! "$VBT_MAX_UNITS_PER_BATCH" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: VBT_MAX_UNITS_PER_BATCH must be a non-negative integer (got '$VBT_MAX_UNITS_PER_BATCH')" >&2
+  exit 1
+fi
+printf -v REMOTE_VBT_MAX_UNITS_PER_BATCH "%q" "$VBT_MAX_UNITS_PER_BATCH"
+if [[ -z "${VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT+x}" ]]; then
+  VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT="1"
+fi
+case "${VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT,,}" in
+  1|true|yes|on)
+    VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT="true"
+    ;;
+  0|false|no|off)
+    VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT="false"
+    ;;
+  *)
+    echo "ERROR: VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT must be boolean (got '$VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT')" >&2
+    exit 1
+    ;;
+esac
+printf -v REMOTE_VBT_SKIP_AGGREGATE "%q" "$VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT"
 
 if [[ -n "${VAST_SSH_TARGET:-}" ]]; then
   VAST_SSH_HOST_ARG="$VAST_SSH_TARGET"
@@ -51,6 +75,6 @@ scp "${SCP_OPTS[@]}" "$VBT_READY_GATE_FILE" \
 
 echo "Launching remote full screen (230 workers on 256 vCPU) in tmux..."
 ssh "${SSH_OPTS[@]}" "$VAST_SSH_HOST_ARG" "cd $REMOTE_REPO && \
-  tmux new-session -d -s vbt_full 'VBT_READY_GATE_FILE=$VBT_READY_GATE_FILE bash scripts/run_vbt_paid_screen_vast_full.sh; exec bash'"
+  tmux new-session -d -s vbt_full 'VBT_READY_GATE_FILE=$VBT_READY_GATE_FILE VBT_MAX_UNITS_PER_BATCH=$REMOTE_VBT_MAX_UNITS_PER_BATCH VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT=$REMOTE_VBT_SKIP_AGGREGATE bash scripts/run_vbt_paid_screen_vast_full.sh; exec bash'"
 
 echo "Attached logs: ssh ${SSH_OPTS[*]} $VAST_SSH_HOST_ARG -t tmux attach -t vbt_full"

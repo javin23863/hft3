@@ -12,9 +12,10 @@ supports ``--resume`` (skip units whose artifact already validates).
 Compatibility flags from v1 (``--vectorbt-scope``, ``--workers``,
 ``--max-wall-clock-seconds``, ``--ready-gate-file``, ``--owner-waiver``,
 ``--dry-run``, ``--no-llm``, ``--repo-root``) are preserved. New v2 flags:
-``--max-batches-before-recycle``, ``--cache-memory-limit-mb``,
-``--cache-max-entries``, ``--events-csv-hash``, ``--lake-manifest-hash``,
-``--worker-affinity-cpus``.
+``--max-batches-before-recycle``, ``--max-units-per-batch``,
+``--cache-memory-limit-mb``, ``--cache-max-entries``, ``--events-csv-hash``,
+``--lake-manifest-hash``, ``--worker-affinity-cpus``,
+``--skip-aggregate-screening-artifact``.
 
 Launch hygiene: run **one** orchestrator per out-dir (``flock`` the manifest
 path on Linux, or a single tmux session on Vast). Duplicate launches leave
@@ -355,6 +356,48 @@ def _count_work_units(all_results: List[UnitScreeningResult]) -> Tuple[int, int,
     return completed, failed, skipped
 
 
+def _run_aggregate_phase(
+    out_dir: Path,
+    unit_result_dicts: List[Dict[str, Any]],
+    *,
+    finished_at_utc: str,
+    skip: bool,
+) -> Dict[str, Any]:
+    """Run or skip the root aggregate artifact phase and return manifest fields."""
+    aggregate_started = datetime.now(timezone.utc)
+    aggregate_started_mono = time.monotonic()
+
+    if skip:
+        aggregate_path = None
+        aggregate_status = "skipped"
+        print(
+            "Skipping aggregate screening artifact "
+            "(--skip-aggregate-screening-artifact)",
+            flush=True,
+        )
+    else:
+        aggregate_path = write_aggregate_screening_artifact(
+            out_dir,
+            unit_result_dicts,
+            finished_at_utc=finished_at_utc,
+        )
+        aggregate_status = "written" if aggregate_path else "not_written"
+        if aggregate_path:
+            print(f"Aggregate screening artifact: {aggregate_path}")
+
+    aggregate_finished = datetime.now(timezone.utc)
+    return {
+        "aggregate_status": aggregate_status,
+        "aggregate_path": str(aggregate_path) if aggregate_path else None,
+        "aggregate_started_at_utc": aggregate_started.isoformat(),
+        "aggregate_finished_at_utc": aggregate_finished.isoformat(),
+        "aggregate_elapsed_seconds": round(
+            time.monotonic() - aggregate_started_mono,
+            6,
+        ),
+    }
+
+
 def _resolve_run_hashes(
     args: argparse.Namespace,
     repo_root: Path,
@@ -385,13 +428,14 @@ def _print_dry_run_plan(
     resume_check: str = "",
 ) -> None:
     groups = group_units_by_batch_key(units, grouping_ctx)
+    batches = _enumerate_bounded_batches(groups, args.max_units_per_batch)
     after_resume = str(len(units))
     resume_check_token = f"resume_check={resume_check} " if resume_check else ""
     print(
         f"DRY_RUN units={units_raw_count} "
         f"after_resume={after_resume} "
         f"{resume_check_token}"
-        f"batches={len(groups)} "
+        f"batches={len(batches)} "
         f"workers={args.workers} "
         f"scope={args.vectorbt_scope} "
         f"out={out_dir}"
@@ -406,6 +450,26 @@ def _print_dry_run_plan(
         }))
     if len(units) > 20:
         print(f"... and {len(units) - 20} more")
+
+
+def _enumerate_bounded_batches(
+    grouped_units: Dict[Any, List[PaidScreenUnit]],
+    max_units_per_batch: int,
+) -> List[Tuple[int, List[PaidScreenUnit]]]:
+    """Enumerate compatible groups, optionally chunked by unit count."""
+    if max_units_per_batch < 0:
+        raise ValueError("max_units_per_batch must be >= 0")
+
+    batches: List[Tuple[int, List[PaidScreenUnit]]] = []
+    for group_units in grouped_units.values():
+        if max_units_per_batch == 0:
+            batches.append((len(batches), group_units))
+            continue
+        for start in range(0, len(group_units), max_units_per_batch):
+            batches.append(
+                (len(batches), group_units[start:start + max_units_per_batch])
+            )
+    return batches
 
 
 def _load_skip_bad_units_file(path: Path) -> set[str]:
@@ -466,6 +530,11 @@ def _write_run_manifest(
     failure_diagnostics_path: str | None = None,
     profiler_summaries: List[Dict[str, Any]] | None = None,
     units_per_hour: float = 0.0,
+    aggregate_status: str = "not_started",
+    aggregate_path: str | None = None,
+    aggregate_started_at_utc: str | None = None,
+    aggregate_finished_at_utc: str | None = None,
+    aggregate_elapsed_seconds: float | None = None,
 ) -> None:
     """Persist the run manifest (initial running snapshot or terminal state)."""
     elapsed_hours = max(
@@ -480,6 +549,7 @@ def _write_run_manifest(
         "units_jsonl": str(units_path),
         "vectorbt_scope": args.vectorbt_scope,
         "workers": args.workers,
+        "max_units_per_batch": int(getattr(args, "max_units_per_batch", 0)),
         "expected_work_units": units_raw_count,
         "completed_work_units": completed,
         "failed_work_units": failed,
@@ -497,6 +567,11 @@ def _write_run_manifest(
         "collected_batches": collected_batches,
         "aborted": aborted,
         "stop_reason": stop_reason,
+        "aggregate_status": aggregate_status,
+        "aggregate_path": aggregate_path,
+        "aggregate_started_at_utc": aggregate_started_at_utc,
+        "aggregate_finished_at_utc": aggregate_finished_at_utc,
+        "aggregate_elapsed_seconds": aggregate_elapsed_seconds,
     }
 
     # Failure counts per error type — separate data-quality from algorithmic.
@@ -1332,6 +1407,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--batch-timeout-seconds", type=float, default=1800.0,
                         help="Per-batch wall-clock timeout when draining results")
     parser.add_argument(
+        "--max-units-per-batch",
+        type=int,
+        default=0,
+        help="Split each compatible batch group into chunks of at most N units; 0 keeps unlimited grouping",
+    )
+    parser.add_argument(
         "--abort-on-failed-units",
         action="store_true",
         help="Stop dispatch after first batch with ERROR units (declaration abort_on_failed_units)",
@@ -1347,8 +1428,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=None,
         help="JSON file with invalid unit IDs from check_lake_data.py. Units listed are skipped before dispatch.",
     )
+    parser.add_argument(
+        "--skip-aggregate-screening-artifact",
+        action="store_true",
+        help="Skip root screening_artifact.json aggregation after work-unit collection completes.",
+    )
 
     args = parser.parse_args(argv)
+    if args.max_units_per_batch < 0:
+        parser.error("--max-units-per-batch must be >= 0")
     try:
         args.worker_affinity_cpus = _parse_worker_affinity_cpus(
             args.worker_affinity_cpus
@@ -1548,9 +1636,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # Group units into compatible batches (full BatchingKey)
     groups = group_units_by_batch_key(units, grouping_ctx)
-    batches: List[Tuple[int, List[PaidScreenUnit]]] = [
-        (idx, batch_units) for idx, batch_units in enumerate(groups.values())
-    ]
+    batches = _enumerate_bounded_batches(groups, args.max_units_per_batch)
 
     resume_cached_results = [
         _resume_cached_unit_result(out_dir, uid) for uid in skipped_unit_ids
@@ -1561,6 +1647,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         started = datetime.now(timezone.utc)
         finished = datetime.now(timezone.utc)
         completed = len(resume_cached_results)
+        aggregate_fields = _run_aggregate_phase(
+            out_dir,
+            resume_cached_results,
+            finished_at_utc=finished.isoformat(),
+            skip=args.skip_aggregate_screening_artifact,
+        )
         _write_run_manifest(
             manifest_path,
             status=determine_manifest_status(completed, 0, False, len(units_raw)),
@@ -1583,14 +1675,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             collected_batches=0,
             aborted=False,
             stop_reason=None,
+            **aggregate_fields,
         )
-        aggregate_path = write_aggregate_screening_artifact(
-            out_dir,
-            resume_cached_results,
-            finished_at_utc=finished.isoformat(),
-        )
-        if aggregate_path:
-            print(f"Aggregate screening artifact: {aggregate_path}")
         print(f"Manifest: {manifest_path}")
         print(f"completed={completed} failed=0 skipped=0 units_per_hour=0.00")
         return 0
@@ -1847,6 +1933,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     elapsed_hours = max((finished - started).total_seconds() / 3600.0, 1e-9)
     units_per_hour = completed / elapsed_hours
 
+    unit_result_dicts = partial_result_dicts + resume_cached_results
+    aggregate_fields = _run_aggregate_phase(
+        out_dir,
+        unit_result_dicts,
+        finished_at_utc=finished.isoformat(),
+        skip=args.skip_aggregate_screening_artifact,
+    )
     _write_run_manifest(
         manifest_path,
         status=determine_manifest_status(completed, failed, aborted, len(units_raw)),
@@ -1872,15 +1965,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         failure_diagnostics_path=failure_diagnostics_path,
         profiler_summaries=profiler_summaries,
         units_per_hour=units_per_hour,
+        **aggregate_fields,
     )
-    unit_result_dicts = partial_result_dicts + resume_cached_results
-    aggregate_path = write_aggregate_screening_artifact(
-        out_dir,
-        unit_result_dicts,
-        finished_at_utc=finished.isoformat(),
-    )
-    if aggregate_path:
-        print(f"Aggregate screening artifact: {aggregate_path}")
     print(f"Manifest: {manifest_path}")
     print(
         f"completed={completed} failed={failed} skipped={skipped} "
