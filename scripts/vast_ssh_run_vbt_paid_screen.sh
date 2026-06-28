@@ -7,13 +7,17 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
 VBT_READY_GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"
-VBT_MAX_UNITS_PER_BATCH="${VBT_MAX_UNITS_PER_BATCH-0}"
+if [[ -z "${VBT_MAX_UNITS_PER_BATCH+x}" ]]; then
+  VBT_MAX_UNITS_PER_BATCH="0"
+fi
 if [[ ! "$VBT_MAX_UNITS_PER_BATCH" =~ ^[0-9]+$ ]]; then
   echo "ERROR: VBT_MAX_UNITS_PER_BATCH must be a non-negative integer (got '$VBT_MAX_UNITS_PER_BATCH')" >&2
   exit 1
 fi
 printf -v REMOTE_VBT_MAX_UNITS_PER_BATCH "%q" "$VBT_MAX_UNITS_PER_BATCH"
-VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT="${VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT-1}"
+if [[ -z "${VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT+x}" ]]; then
+  VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT="1"
+fi
 case "${VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT,,}" in
   1|true|yes|on)
     VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT="true"

@@ -52,12 +52,20 @@ if [[ ! "$BATCH_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || (( BATCH_TIMEOUT_SECONDS < 1 
   echo "ERROR: VBT_BATCH_TIMEOUT_SECONDS must be a positive integer (got '$BATCH_TIMEOUT_SECONDS')" >&2
   exit 1
 fi
-MAX_UNITS_PER_BATCH="${VBT_MAX_UNITS_PER_BATCH-0}"
+if [[ -n "${VBT_MAX_UNITS_PER_BATCH+x}" ]]; then
+  MAX_UNITS_PER_BATCH="$VBT_MAX_UNITS_PER_BATCH"
+else
+  MAX_UNITS_PER_BATCH="0"
+fi
 if [[ ! "$MAX_UNITS_PER_BATCH" =~ ^[0-9]+$ ]]; then
   echo "ERROR: VBT_MAX_UNITS_PER_BATCH must be a non-negative integer (got '$MAX_UNITS_PER_BATCH')" >&2
   exit 1
 fi
-SKIP_AGGREGATE_SCREENING_ARTIFACT="${VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT-1}"
+if [[ -n "${VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT+x}" ]]; then
+  SKIP_AGGREGATE_SCREENING_ARTIFACT="$VBT_SKIP_AGGREGATE_SCREENING_ARTIFACT"
+else
+  SKIP_AGGREGATE_SCREENING_ARTIFACT="1"
+fi
 case "${SKIP_AGGREGATE_SCREENING_ARTIFACT,,}" in
   1|true|yes|on)
     SKIP_AGGREGATE_SCREENING_ARTIFACT="true"
@@ -307,7 +315,7 @@ expect_int("workers_requested", int(workers))
 expect_int("stall_minutes", int(stall_minutes))
 expect_int("batch_timeout_seconds", int(batch_timeout_seconds))
 expect_int("max_units_per_batch", int(max_units_per_batch))
-if payload.get("skip_aggregate_screening_artifact") is not (skip_aggregate == "true"):
+if payload.get("skip_aggregate_screening_artifact") != (skip_aggregate == "true"):
     errors.append(f"skip_aggregate_screening_artifact={payload.get('skip_aggregate_screening_artifact')} expected {skip_aggregate}")
 expect_str("units_source", units_source)
 expect_str("git_head", git_head)
