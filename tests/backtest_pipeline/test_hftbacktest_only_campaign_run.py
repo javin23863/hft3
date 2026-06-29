@@ -248,3 +248,36 @@ def test_campaign_runner_augments_preblocked_rows_with_metadata_blockers(tmp_pat
     payload = json.loads(receipt.read_text(encoding="utf-8"))
     assert "instrument_metadata_missing:contract_size" in payload["blocker_detail"]
     assert "missing_hbt_run_metadata:product_metadata_source,metadata_policy" in payload["blocker_detail"]
+
+
+def test_campaign_runner_preserves_prefixed_blocker_codes() -> None:
+    module = _load_runner_module()
+
+    assert (
+        module._fail_closed_blocker(
+            "pipeline_blocker",
+            ["pipeline_blocker:no_hbt_order_submitted"],
+        )
+        == "pipeline_blocker:no_hbt_order_submitted"
+    )
+    assert (
+        module._fail_closed_blocker(
+            "data_invalid",
+            ["data_blocker:TIMESTAMP_UNITS_UNPROVEN"],
+        )
+        == "data_blocker:TIMESTAMP_UNITS_UNPROVEN"
+    )
+    assert (
+        module._fail_closed_blocker(
+            "authority_missing",
+            ["authority_missing"],
+        )
+        == "authority_missing"
+    )
+    assert (
+        module._fail_closed_blocker(
+            "authority_missing",
+            ["authority_missing:canonical_model_id_missing"],
+        )
+        == "authority_missing:canonical_model_id_missing"
+    )
