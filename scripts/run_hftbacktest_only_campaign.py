@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import multiprocessing as mp
 import sys
 from pathlib import Path
 from typing import Any, Iterator, Mapping
@@ -36,6 +37,7 @@ def run_campaign(
     strategy_id: str = "hypothesis_limit_order",
     dry_run: bool = False,
     workers: int = 1,
+    max_tasks_per_child: int = 0,
     resume: bool = False,
     maker_fee: float = 0.0,
     taker_fee: float = 0.0,
@@ -57,6 +59,7 @@ def run_campaign(
     }
 
     worker_count = max(1, int(workers))
+    task_limit = _nonnegative_int(max_tasks_per_child, "max_tasks_per_child")
     status_counts: dict[str, int] = {}
     blocker_counts: dict[str, int] = {}
     row_count = 0
@@ -74,7 +77,7 @@ def run_campaign(
             record(_run_row_task((row, str(campaign_root), settings)))
     else:
         max_in_flight = worker_count * 2
-        with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as pool:
+        with concurrent.futures.ProcessPoolExecutor(**_process_pool_kwargs(worker_count, task_limit)) as pool:
             pending: set[concurrent.futures.Future[dict[str, Any]]] = set()
             for row in _iter_jsonl(manifest_path):
                 row_count += 1
@@ -95,6 +98,7 @@ def run_campaign(
         "out_root": str(campaign_root),
         "row_count": row_count,
         "workers": worker_count,
+        "max_tasks_per_child": task_limit,
         "dry_run": dry_run,
         "status_counts": dict(sorted(status_counts.items())),
         "blocker_counts": dict(sorted(blocker_counts.items())),
@@ -102,6 +106,23 @@ def run_campaign(
     }
     write_json_atomic(campaign_root / "campaign_run_summary.json", summary)
     return summary
+
+
+def _process_pool_kwargs(worker_count: int, max_tasks_per_child: int) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {"max_workers": worker_count}
+    if max_tasks_per_child < 0:
+        raise ValueError("max_tasks_per_child must be >= 0")
+    if max_tasks_per_child:
+        kwargs["max_tasks_per_child"] = max_tasks_per_child
+        kwargs["mp_context"] = mp.get_context("spawn")
+    return kwargs
+
+
+def _nonnegative_int(value: Any, name: str) -> int:
+    result = int(0 if value is None else value)
+    if result < 0:
+        raise ValueError(f"{name} must be >= 0")
+    return result
 
 
 def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[str, Any]:
@@ -344,6 +365,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-root", type=Path, default=REPO / "artifacts" / "hbt_campaign_runs")
     parser.add_argument("--strategy-id", default="hypothesis_limit_order")
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument(
+        "--max-tasks-per-child",
+        type=int,
+        default=0,
+        help="Recycle process-pool workers after N row tasks; 0 disables recycling.",
+    )
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--maker-fee", type=float, default=0.0)
@@ -351,6 +378,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--entry-latency-ns", type=int, default=100_000)
     parser.add_argument("--response-latency-ns", type=int, default=100_000)
     args = parser.parse_args(argv)
+    if args.max_tasks_per_child < 0:
+        parser.error("--max-tasks-per-child must be >= 0")
 
     summary = run_campaign(
         manifest_path=args.campaign_manifest,
@@ -358,6 +387,7 @@ def main(argv: list[str] | None = None) -> int:
         strategy_id=args.strategy_id,
         dry_run=args.dry_run,
         workers=args.workers,
+        max_tasks_per_child=args.max_tasks_per_child,
         resume=args.resume,
         maker_fee=args.maker_fee,
         taker_fee=args.taker_fee,
