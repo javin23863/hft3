@@ -318,6 +318,8 @@ void FeatureExtractorCpp::extract() {
     vec_[static_cast<size_t>(FeatureIndex::PROP_REENTRY_SCORE)] =
         std::tanh(trade_rate_accel) * aggressor_imbalance;
 
+    vec_[static_cast<size_t>(FeatureIndex::CUTOFF_PRESSURE_SCORE)] = 0.0;
+    vec_[static_cast<size_t>(FeatureIndex::NEWS_RESTRICTION_FLATTEN_SCORE)] = 0.0;
     if (total_agg > 0) {
         const double total_agg_d = static_cast<double>(total_agg);
         const double agg_delta = static_cast<double>(buy_agg_ - sell_agg_);
