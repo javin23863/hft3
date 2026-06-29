@@ -39,6 +39,9 @@ than the executable price in the filtration.
 
 ## Pipeline Flow
 
+This section is legacy documentation for the inactive VectorBT handoff path. It
+is not an active HBT-only campaign recipe.
+
 ```
 1. run_pipeline.py --thesis "..." --event-id CPI_2024_09_11_TIGHT --vectorbt
 2.   → parse_hypothesis()                [existing, unchanged]
@@ -100,8 +103,9 @@ Hard blockers for replay eligibility:
 
 VectorBT screen-passed candidates are serialized into the terminal handoff
 artifact at `research_cards/pipeline_runs/<run_id>/screening_artifact.json`.
-Only rows inside that screening artifact, with valid robustness evidence, can
-reach HftBacktest/replay realism gates.
+In this historical path only, rows inside that screening artifact, with valid
+robustness evidence, could reach HftBacktest/replay realism gates. Under the
+active HBT-only plan, `screening_artifact.json` is not an eligibility source.
 
 Minimum top-level screening artifact fields are listed below. The authoritative
 full schema, including per-candidate fields and fail-closed robustness semantics,

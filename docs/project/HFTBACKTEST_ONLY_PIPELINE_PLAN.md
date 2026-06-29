@@ -22,6 +22,7 @@ Primary authorities checked for this plan:
 | Repo `.cursor/rules/01-ponytail-mindset.mdc` and `docs/ai/PONYTAIL.md` | Minimal-diff, YAGNI, no new abstractions unless needed; never cut validation or finance/math invariants. |
 | `docs/vault/HFTBACKTEST_LATENCY_ONTOLOGY.md` | HftBacktest latency must keep feed, order-entry, and order-response components separate. |
 | `docs/project/HFTBACKTEST_REALISM_ENGINE_SPEC.md` | Official HftBacktest APIs, data validation, source lock, fill/queue, latency, and artifact contracts remain authoritative unless this plan explicitly replaces VectorBT handoff assumptions. |
+| `docs/project/HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md` | HBT-only evidence ledger, readiness, raw diagnostics, blocker semantics, and parameter-surface manifest. |
 | Obsidian `validation/Backtester Certification.md` and `library/System Implications.md` | Backtester claims require tiered certification, no-lookahead, event-time ordering, and robustness discipline. |
 | Upstream HftBacktest repository and docs | Use official data schema, validation utilities, L2/L3 replay semantics, latency models, fill models, and v2 return-code semantics. |
 
@@ -302,6 +303,67 @@ historical book. Large liquidity-taking behavior must be rejected or labeled
 
 Every candidate model must be wrapped as a HftBacktest strategy. VectorBT
 strategy objects and OHLC-bar execution substitutes are inactive for this path.
+
+Uniform model-flow rule:
+
+- active model identity is the canonical descriptive slug from
+  `packages/features_engine/config/model_registry.yaml`;
+- every canonical model registry entry by descriptive slug is in scope for the
+  uniform HftBacktest campaign manifest, including hypothesis, structural, and
+  reinforcement-learning policy/proxy entries;
+- legacy IDs, registry `kind`, and inventory-count language are provenance only.
+  They may appear under `legacy_aliases`, migration metadata, or compatibility
+  fields, but must not route, skip, downgrade, or classify active HBT campaign
+  units;
+- `50 HYP + 11 PDF` is a legacy/provenance inventory phrase, not the active
+  model universe, because it omits reinforcement-learning entries carried in the
+  canonical registry;
+- reinforcement-learning entries remain research-only or simulator-blocked until
+  their own HBT order adapters and post-HBT gates exist; missing adapters are
+  pipeline blockers, not model rejection;
+- no canonical model slug may be excluded because the current code has a narrower
+  adapter interface;
+- an adapter, data-shape, feature-sync, or strategy-compile failure is a
+  pipeline blocker to fix, not a model rejection and not evidence that the model
+  is untradable;
+- campaign artifacts may record such failures only as `pipeline_blocker`,
+  `authority_missing`, or `data_blocker` states; they block campaign readiness,
+  Vast full-run readiness, and merge-readiness until the adapter path, authority,
+  or data surface is fixed or the owner records an explicit methodology waiver;
+- agents may not turn a repo interface mismatch into a research decision unless
+  the repo plan, vault decision, and underlying PDF/academic authority support
+  that decision.
+
+Uniform campaign manifest rule:
+
+- before broad HBT execution, build a deterministic manifest from every
+  canonical model slug and every admissible HBT-normalized NPZ/event unit;
+- the campaign input is `model_id=<canonical_slug>`, never a legacy ID, registry
+  kind, or inventory-count bucket;
+- each row records `canonical_model_id`, `legacy_aliases`, `registry_hash`,
+  `source_npz_sha256`, `initial_snapshot_sha256`, symbol/contract/event
+  metadata, `adapter_status`, `authority_refs`, `hbt_run_status`, and
+  `promotion_decision_path`;
+- local canaries select the first bounded rows by manifest order, not by model
+  preference.
+
+Evidence-ledger and parameter-surface rule:
+
+- keep the old evidence-ledger improvements only as evidence-shape patterns:
+  evidence ledger, family/candidate readiness, raw diagnostic evidence, blocker
+  reason codes, data-vs-pipeline audit, and bridge-failure-as-pipeline-evidence;
+- do not keep the old VectorBT -> robustness -> HftBacktest routing rule;
+- before full campaign execution, expand the campaign manifest into
+  `canonical_model_id x source_npz/event x parameter_hash` rows;
+- `grid`, `bayesian-prior`, and `evolutionary-prior` parameter sets are
+  deterministic pre-HBT proposals only when `objective_evaluations=0`; they are
+  not adaptive optimizer evidence and cannot rank or reject parameters before
+  HftBacktest artifacts exist;
+- evaluate parameter regions only after `recorder_result.npz` and
+  `stats_summary.json` exist for the corresponding HBT row;
+- missing adapter, missing data, missing authority, or feature-surface mismatch
+  remains a `pipeline_blocker`, `data_blocker`, or `authority_missing` state,
+  never a model rejection state.
 
 Required interface:
 
@@ -640,7 +702,9 @@ The HftBacktest-only active pipeline is accepted only when all are true:
    controls the run.
 8. Latency, fill, queue, fee, tick, lot, and market-impact assumptions are
    explicit in every run artifact.
-9. Plan Drift Review passes against this document.
-10. PR GrepLoop is last and clean on the current review head, or the handoff
+9. The uniform campaign manifest includes every canonical registry slug and
+   records omissions or adapter failures as blockers, never model rejection.
+10. Plan Drift Review passes against this document.
+11. PR GrepLoop is last and clean on the current review head, or the handoff
     reports the exact unavailable or waived state with `merge-ready: no`.
 ```

@@ -1,4 +1,4 @@
-"""C++ golden parity for REALIZED_VOL (26) and regime slots (41-49)."""
+"""C++ golden parity for changed feature slots and regime slots."""
 import json
 import subprocess
 import sys
@@ -18,7 +18,7 @@ from features_engine.src.features.feature_index import (
 from features_engine.src.features.mbo_features import MBOEvent, MBOFeatureExtractor
 from features_engine.src.regime.regime_filter import RegimeFilter
 
-_PARITY_SLOTS = [FeatureIndex.REALIZED_VOL_STATE, *range(41, 50)]
+_PARITY_SLOTS = [FeatureIndex.REALIZED_VOL_STATE, *range(31, 35), *range(41, 50)]
 
 
 def _golden_exe() -> Path | None:

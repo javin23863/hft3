@@ -122,6 +122,23 @@ def build_models_config() -> Dict[str, ModelConfig]:
                 execution_assumptions=ov.get("execution_assumptions", "signal_threshold"),
                 parameter_bounds=ov.get("parameter_bounds", {}),
             )
+        elif entry.get("kind") == "reinforcement_learning":
+            configs[slug] = ModelConfig(
+                model_id=slug,
+                kind="reinforcement_learning",
+                name=ov.get("name", entry.get("display_name", slug)),
+                signal_field=ov.get("signal_field", entry.get("algorithm", "")),
+                diagnostics_only=True,
+                required_datasets=ov.get("required_datasets", ["rl_policy_artifact"]),
+                min_history_years=ov.get("min_history_years", _DEFAULTS["min_history_years"]),
+                robustness_window=ov.get("robustness_window", "post_hbt_only"),
+                latency_lane=ov.get("latency_lane", "multi_second"),
+                execution_assumptions=ov.get(
+                    "execution_assumptions",
+                    "pipeline_blocker:missing_uniform_hbt_adapter",
+                ),
+                parameter_bounds=ov.get("parameter_bounds", {}),
+            )
     return configs
 
 
@@ -147,6 +164,8 @@ def get_model_by_id(model_id: str):
     legacy = legacy_to_slug().get(slug, slug)
     pdf_cfg = binding_raw.get("pdf", {}).get(slug) or binding_raw.get("pdf", {}).get(legacy, {})
     hyp_cfg = binding_raw.get("hypothesis", {}).get(slug) or binding_raw.get("hypothesis", {}).get(legacy, {})
+    if cfg.kind == "reinforcement_learning":
+        raise KeyError(f"{slug} is research-only until a uniform HBT order adapter exists")
     if pdf_cfg.get("campaign_mode") == "options_lane":
         from workbench.src.adapters.options_lane_adapter import OptionsLaneAdapter
 

@@ -428,6 +428,69 @@ class TestArtifactValidation:
         result = validate_artifact_schema(artifact)
         assert result.valid is False
 
+    def test_hbt_only_replay_artifact_passes_replay_schema(self):
+        artifact = {
+            "schema_version": "hft3_hftbacktest_only_official_replay_v1",
+            "official_hftbacktest_replay_status": "pass",
+            "run_id": "hbt_test",
+            "canonical_model_id": "BOOK_PRESSURE",
+            "symbol": "MES",
+            "contract": "MESU4",
+            "event_id": "CPI_2024_09_11_TIGHT",
+            "strategy_id": "hypothesis_limit_order",
+            "strategy_adapter_status": "available",
+            "signal_observations": 10,
+            "signal_source": "hbt_normalized_mbo_structural_integrator",
+            "orders": [],
+            "fills": [],
+            "position_timeseries": [],
+            "equity_curve": [],
+            "orders_intended": 1,
+            "orders_submitted": 0,
+            "orders_acknowledged": 0,
+            "fills_count": 0,
+            "fill_rate": 0.0,
+            "gross_pnl": 0.0,
+            "net_pnl": 0.0,
+            "fail_closed_reasons": [],
+        }
+
+        result = validate_artifact_schema(artifact, artifact_type="replay")
+
+        assert result.valid is True
+
+    def test_hbt_only_replay_artifact_requires_canonical_model_id(self):
+        artifact = {
+            "schema_version": "hft3_hftbacktest_only_official_replay_v1",
+            "official_hftbacktest_replay_status": "pass",
+            "run_id": "hbt_test",
+            "canonical_model_id": "",
+            "symbol": "MES",
+            "contract": "MESU4",
+            "event_id": "CPI_2024_09_11_TIGHT",
+            "strategy_id": "hypothesis_limit_order",
+            "strategy_adapter_status": "available",
+            "signal_observations": 10,
+            "signal_source": "hbt_normalized_mbo_structural_integrator",
+            "orders": [],
+            "fills": [],
+            "position_timeseries": [],
+            "equity_curve": [],
+            "orders_intended": 1,
+            "orders_submitted": 0,
+            "orders_acknowledged": 0,
+            "fills_count": 0,
+            "fill_rate": 0.0,
+            "gross_pnl": 0.0,
+            "net_pnl": 0.0,
+            "fail_closed_reasons": [],
+        }
+
+        result = validate_artifact_schema(artifact, artifact_type="replay")
+
+        assert result.valid is False
+        assert "canonical_model_id" in result.missing_fields
+
 
 # ---------------------------------------------------------------------------
 # Drift guard tests

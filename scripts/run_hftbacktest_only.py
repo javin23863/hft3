@@ -19,6 +19,8 @@ from backtest_pipeline.src.hftbacktest_only_pipeline import (
     prepare_hftbacktest_only_l3_from_lake,
     run_hftbacktest_only,
 )
+from backtest_pipeline.src.hftbacktest_only_campaign_manifest import DEFAULT_AUTHORITY_REFS
+from features_engine.src.model_registry import legacy_to_slug, resolve_model_id, slug_to_legacy
 
 
 def _default_run_id() -> str:
@@ -40,6 +42,22 @@ def _trade_date_from_event_id(event_id: str) -> str:
     return "-".join(match.groups())
 
 
+def _canonical_model_identity(model_id: str | None) -> tuple[str, tuple[str, ...]]:
+    if model_id is None or str(model_id).strip() == "":
+        raise SystemExit("--model-id is required for active HftBacktest-only runs")
+    candidate = str(model_id).strip()
+    if candidate in legacy_to_slug():
+        raise SystemExit("--model-id must be a canonical descriptive slug; legacy IDs are provenance only")
+    try:
+        canonical = resolve_model_id(candidate)
+    except KeyError as exc:
+        raise SystemExit(f"--model-id unknown canonical slug: {candidate}") from exc
+    if canonical != candidate:
+        raise SystemExit("--model-id must be a canonical descriptive slug; legacy IDs are provenance only")
+    legacy_id = slug_to_legacy().get(canonical)
+    return canonical, (legacy_id,) if legacy_id else ()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run HftBacktest-only active pipeline")
     parser.add_argument("--data-npz", type=Path, default=None)
@@ -53,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--symbol", required=True)
     parser.add_argument("--contract", required=True)
     parser.add_argument("--event-id", required=True)
+    parser.add_argument("--model-id", default=None, help="Canonical descriptive slug from model_registry.yaml.")
     parser.add_argument("--strategy-id", default=None)
     parser.add_argument("--strategy-params-json", default=None)
     parser.add_argument("--strategy-params-file", type=Path, default=None)
@@ -101,6 +120,12 @@ def main(argv: list[str] | None = None) -> int:
 
     run_id = args.run_id or _default_run_id()
     strategy_params = _load_strategy_params(args.strategy_params_json, args.strategy_params_file)
+    param_model_id = strategy_params.get("model_id")
+    if args.model_id is not None and param_model_id is not None and str(param_model_id) != str(args.model_id):
+        parser.error("--model-id must match strategy_params.model_id when both are provided")
+    canonical_model_id, legacy_aliases = _canonical_model_identity(args.model_id or param_model_id)
+    if canonical_model_id:
+        strategy_params = {**strategy_params, "model_id": canonical_model_id}
     config = HftBacktestOnlyRunConfig(
         run_id=run_id,
         symbol=args.symbol,
@@ -110,6 +135,9 @@ def main(argv: list[str] | None = None) -> int:
         initial_snapshot=initial_snapshot.resolve(),
         strategy_id=args.strategy_id,
         strategy_params=strategy_params,
+        canonical_model_id=canonical_model_id,
+        legacy_aliases=legacy_aliases,
+        authority_refs=tuple(DEFAULT_AUTHORITY_REFS) if canonical_model_id else (),
         tick_size=args.tick_size,
         lot_size=args.lot_size,
         contract_size=args.contract_size,

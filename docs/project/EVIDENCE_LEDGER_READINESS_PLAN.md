@@ -1,8 +1,14 @@
 # Evidence Ledger Readiness Plan
 
-Status: operator-approved planning document for organizing VectorBT, robustness,
-Monte Carlo, and HftBacktest handoff evidence without forcing incompatible
-native artifacts into one linear artifact shape.
+Status: historical / inactive for active HBT-only routing. This operator-approved
+planning document organizes VectorBT, robustness, Monte Carlo, and legacy
+HftBacktest handoff evidence without forcing incompatible native artifacts into
+one linear artifact shape.
+
+Active HBT-only supersession: reuse the evidence-ledger shape from this plan,
+but do not reuse its VectorBT -> robustness -> HftBacktest eligibility route for
+the active campaign. Active HBT identity and parameter-surface rules live in
+[HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md](HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md).
 
 Source note: `C:\Users\MSI\.codex\attachments\0997d436-470f-4839-ab94-553425d5a6d2\pasted-text.txt`
 
@@ -160,7 +166,7 @@ cost-adjusted expectancy failed
 
 This is a robustness or alpha-structure failure.
 
-### HftBacktest Eligibility
+### Historical HftBacktest Eligibility
 
 Question:
 
@@ -168,7 +174,14 @@ Question:
 Is this robust enough to spend expensive replay-realism compute?
 ```
 
-Required pass evidence includes:
+This section describes the legacy VectorBT/robustness handoff only. It is not
+active HBT-only eligibility. For active HBT-only work, use
+[HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md](HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md):
+canonical registry slug x HBT source/event x parameter hash, with missing
+adapter/data/authority/feature shape recorded as blockers rather than model
+rejection.
+
+Historical pass evidence included:
 
 ```text
 VectorBT pass
@@ -186,8 +199,8 @@ replay_eligibility_status=eligible
 strict replay eligibility validator clean
 ```
 
-Do not route anything to HftBacktest until the existing executable contract is
-satisfied:
+In this historical route, nothing went to HftBacktest until the legacy
+executable contract was satisfied:
 
 ```text
 replay_eligibility_status=eligible
@@ -201,10 +214,12 @@ routing authority and must never bypass
 `apply_robustness_evidence_to_screening.py` or the strict HftBacktest handoff
 validator.
 
-## Broad Discovery Versus Confirmatory Robustness
+## Historical Broad Discovery Versus Confirmatory Robustness
 
-VectorBT should remain the cheap broad screen before HftBacktest, but it should
-not be forced to emit only robustness-ready complete surfaces during discovery.
+In the legacy path, VectorBT was the cheap broad screen before HftBacktest, but
+it was not forced to emit only robustness-ready complete surfaces during
+discovery. For active HBT-only, VectorBT, Stage A, screening artifacts, and
+robustness bridges are diagnostic only and cannot decide HBT inputs.
 
 Recommended split:
 
@@ -428,8 +443,8 @@ hftbacktest_eligible_derived
 
 Task 3: Persist raw diagnostic evidence for each failed robustness decision.
 
-Task 4: Do not route anything to HftBacktest until the ledger records the
-existing strict contract as true:
+Task 4: In the legacy route, nothing went to HftBacktest until the ledger
+recorded the old strict contract as true:
 
 ```text
 replay_eligibility_status=eligible
@@ -535,10 +550,11 @@ recommended_next_action
 final_diagnosis
 ```
 
-### HftBacktest Boundary
+### Historical HftBacktest Boundary
 
-This slice does not route any failed, data-quality, or control candidate to
-HftBacktest. The production promotion gate remains fail-closed:
+This historical slice did not route any failed, data-quality, or control
+candidate to HftBacktest. Its legacy production promotion gate remained
+fail-closed:
 
 ```text
 replay_eligibility_status=eligible
@@ -546,9 +562,9 @@ robustness_evidence_receipt present
 validate_candidate_replay_eligibility() clean
 ```
 
-If the operator later authorizes a separate HftBacktest calibration experiment,
-it must be planned as a new diagnostic lane with its own explicit waiver and
-must not change this evidence-ledger gate.
+If the operator later authorizes a separate legacy HftBacktest calibration
+experiment, it must be planned as a diagnostic lane with its own explicit waiver
+and must not change the active HBT-only campaign identity.
 
 ## Acceptance Criteria
 

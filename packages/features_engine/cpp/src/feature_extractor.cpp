@@ -26,6 +26,8 @@ void FeatureExtractorCpp::reset() {
     buy_agg_ = sell_agg_ = add_vol_ = cancel_vol_ = 0;
     bid_add_ = ask_add_ = bid_cancel_ = ask_cancel_ = 0;
     near_touch_cancel_ = 0;
+    signed_size_sq_ = total_size_sq_ = 0.0;
+    curr_trade_count_ = prev_trade_count_ = 0;
     prev_top10_depth_ = 0.0;
     prev_book_slope_ = 0.0;
     prev_bid1_ = prev_ask1_ = 0;
@@ -46,6 +48,9 @@ void FeatureExtractorCpp::maybe_reset_window(int64_t ts_ns) {
         buy_agg_ = sell_agg_ = add_vol_ = cancel_vol_ = 0;
         bid_add_ = ask_add_ = bid_cancel_ = ask_cancel_ = 0;
         near_touch_cancel_ = 0;
+        prev_trade_count_ = curr_trade_count_;
+        curr_trade_count_ = 0;
+        signed_size_sq_ = total_size_sq_ = 0.0;
         reload_at_level_.clear();
         trade_at_level_.clear();
         mid_returns_.clear();
@@ -158,8 +163,16 @@ void FeatureExtractorCpp::process_event(const MBOEventCpp& event) {
     const double near_ticks = tick_size_ * 3;
 
     if (event.action == 'T') {
-        if (event.side == 'A') buy_agg_ += event.size;
-        else sell_agg_ += event.size;
+        const double size_sq = static_cast<double>(event.size) * static_cast<double>(event.size);
+        if (event.side == 'A') {
+            buy_agg_ += event.size;
+            signed_size_sq_ += size_sq;
+        } else {
+            sell_agg_ += event.size;
+            signed_size_sq_ -= size_sq;
+        }
+        total_size_sq_ += size_sq;
+        curr_trade_count_ += 1;
         auto key = std::make_pair(event.side, event.price);
         trade_at_level_[key] += event.size;
     } else if (event.action == 'A') {
@@ -261,6 +274,33 @@ void FeatureExtractorCpp::extract() {
     int hit_vol = 0;
     for (const auto& [_, v] : trade_at_level_) hit_vol += v;
     vec_[21] = total_agg > 0 ? (static_cast<double>(hit_vol) / (total_agg + 1e-9)) * (1.0 - std::abs(slope)) : 0.0;
+
+    vec_[static_cast<size_t>(FeatureIndex::MAX_CONTRACT_TRADE_IMBALANCE)] =
+        total_size_sq_ > 0.0 ? signed_size_sq_ / total_size_sq_ : 0.0;
+
+    const double aggressor_imbalance =
+        vec_[static_cast<size_t>(FeatureIndex::AGGRESSOR_VOLUME_IMBALANCE)];
+    const double trade_rate_accel =
+        static_cast<double>(curr_trade_count_ - prev_trade_count_) /
+        static_cast<double>(prev_trade_count_ + 1);
+    vec_[static_cast<size_t>(FeatureIndex::PROP_REENTRY_SCORE)] =
+        std::tanh(trade_rate_accel) * aggressor_imbalance;
+
+    if (total_agg > 0) {
+        const double total_agg_d = static_cast<double>(total_agg);
+        const double agg_delta = static_cast<double>(buy_agg_ - sell_agg_);
+        const double one_sidedness = std::abs(agg_delta) / total_agg_d;
+        const double dominant_sign = buy_agg_ >= sell_agg_ ? 1.0 : -1.0;
+        vec_[static_cast<size_t>(FeatureIndex::CUTOFF_PRESSURE_SCORE)] =
+            dominant_sign * one_sidedness * std::tanh(total_agg_d / 100.0);
+
+        if (near_touch_cancel_ > 0) {
+            const double raw_cancel_pressure =
+                add_vol_ > 0 ? static_cast<double>(near_touch_cancel_) / static_cast<double>(add_vol_) : 1.0;
+            vec_[static_cast<size_t>(FeatureIndex::NEWS_RESTRICTION_FLATTEN_SCORE)] =
+                dominant_sign * one_sidedness * std::tanh(raw_cancel_pressure);
+        }
+    }
 
     regime_filter_.update(vec_, event_context_);
 }

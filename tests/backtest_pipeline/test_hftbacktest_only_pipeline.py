@@ -19,6 +19,7 @@ from backtest_pipeline.src.hftbacktest_only_pipeline import (
     validate_hftbacktest_only_input,
     write_promotion_decision,
 )
+from backtest_pipeline.src.ontology_gate import validate_artifact_schema
 
 
 def _event_contract() -> tuple[np.dtype, dict[str, int]]:
@@ -43,6 +44,8 @@ def _event_contract() -> tuple[np.dtype, dict[str, int]]:
         "CANCEL_ORDER_EVENT": 11,
         "MODIFY_ORDER_EVENT": 12,
         "FILL_EVENT": 13,
+        "BUY_EVENT": 1 << 10,
+        "SELL_EVENT": 1 << 11,
     }
     return dtype, constants
 
@@ -112,7 +115,16 @@ def _write_invalid_npz(path: Path) -> Path:
     return path
 
 
-def _config(tmp_path: Path, data_path: Path, snapshot_path: Path) -> HftBacktestOnlyRunConfig:
+def _config(
+    tmp_path: Path,
+    data_path: Path,
+    snapshot_path: Path,
+    *,
+    strategy_id: str = "smoke_limit_order",
+    strategy_params: dict[str, object] | None = None,
+    canonical_model_id: str = "SPREAD_BLOWOUT_RECOMPRESSION",
+    legacy_aliases: tuple[str, ...] = ("HYP_5",),
+) -> HftBacktestOnlyRunConfig:
     return HftBacktestOnlyRunConfig(
         run_id="hbt_only_test",
         symbol="MES",
@@ -120,8 +132,11 @@ def _config(tmp_path: Path, data_path: Path, snapshot_path: Path) -> HftBacktest
         event_id="CPI_2024_09_11_TIGHT",
         normalized_npz=data_path,
         initial_snapshot=snapshot_path,
-        strategy_id="smoke_limit_order",
-        strategy_params={"side": "BUY", "quantity": 1.0, "max_steps": 2},
+        strategy_id=strategy_id,
+        strategy_params=strategy_params or {"side": "BUY", "quantity": 1.0, "max_steps": 2},
+        canonical_model_id=canonical_model_id,
+        legacy_aliases=legacy_aliases,
+        authority_refs=("test:model_registry",),
         tick_size=0.25,
         lot_size=1.0,
         contract_size=5.0,
@@ -192,9 +207,11 @@ def _install_fake_hftbacktest(
         def __init__(self, _assets: list[RecordingAsset]) -> None:
             self.steps = 0
             self.order_id = 0
+            self.current_timestamp = 0
 
         def elapse(self, _interval_ns: int) -> int:
             self.steps += 1
+            self.current_timestamp += int(_interval_ns)
             return 0 if self.steps <= 2 else 1
 
         def clear_inactive_orders(self, _asset_no: int) -> None:
@@ -266,9 +283,14 @@ def test_active_hftbacktest_only_run_writes_outputs_without_vectorbt(
     assert (out_dir / "stats_summary.json").is_file()
     assert (out_dir / "promotion_decision.json").is_file()
     manifest = json.loads((out_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    stats = json.loads((out_dir / "stats_summary.json").read_text(encoding="utf-8"))
     decision = json.loads((out_dir / "promotion_decision.json").read_text(encoding="utf-8"))
     assert manifest["active_path"] == "hftbacktest_only"
-    assert manifest["vectorbt_dependency"] == "forbidden_active_path"
+    assert manifest["legacy_screening_dependency"] == "forbidden_active_path"
+    assert manifest["canonical_model_id"] == "SPREAD_BLOWOUT_RECOMPRESSION"
+    assert manifest["legacy_aliases"] == ["HYP_5"]
+    assert stats["canonical_model_id"] == "SPREAD_BLOWOUT_RECOMPRESSION"
+    assert decision["canonical_model_id"] == "SPREAD_BLOWOUT_RECOMPRESSION"
     assert decision["promotion_allowed"] is False
     assert "backtest_pipeline.src.vectorbt_adapter" not in sys.modules
 
@@ -297,6 +319,157 @@ def test_active_hftbacktest_only_run_records_passive_fill_after_later_elapse(
     assert stats["orders_acknowledged"] == 1
     assert stats["net_pnl"] == 12.5
     assert recorder["fill_quantities"].tolist() == [1.0]
+
+
+def test_hypothesis_limit_order_evaluates_canonical_model_signal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz", include_trade_event=True)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "hypothesis_signal"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={
+            "model_id": "SECOND_WAVE_CONTINUATION",
+            "quantity": 1.0,
+            "max_steps": 3,
+            "signal_threshold": 0.01,
+        },
+        canonical_model_id="SECOND_WAVE_CONTINUATION",
+        legacy_aliases=("HYP_1",),
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed"
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    stats = json.loads((out_dir / "stats_summary.json").read_text(encoding="utf-8"))
+    submitted = [row for row in replay["orders"] if row["event_type"] == "ORDER_SUBMITTED"]
+    assert replay["strategy_adapter_status"] == "available"
+    assert replay["signal_source"] == "hbt_normalized_mbo_market_state_pipeline"
+    assert replay["signal_observations"] > 0
+    assert submitted
+    assert submitted[0]["side"] in {"BUY", "SELL"}
+    assert isinstance(submitted[0]["signal"], float)
+    assert stats["canonical_model_id"] == "SECOND_WAVE_CONTINUATION"
+
+
+def test_structural_limit_order_evaluates_canonical_payload_signal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz", include_trade_event=True)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "structural_signal"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={
+            "model_id": "BOOK_PRESSURE",
+            "quantity": 1.0,
+            "max_steps": 3,
+            "signal_threshold": 0.01,
+        },
+        canonical_model_id="BOOK_PRESSURE",
+        legacy_aliases=("PDF_MODEL_1",),
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed"
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    stats = json.loads((out_dir / "stats_summary.json").read_text(encoding="utf-8"))
+    submitted = [row for row in replay["orders"] if row["event_type"] == "ORDER_SUBMITTED"]
+    assert replay["strategy_adapter_status"] == "available"
+    assert replay["signal_source"] == "hbt_normalized_mbo_structural_integrator"
+    assert set(replay["signal_field"].split(",")) <= {"OFI_zscore", "OFI_smooth", "book_pressure_direction"}
+    assert replay["signal_field"]
+    assert replay["signal_observations"] > 0
+    assert submitted
+    assert submitted[0]["side"] in {"BUY", "SELL"}
+    assert isinstance(submitted[0]["signal"], float)
+    assert stats["canonical_model_id"] == "BOOK_PRESSURE"
+
+
+def test_missing_uniform_hbt_adapter_is_pipeline_blocker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import backtest_pipeline.src.hftbacktest_only_pipeline as pipeline
+
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz", include_trade_event=True)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "missing_adapter"
+
+    def missing_adapter(_model_id: str) -> tuple[str, object, str]:
+        raise HftBacktestOnlyPipelineError("pipeline_blocker:missing_uniform_hbt_adapter")
+
+    monkeypatch.setattr(pipeline, "_canonical_signal_adapter", missing_adapter)
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={"model_id": "BOOK_PRESSURE", "quantity": 1.0, "max_steps": 3},
+        canonical_model_id="BOOK_PRESSURE",
+        legacy_aliases=("PDF_MODEL_1",),
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "pipeline_blocker"
+    assert "pipeline_blocker:missing_uniform_hbt_adapter" in result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["strategy_adapter_status"] == "missing_uniform_hbt_adapter"
+    assert replay["signal_observations"] == 0
+    assert replay["signal_source"] == "none"
+    assert validate_artifact_schema(replay, artifact_type="replay").valid is True
+    assert not (out_dir / "recorder_result.npz").exists()
+    assert not (out_dir / "stats_summary.json").exists()
+    assert not (out_dir / "promotion_decision.json").exists()
+
+
+def test_structural_model_without_signal_fields_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz", include_trade_event=True)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "empty_structural_signal"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={
+            "model_id": "QUANTUM_SPREAD_DEFENSE",
+            "quantity": 1.0,
+            "max_steps": 3,
+        },
+        canonical_model_id="QUANTUM_SPREAD_DEFENSE",
+        legacy_aliases=("PDF_MODEL_9",),
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "pipeline_blocker"
+    assert "pipeline_blocker:missing_uniform_hbt_adapter" in result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["strategy_adapter_status"] == "missing_uniform_hbt_adapter"
+    assert replay["signal_observations"] == 0
+    assert replay["signal_source"] == "none"
+    assert not (out_dir / "recorder_result.npz").exists()
+    assert not (out_dir / "stats_summary.json").exists()
 
 
 def test_save_npz_atomic_avoids_multi_dot_with_suffix(

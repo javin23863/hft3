@@ -22,7 +22,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/cockpit_launch.ps1 -
 | **System → Validation honesty** | Pointer to `docs/VALIDATION_HONESTY.md` + M6 monitor doc |
 | **Pipeline → M6 sweep** | Read-only Vast/local tracking (no launch button); monitor doc path |
 | **Pipeline → Latency evidence** | `component_bands` table, live placement summary, CC ingest / regime flags |
-| **Models** | Slug registry count from `model_registry.yaml` (50 HYP + 11 PDF = 61) |
+| **Models** | Slug registry count from `model_registry.yaml`, including hypothesis, structural, and RL entries |
 | **Control** | Retired jobs removed (`cme_m6_universe_sweep` no longer listed) |
 
 **Vast M6 mirror (optional):** sync remote log/checkpoint per `runtime/monitor/universe_M6_full_watch.md` so Pipeline sweep state reflects Vast, not a stale local 14-worker run.

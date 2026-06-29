@@ -25,6 +25,28 @@ Canonical repo: `C:\Users\MSI\repos\hft3`. Full Fable reference: `C:\Users\MSI\.
 
 Apply the ponytail lazy-senior-dev ladder on every implementation: YAGNI → stdlib → native → installed dep → one line → minimum that works. **Cursor runtime (#2):** `.cursor/rules/01-ponytail-mindset.mdc`. Upstream: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/` · Charter: `docs/ai/PONYTAIL.md`. Never cut validation, security, or finance/math invariants. Vast rent/SSH: `vastai` CLI + `scripts/vast_ssh_run_vbt_paid_screen.sh`.
 
+## HBT-only plan drift guard
+
+For HftBacktest-only work, pause before editing and name the active identity
+surface:
+
+```text
+canonical_model_id
+registry_hash
+source_npz_sha256
+initial_snapshot_sha256
+adapter_status
+authority_refs
+hbt_run_status
+promotion_decision_path
+```
+
+Do not revive the legacy VectorBT -> robustness -> HftBacktest eligibility rule.
+Evidence-ledger, family/candidate readiness, raw diagnostics, blocker reason
+codes, and data-vs-pipeline audits may be ported only after they are rewritten
+against the HBT-only identity above. A bridge, adapter, data, or feature-shape
+failure is pipeline/data/authority evidence, not model failure.
+
 ## 3. When the operator says **“latency test”**
 
 They mean the **CHI404 native C++ placement probe** with **offensive and defensive clocks in microseconds (`_us`)** — **not** a generic order-ack sweep in milliseconds.

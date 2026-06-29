@@ -22,6 +22,12 @@ Each model entry may declare:
 - `risk_metrics`: expected risk metrics for downstream review and gates.
 - `feature_recipe`: only where the registry can state data requirements and
   point-in-time boundaries.
+- `rl_status`, `algorithm_class`, `algorithm`, `action_space`, and
+  `source_family`: reinforcement-learning model-card fields. These carry RL
+  policy/proxy entries forward as canonical models without claiming they are
+  immediately executable or promotable.
+- `authority_refs`: repo or vault references that justify the model-card
+  metadata and its current research/blocker status.
 
 Known parameter aliases:
 
@@ -47,11 +53,13 @@ Known parameter aliases:
 - Unknown symbols do not become silently compatible.
 - Models missing `valid_instrument_universe` are not routable through the CLI;
   candidate generation fails closed until the registry declares compatibility.
-- `kind=structural` registry entries may be used as feature/context receipts,
-  but they cannot be selected as primary autoresearch hypothesis models.
-- Registry ranges define the candidate search universe before evaluation.
-- Bayesian/evolutionary search methods are deterministic stdlib pre-VectorBT
-  selectors with `method_status=ok`, `backend=stdlib`, and
-  `objective_evaluations=0`; they have no promotion authority.
-- Registry metadata is research evidence only; promotion still requires the
-  normal VectorBT, robustness, HftBacktest realism, and review gates.
+- `kind=pdf_structural` and `kind=reinforcement_learning` entries are canonical
+  model records. If an active HBT path lacks a uniform order adapter for one of
+  them, the correct state is a pipeline blocker, not model rejection.
+- Registry ranges define declared parameter proposal surfaces before evaluation.
+- Bayesian/evolutionary search methods with `objective_evaluations=0` are
+  deterministic proposal generators/manifests with `method_status=ok` and
+  `backend=stdlib`; they cannot rank, reject, optimize, or promote before the
+  corresponding HftBacktest artifacts exist.
+- Registry metadata is research evidence only; promotion still requires
+  completed HftBacktest artifacts, robustness evidence, and review gates.

@@ -42,6 +42,33 @@ from backtest_pipeline.src.vectorbt_adapter import (
     validate_screening_artifact,
 )
 
+HBT_ONLY_REPLAY_SCHEMA_VERSION = "hft3_hftbacktest_only_official_replay_v1"
+HBT_ONLY_REPLAY_REQUIRED_FIELDS = (
+    "schema_version",
+    "official_hftbacktest_replay_status",
+    "run_id",
+    "canonical_model_id",
+    "symbol",
+    "contract",
+    "event_id",
+    "strategy_id",
+    "strategy_adapter_status",
+    "signal_observations",
+    "signal_source",
+    "orders",
+    "fills",
+    "position_timeseries",
+    "equity_curve",
+    "orders_intended",
+    "orders_submitted",
+    "orders_acknowledged",
+    "fills_count",
+    "fill_rate",
+    "gross_pnl",
+    "net_pnl",
+    "fail_closed_reasons",
+)
+
 
 # ---------------------------------------------------------------------------
 # Path discovery
@@ -636,12 +663,34 @@ def validate_artifact_schema(
     artifact_type: str = "screening",
     run_screening_validator: bool = True,
 ) -> ArtifactResult:
-    """Validate a screening/feature-plane artifact schema.
+    """Validate a screening/feature-plane or HBT-only replay artifact schema.
 
     Delegates to :func:`validate_screening_artifact` and
     :func:`feature_plane_validation_errors` from the existing modules — this
     gate does not duplicate schema logic.
     """
+    if artifact_type == "replay":
+        schema_version = str(artifact.get("schema_version") or "")
+        if schema_version != HBT_ONLY_REPLAY_SCHEMA_VERSION:
+            return ArtifactResult(
+                valid=False,
+                issues=(f"unsupported_replay_schema:{schema_version or 'missing'}",),
+            )
+        missing = [
+            field_name
+            for field_name in HBT_ONLY_REPLAY_REQUIRED_FIELDS
+            if field_name not in artifact or artifact[field_name] == "" or artifact[field_name] is None
+        ]
+        status = str(artifact.get("official_hftbacktest_replay_status") or "")
+        issues = list(missing)
+        if status not in {"pass", "fail", "not_run"}:
+            issues.append(f"invalid_hbt_replay_status:{status or 'missing'}")
+        return ArtifactResult(
+            valid=not issues,
+            missing_fields=tuple(missing),
+            issues=tuple(issues),
+        )
+
     missing: list[str] = []
     for field_name in SCREENING_ARTIFACT_REQUIRED_FIELDS:
         if field_name not in artifact:

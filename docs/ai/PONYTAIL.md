@@ -52,6 +52,24 @@ Default: **full**. Override per session:
 
 **Mark deferred shortcuts:** `ponytail: <ceiling> — upgrade via <path>`
 
+## HBT-only evidence-port review
+
+For HftBacktest-only work, Ponytail means porting only the minimum useful
+evidence shape, not dragging forward the old pipeline. Before adding code or
+docs that mention VectorBT, robustness bridges, screening artifacts, Stage A, or
+parameter search, ask:
+
+1. Is this evidence shape needed by the HBT-only campaign?
+2. Has it been rewritten to `canonical_model_id`, registry/source hashes,
+   `adapter_status`, `authority_refs`, `hbt_run_status`, and
+   `promotion_decision_path`?
+3. Does any sentence imply VectorBT or robustness decides what HBT receives?
+4. Does any adapter, bridge, data, or feature-shape failure become model failure?
+
+If the answer to 3 or 4 is yes, stop and repair the plan before implementation.
+Parameter proposals with `objective_evaluations=0` are proposal manifests only,
+not adaptive optimizers or pre-HBT rejection evidence.
+
 ## Vast operations (hft3 — not ponytail)
 
 Use `vastai` CLI + `scripts/vast_ssh_run_vbt_paid_screen.sh` or direct SSH (`VAST_SSH_HOST`, `VAST_SSH_PORT`). Resolve instance: `vastai show instances --raw` or REST `https://console.vast.ai/api/v0/instances/`.

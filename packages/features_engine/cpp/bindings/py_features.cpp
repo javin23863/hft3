@@ -100,7 +100,7 @@ public:
         auto px_buf     = px_arr.request();
         auto qty_buf    = qty_arr.request();
 
-        const ssize_t n = ts_buf.size;
+        const py::ssize_t n = ts_buf.size;
         if (oid_buf.size != n || action_buf.size != n || side_buf.size != n ||
             px_buf.size != n  || qty_buf.size  != n) {
             throw std::invalid_argument("all arrays must have the same length");
@@ -115,7 +115,7 @@ public:
 
         {
             py::gil_scoped_release release;
-            for (ssize_t i = 0; i < n; ++i) {
+            for (py::ssize_t i = 0; i < n; ++i) {
                 hft::MBOEventCpp ev;
                 ev.timestamp_ns = ts_ptr[i];
                 ev.order_id     = oid_ptr[i];

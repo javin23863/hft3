@@ -120,7 +120,7 @@ def test_build_all_lanes_plan_assigns_one_terminal_state_per_model() -> None:
         assert row["model_id"]
         assert row["lane"] in {"cme_futures", "equities", "cme_options"}
         assert "campaign_mode" in row
-        assert row["kind"] in {"hypothesis", "pdf", "lane_structural", ""}
+        assert row["kind"] in {"hypothesis", "pdf", "reinforcement_learning", "lane_structural", ""}
         assert isinstance(row["required_datasets"], list)
         assert "latency_lane" in row
         assert "execution_assumptions" in row
@@ -133,6 +133,9 @@ def test_build_all_lanes_plan_assigns_one_terminal_state_per_model() -> None:
             assert matching_gates
         else:
             assert not matching_gates
+    rl_rows = [row for row in plan["models"] if row["kind"] == "reinforcement_learning"]
+    assert rl_rows
+    assert {row["terminal_state"] for row in rl_rows} == {"BLOCKED_VALIDATION"}
 
 
 def test_build_all_lanes_plan_routes_options_campaign_binding_to_options_lane() -> None:

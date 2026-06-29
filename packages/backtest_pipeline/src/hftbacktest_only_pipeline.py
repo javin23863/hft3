@@ -1,9 +1,7 @@
 """HftBacktest-only active pipeline contract.
 
-This module is intentionally independent from ``vectorbt_adapter`` and
-``hftbacktest_realism``.  The older realism layer remains available for
-historical VectorBT handoff artifacts; the active path here starts from
-validated HftBacktest event data.
+This module is intentionally independent of the older handoff and realism
+layers. The active path here starts with validated HftBacktest event data.
 """
 
 from __future__ import annotations
@@ -17,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 import numpy as np
 
@@ -33,6 +31,32 @@ _ADD_ORDER_EVENT = 10
 _CANCEL_ORDER_EVENT = 11
 _MODIFY_ORDER_EVENT = 12
 _FILL_EVENT = 13
+_STRUCTURAL_PAYLOAD_ATTR_BY_CLASS = {
+    "BookPressureModel": "book_pressure",
+    "CrossAssetLeadLagModel": "cross_asset",
+    "VPINToxicityModel": "vpin",
+    "HybridExecutionModel": "hybrid",
+    "DealerHedgingModel": "dealer",
+    "DowYMIndexModel": "dow_ym",
+    "TreasuryCTDModel": "treasury",
+    "TransferEntropyModel": "transfer_entropy",
+    "QuantumSpreadDefenseModel": "quantum_spread",
+    "StochasticThermoModel": "thermo",
+    "HawkesToxicFlowModel": "hawkes",
+}
+_STRUCTURAL_SIGNAL_FIELDS_BY_CLASS = {
+    "BookPressureModel": ("OFI_zscore", "OFI_smooth", "book_pressure_direction"),
+    "CrossAssetLeadLagModel": ("predicted_target_return", "cross_impact_score"),
+    "VPINToxicityModel": (),
+    "HybridExecutionModel": ("OFI_drift_component",),
+    "DealerHedgingModel": ("dealer_hedging_pressure",),
+    "DowYMIndexModel": ("constituent_to_YM_signal", "YM_fair_pressure", "synthetic_Dow_pressure"),
+    "TreasuryCTDModel": ("futures_basis_signal",),
+    "TransferEntropyModel": (),
+    "QuantumSpreadDefenseModel": (),
+    "StochasticThermoModel": (),
+    "HawkesToxicFlowModel": ("reservation_price_skew",),
+}
 
 
 class HftBacktestOnlyPipelineError(ValueError):
@@ -49,6 +73,9 @@ class HftBacktestOnlyRunConfig:
     initial_snapshot: Path
     strategy_id: str
     strategy_params: Mapping[str, Any] = field(default_factory=dict)
+    canonical_model_id: str = ""
+    legacy_aliases: tuple[str, ...] = field(default_factory=tuple)
+    authority_refs: tuple[str, ...] = field(default_factory=tuple)
     tick_size: float = 0.25
     lot_size: float = 1.0
     contract_size: float = 1.0
@@ -81,6 +108,9 @@ class HftBacktestOnlyRunConfig:
             "initial_snapshot": str(self.initial_snapshot),
             "strategy_id": self.strategy_id,
             "strategy_params": dict(self.strategy_params),
+            "canonical_model_id": self.canonical_model_id,
+            "legacy_aliases": list(self.legacy_aliases),
+            "authority_refs": list(self.authority_refs),
             "tick_size": self.tick_size,
             "lot_size": self.lot_size,
             "contract_size": self.contract_size,
@@ -95,7 +125,7 @@ class HftBacktestOnlyRunConfig:
             "roi_lower_bound": self.roi_lower_bound,
             "roi_upper_bound": self.roi_upper_bound,
             "active_path": "hftbacktest_only",
-            "vectorbt_dependency": "forbidden_active_path",
+            "legacy_screening_dependency": "forbidden_active_path",
         }
 
 
@@ -374,8 +404,9 @@ def run_hftbacktest_only(
     _write_jsonl(out_dir / "fills.jsonl", replay.get("fills", []))
 
     if replay_reasons:
-        _write_audit(out_dir, "hftbacktest_run_failed", replay_reasons)
-        return _result(config, out_dir, "hftbacktest_run_failed", replay_reasons)
+        status = _blocked_run_status(replay_reasons)
+        _write_audit(out_dir, status, replay_reasons)
+        return _result(config, out_dir, status, replay_reasons)
 
     recorder_path = _write_recorder_result(out_dir / "recorder_result.npz", replay)
     stats = _stats_summary(config, replay, recorder_path)
@@ -411,6 +442,7 @@ def write_promotion_decision(out_dir: Path, *, stats_summary: Mapping[str, Any] 
         "plan": PLAN_PATH,
         "created_at_utc": _utc_now(),
         "run_id": stats.get("run_id"),
+        "canonical_model_id": stats.get("canonical_model_id", ""),
         "decision": "observe" if mechanical_pass else "reject",
         "promotion_allowed": False,
         "mechanical_validity_status": stats.get("mechanical_validity_status"),
@@ -432,12 +464,21 @@ def write_promotion_decision(out_dir: Path, *, stats_summary: Mapping[str, Any] 
 
 def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, Any], list[str]]:
     params = dict(config.strategy_params)
-    side = str(params.get("side", "BUY")).upper()
+    signal_lookup: Callable[[int | None], float] | None = None
+    signal_meta: dict[str, Any] = {}
+    if config.strategy_id == "hypothesis_limit_order":
+        signal_lookup, signal_meta, setup_reasons = _build_model_signal_lookup(config, params)
+        if setup_reasons:
+            return _not_run_replay(setup_reasons[0], config), setup_reasons
+        side = "BUY"
+    else:
+        side = str(params.get("side", "BUY")).upper()
     try:
         quantity = _positive_float(params.get("quantity", 1.0), "strategy_params.quantity")
         max_steps = _positive_int(params.get("max_steps", params.get("max_feed_steps", 3)), "strategy_params.max_steps")
         interval_ns = _positive_int(params.get("interval_ns", 1_000_000_000), "strategy_params.interval_ns")
         order_id = _positive_int(params.get("order_id", 9001), "strategy_params.order_id")
+        signal_threshold = _positive_float(params.get("signal_threshold", 0.15), "strategy_params.signal_threshold")
     except HftBacktestOnlyPipelineError as exc:
         reason = str(exc)
         return _not_run_replay(reason, config), [reason]
@@ -533,6 +574,12 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                 _maybe_call(hbt, "clear_inactive_orders", 0)
                 api_calls.append("HashMapMarketDepthBacktest.clear_inactive_orders")
                 continue
+            signal_value = None
+            if signal_lookup is not None:
+                signal_value = signal_lookup(_hbt_current_timestamp(hbt))
+                if abs(signal_value) < signal_threshold:
+                    continue
+                side = "BUY" if signal_value > 0 else "SELL"
             _maybe_call(hbt, "clear_inactive_orders", 0)
             api_calls.append("HashMapMarketDepthBacktest.clear_inactive_orders")
             depth = hbt.depth(0)
@@ -556,6 +603,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                     "side": side,
                     "price": price,
                     "quantity": quantity,
+                    "signal": signal_value,
                     "submit_return_code": submit_ret,
                     "response_return_code": response_ret,
                 }
@@ -586,8 +634,12 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         return _not_run_replay(reason, config), [reason]
 
     reasons: list[str] = []
+    no_order_observation = ""
     if not submitted:
-        reasons.append("strategy_submitted_no_orders")
+        if signal_lookup is not None and signal_meta.get("adapter_status") == "available":
+            no_order_observation = "strategy_signal_below_threshold_or_no_directional_order"
+        else:
+            reasons.append("strategy_submitted_no_orders")
     if submit_ret not in (0, None):
         reasons.append("order_submit_failed")
     # hftbacktest v2 return codes: 0 = success, 3 = WaitCanceled timeout for passive orders.
@@ -609,11 +661,20 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "official_hftbacktest_replay_status": "pass" if not reasons else "fail",
         "api_calls": list(dict.fromkeys(api_calls)),
         "run_id": config.run_id,
+        "canonical_model_id": config.canonical_model_id,
         "symbol": config.symbol,
         "contract": config.contract,
         "event_id": config.event_id,
         "strategy_id": config.strategy_id,
         "strategy_params": params,
+        "legacy_aliases": list(config.legacy_aliases),
+        "authority_refs": list(config.authority_refs),
+        "strategy_adapter_status": signal_meta.get("adapter_status", "smoke_limit_order"),
+        "signal_observations": signal_meta.get("signal_observations", 0),
+        "signal_source": signal_meta.get("signal_source", "none"),
+        "signal_field": signal_meta.get("signal_field", ""),
+        "feature_backend": signal_meta.get("feature_backend", "none"),
+        "no_order_observation": no_order_observation,
         "orders": orders,
         "fills": fills,
         "position_timeseries": positions,
@@ -632,6 +693,226 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "fail_closed_reasons": reasons,
     }
     return replay, reasons
+
+
+def _build_model_signal_lookup(
+    config: HftBacktestOnlyRunConfig,
+    params: Mapping[str, Any],
+) -> tuple[Callable[[int | None], float] | None, dict[str, Any], list[str]]:
+    model_id = str(params.get("model_id") or config.canonical_model_id or "").strip()
+    if not model_id:
+        return None, {}, ["authority_missing:canonical_model_id_missing"]
+    if config.canonical_model_id and model_id != config.canonical_model_id:
+        return None, {}, ["authority_missing:canonical_model_id_mismatch"]
+    try:
+        adapter_kind, adapter, class_name = _canonical_signal_adapter(model_id)
+        if adapter_kind == "structural":
+            return _build_structural_signal_lookup(config, adapter, class_name)
+        from features_engine.src.features.npz_feed import iter_mbo_events, load_npz_events
+        from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
+
+        raw_events = load_npz_events(str(config.normalized_npz))
+        pipeline = MarketStatePipeline(
+            tick_size=float(config.tick_size),
+            latency_ms=float(config.entry_latency_ns) / 1_000_000.0,
+        )
+        observations: list[tuple[int, float]] = []
+        for event in iter_mbo_events(raw_events):
+            state = pipeline.process_event(event)
+            observations.append((int(event.timestamp_ns), float(adapter.evaluate(state))))
+    except HftBacktestOnlyPipelineError as exc:
+        return None, {}, [str(exc)]
+    except Exception as exc:
+        reason = f"pipeline_blocker:feature_surface_mismatch:{type(exc).__name__}:{exc}"
+        return None, {}, [reason]
+    if not observations:
+        return None, {}, ["pipeline_blocker:feature_surface_mismatch:no_signal_observations"]
+
+    observations.sort(key=lambda item: item[0])
+    cursor = {"index": 0, "last_signal": 0.0}
+
+    def lookup(timestamp_ns: int | None) -> float:
+        if timestamp_ns is None:
+            index = int(cursor["index"])
+            if index < len(observations):
+                cursor["last_signal"] = observations[index][1]
+                cursor["index"] = index + 1
+            return float(cursor["last_signal"])
+        index = int(cursor["index"])
+        while index < len(observations) and observations[index][0] <= int(timestamp_ns):
+            cursor["last_signal"] = observations[index][1]
+            index += 1
+        cursor["index"] = index
+        return float(cursor["last_signal"])
+
+    return lookup, {
+        "adapter_status": "available",
+        "signal_observations": len(observations),
+        "signal_source": "hbt_normalized_mbo_market_state_pipeline",
+        "signal_field": "hypothesis.evaluate",
+        "feature_backend": getattr(pipeline, "feature_backend", "unknown"),
+    }, []
+
+
+def _build_structural_signal_lookup(
+    config: HftBacktestOnlyRunConfig,
+    _adapter: Any,
+    class_name: str,
+) -> tuple[Callable[[int | None], float] | None, dict[str, Any], list[str]]:
+    if not _STRUCTURAL_SIGNAL_FIELDS_BY_CLASS.get(class_name):
+        return None, {}, ["pipeline_blocker:missing_uniform_hbt_adapter"]
+    try:
+        from features_engine.src.features.feature_index import FEATURE_DIM
+        from features_engine.src.features.npz_feed import iter_mbo_events, load_npz_events
+        from features_engine.src.pipeline.structural_integration import StructuralModelIntegrator
+
+        raw_events = load_npz_events(str(config.normalized_npz))
+        integrator = StructuralModelIntegrator(
+            tick_size=float(config.tick_size),
+            target_asset=str(config.symbol),
+        )
+        observations: list[tuple[int, float]] = []
+        signal_fields: set[str] = set()
+        for event in iter_mbo_events(raw_events):
+            snapshot = integrator.integrate(event, np.zeros(FEATURE_DIM, dtype=np.float64))
+            payload = _structural_payload_for_class(snapshot, class_name)
+            signal_value, signal_field = _structural_payload_signal(class_name, payload)
+            if signal_field:
+                signal_fields.add(signal_field)
+            observations.append((int(event.timestamp_ns), signal_value))
+    except HftBacktestOnlyPipelineError as exc:
+        return None, {}, [str(exc)]
+    except Exception as exc:
+        reason = f"pipeline_blocker:feature_surface_mismatch:{type(exc).__name__}:{exc}"
+        return None, {}, [reason]
+    if not observations:
+        return None, {}, ["pipeline_blocker:feature_surface_mismatch:no_signal_observations"]
+
+    observations.sort(key=lambda item: item[0])
+    cursor = {"index": 0, "last_signal": 0.0}
+
+    def lookup(timestamp_ns: int | None) -> float:
+        if timestamp_ns is None:
+            index = int(cursor["index"])
+            if index < len(observations):
+                cursor["last_signal"] = observations[index][1]
+                cursor["index"] = index + 1
+            return float(cursor["last_signal"])
+        index = int(cursor["index"])
+        while index < len(observations) and observations[index][0] <= int(timestamp_ns):
+            cursor["last_signal"] = observations[index][1]
+            index += 1
+        cursor["index"] = index
+        return float(cursor["last_signal"])
+
+    return lookup, {
+        "adapter_status": "available",
+        "signal_observations": len(observations),
+        "signal_source": "hbt_normalized_mbo_structural_integrator",
+        "signal_field": ",".join(sorted(signal_fields)),
+        "feature_backend": "structural_integrator_python",
+    }, []
+
+
+def _structural_payload_for_class(snapshot: Any, class_name: str) -> Any:
+    attr = _STRUCTURAL_PAYLOAD_ATTR_BY_CLASS.get(class_name)
+    if not attr:
+        raise HftBacktestOnlyPipelineError("pipeline_blocker:missing_uniform_hbt_adapter")
+    return getattr(snapshot, attr, None)
+
+
+def _structural_payload_signal(class_name: str, payload: Any) -> tuple[float, str]:
+    if payload is None:
+        return 0.0, ""
+    for field_name in _STRUCTURAL_SIGNAL_FIELDS_BY_CLASS.get(class_name, ()):
+        value = getattr(payload, field_name, 0.0)
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(numeric) and abs(numeric) > 1e-12:
+            return math.tanh(numeric), field_name
+    return 0.0, ""
+
+
+def _canonical_signal_adapter(canonical_model_id: str) -> tuple[str, Any, str]:
+    class_name = _canonical_registry_class_name(canonical_model_id)
+    import_errors: list[str] = []
+
+    try:
+        from features_engine.src.hypotheses.registry import get_active_hypotheses
+    except Exception as exc:
+        import_errors.append(f"hypotheses:{type(exc).__name__}")
+    else:
+        by_class = {hyp.__class__.__name__: hyp for hyp in get_active_hypotheses()}
+        hypothesis = by_class.get(class_name)
+        if hypothesis is not None:
+            return "hypothesis", hypothesis, class_name
+
+    try:
+        from features_engine.src.structural_models.registry import get_structural_models
+    except Exception as exc:
+        import_errors.append(f"structural_models:{type(exc).__name__}")
+    else:
+        by_class = {model.__class__.__name__: model for model in get_structural_models()}
+        structural_model = by_class.get(class_name)
+        if structural_model is not None:
+            return "structural", structural_model, class_name
+
+    if import_errors:
+        joined = ",".join(import_errors)
+        raise HftBacktestOnlyPipelineError(
+            f"pipeline_blocker:missing_uniform_hbt_adapter:import_failed:{joined}"
+        )
+    raise HftBacktestOnlyPipelineError("pipeline_blocker:missing_uniform_hbt_adapter")
+
+
+def uniform_hbt_order_adapter_status(canonical_model_id: str) -> str:
+    """Return adapter availability from the active HBT runner, not registry metadata."""
+    try:
+        adapter_kind, _adapter, class_name = _canonical_signal_adapter(canonical_model_id)
+    except HftBacktestOnlyPipelineError as exc:
+        if "feature_surface_mismatch" in str(exc):
+            return "feature_surface_mismatch"
+        return "missing_uniform_hbt_adapter"
+    if adapter_kind == "structural":
+        if class_name not in _STRUCTURAL_PAYLOAD_ATTR_BY_CLASS:
+            return "missing_uniform_hbt_adapter"
+        if not _STRUCTURAL_SIGNAL_FIELDS_BY_CLASS.get(class_name):
+            return "missing_uniform_hbt_adapter"
+    return "available"
+
+
+def _canonical_registry_class_name(canonical_model_id: str) -> str:
+    try:
+        from features_engine.src.model_registry import legacy_to_slug, load_model_registry, resolve_model_id
+    except Exception as exc:
+        raise HftBacktestOnlyPipelineError(
+            f"pipeline_blocker:missing_uniform_hbt_adapter:import_failed:{type(exc).__name__}"
+        ) from exc
+    if canonical_model_id in legacy_to_slug():
+        raise HftBacktestOnlyPipelineError("authority_missing:canonical_model_id_required")
+    try:
+        resolved = resolve_model_id(canonical_model_id)
+    except KeyError as exc:
+        raise HftBacktestOnlyPipelineError("authority_missing:canonical_model_id_unknown") from exc
+    if resolved != canonical_model_id:
+        raise HftBacktestOnlyPipelineError("authority_missing:canonical_model_id_required")
+    entry = (load_model_registry().get("models") or {}).get(resolved) or {}
+    class_name = str(entry.get("class") or "").strip()
+    if not class_name:
+        raise HftBacktestOnlyPipelineError("authority_missing:model_registry_class_missing")
+    return class_name
+
+
+def _hbt_current_timestamp(hbt: Any) -> int | None:
+    value = getattr(hbt, "current_timestamp", None)
+    if callable(value):
+        value = value()
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _apply_latency(asset: Any, config: HftBacktestOnlyRunConfig) -> None:
@@ -663,6 +944,7 @@ def _apply_exchange_and_queue(asset: Any, config: HftBacktestOnlyRunConfig) -> N
 def _data_manifest(config: HftBacktestOnlyRunConfig, validation: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": "hft3_hftbacktest_only_data_manifest_v1",
+        "canonical_model_id": config.canonical_model_id,
         "symbol": config.symbol,
         "contract": config.contract,
         "event_id": config.event_id,
@@ -700,18 +982,27 @@ def _hbt_config(config: HftBacktestOnlyRunConfig) -> dict[str, Any]:
 
 
 def _strategy_config(config: HftBacktestOnlyRunConfig) -> dict[str, Any]:
+    pit_safe_signal_status = (
+        "hbt_normalized_mbo_market_state_pipeline"
+        if config.strategy_id == "hypothesis_limit_order"
+        else "strategy_params_only_minimal_slice"
+    )
     return {
         "schema_version": "hft3_hftbacktest_only_strategy_config_v1",
         "strategy_id": config.strategy_id,
         "strategy_params": dict(config.strategy_params),
+        "canonical_model_id": config.canonical_model_id,
+        "legacy_aliases": list(config.legacy_aliases),
+        "authority_refs": list(config.authority_refs),
         "loop_semantics": "while hbt.elapse(interval_ns) == 0 when available",
-        "pit_safe_signal_status": "strategy_params_only_minimal_slice",
+        "pit_safe_signal_status": pit_safe_signal_status,
     }
 
 
 def _normalized_input_manifest(config: HftBacktestOnlyRunConfig, validation: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": "hft3_hftbacktest_only_normalized_input_manifest_v1",
+        "canonical_model_id": config.canonical_model_id,
         "normalized_npz": str(config.normalized_npz),
         "initial_snapshot": str(config.initial_snapshot),
         "dtype_fields": validation.get("dtype_fields", []),
@@ -739,6 +1030,7 @@ def _stats_summary(config: HftBacktestOnlyRunConfig, replay: Mapping[str, Any], 
     return {
         "schema_version": "hft3_hftbacktest_only_stats_summary_v1",
         "run_id": config.run_id,
+        "canonical_model_id": config.canonical_model_id,
         "symbol": config.symbol,
         "contract": config.contract,
         "event_id": config.event_id,
@@ -813,9 +1105,21 @@ def _write_optional_parquet(path: Path, rows: Any) -> None:
         )
 
 
+def _blocked_run_status(reasons: list[str]) -> str:
+    for reason in reasons:
+        if reason.startswith("pipeline_blocker:"):
+            return "pipeline_blocker"
+        if reason.startswith("authority_missing"):
+            return "authority_missing"
+        if reason.startswith("data_blocker:"):
+            return "data_blocker"
+    return "hftbacktest_run_failed"
+
+
 def _result(config: HftBacktestOnlyRunConfig, out_dir: Path, status: str, reasons: list[str]) -> dict[str, Any]:
     return {
         "run_id": config.run_id,
+        "canonical_model_id": config.canonical_model_id,
         "artifact_dir": str(out_dir),
         "status": status,
         "fail_closed_reasons": list(reasons),
@@ -828,10 +1132,20 @@ def _not_run_replay(reason: str, config: HftBacktestOnlyRunConfig) -> dict[str, 
         "schema_version": "hft3_hftbacktest_only_official_replay_v1",
         "official_hftbacktest_replay_status": "not_run",
         "run_id": config.run_id,
+        "canonical_model_id": config.canonical_model_id,
         "symbol": config.symbol,
         "contract": config.contract,
         "event_id": config.event_id,
         "strategy_id": config.strategy_id,
+        "strategy_adapter_status": (
+            "missing_uniform_hbt_adapter"
+            if "missing_uniform_hbt_adapter" in reason
+            else "not_run"
+        ),
+        "signal_observations": 0,
+        "signal_source": "none",
+        "legacy_aliases": list(config.legacy_aliases),
+        "authority_refs": list(config.authority_refs),
         "orders": [],
         "fills": [],
         "position_timeseries": [],
@@ -844,8 +1158,8 @@ def _not_run_replay(reason: str, config: HftBacktestOnlyRunConfig) -> dict[str, 
         "partial_fills_count": 0,
         "unfilled_count": 0,
         "fill_rate": 0.0,
-        "gross_pnl": None,
-        "net_pnl": None,
+        "gross_pnl": 0.0,
+        "net_pnl": 0.0,
         "fail_closed_reasons": [reason],
     }
 
@@ -856,7 +1170,7 @@ def _write_audit(out_dir: Path, status: str, reasons: list[str]) -> None:
         "",
         f"- status: {status}",
         f"- plan: {PLAN_PATH}",
-        f"- vectorbt_dependency: forbidden_active_path",
+        f"- legacy_screening_dependency: forbidden_active_path",
         f"- fail_closed_reasons: {', '.join(reasons) if reasons else 'none'}",
         "",
     ]
