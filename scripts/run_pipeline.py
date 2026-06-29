@@ -1918,6 +1918,100 @@ def _emit_risk_metric_gate_warnings(results: Sequence[EvaluationResult]) -> None
             )
 
 
+def _run_continuous_lane(args: argparse.Namespace) -> int:
+    """Continuous lane: coverage manifest and optional relationship graph / candidates."""
+    from research_pipeline.continuous_data_manifest import (
+        build_coverage_manifest,
+        write_coverage_manifest,
+    )
+    from research_pipeline.continuous_universe import validate_universe_profile
+    from research_pipeline.continuous_feature_store import (
+        build_continuous_feature_store_stub,
+        write_continuous_feature_store,
+    )
+    from research_pipeline.relationship_graph import (
+        build_relationship_graph_stub,
+        write_relationship_graph,
+    )
+
+    if not args.rithmic_week:
+        print("Error: --rithmic-week is required for --lane continuous.", file=sys.stderr)
+        return 2
+    try:
+        profile = validate_universe_profile(args.universe_profile)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    repo_root = args.repo_root.resolve()
+    manifest = build_coverage_manifest(
+        repo_root=repo_root,
+        rithmic_week=args.rithmic_week,
+        universe_profile=profile,
+    )
+    manifest_path = write_coverage_manifest(repo_root, manifest)
+    payload: dict = {
+        "status": "continuous_manifest",
+        "lane": "continuous",
+        "rithmic_week": args.rithmic_week,
+        "universe_profile": profile,
+        "manifest_path": str(manifest_path),
+    }
+
+    graph_path: Path | None = None
+    if args.build_relationship_graph:
+        graph = build_relationship_graph_stub(
+            repo_root=repo_root,
+            rithmic_week=args.rithmic_week,
+            universe_profile=profile,
+        )
+        graph_path = write_relationship_graph(repo_root, graph)
+        payload["status"] = "continuous_manifest_and_graph"
+        payload["relationship_graph_path"] = str(graph_path)
+        payload["graph_summary"] = graph.get("summary")
+
+    if args.build_feature_store:
+        matrix = build_continuous_feature_store_stub(
+            repo_root=repo_root,
+            rithmic_week=args.rithmic_week,
+            universe_profile=profile,
+            relationship_graph_path=graph_path,
+        )
+        fs_path = write_continuous_feature_store(repo_root, matrix)
+        payload["feature_store_path"] = str(fs_path)
+        payload["feature_store_summary"] = matrix.get("summary")
+        if payload["status"] == "continuous_manifest":
+            payload["status"] = "continuous_manifest_and_feature_store"
+        elif payload["status"] == "continuous_manifest_and_graph":
+            payload["status"] = "continuous_manifest_graph_and_feature_store"
+
+    if args.scan_continuous_candidates:
+        from research_pipeline.continuous_model_generation import scan_continuous_candidates
+
+        scan_max = args.continuous_scan_max
+        try:
+            scan = scan_continuous_candidates(
+                repo_root=repo_root,
+                rithmic_week=args.rithmic_week,
+                universe_profile=profile,
+                relationship_graph_path=graph_path,
+                max_candidates=scan_max,
+                build_graph_if_missing=args.build_relationship_graph,
+            )
+        except FileNotFoundError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        payload["candidates_path"] = scan.get("candidates_path")
+        payload["candidates_summary"] = scan.get("summary")
+        if payload["status"].startswith("continuous_manifest"):
+            payload["status"] = payload["status"] + "_and_candidates"
+        else:
+            payload["status"] = "continuous_candidates"
+
+    _emit_pipeline_payload(payload, orchestrator_result=bool(args.orchestrator_result))
+    return 0
+
+
 def _main_impl(
     argv: list[str] | None = None,
     failure_context: dict[str, Any] | None = None,
@@ -1926,9 +2020,46 @@ def _main_impl(
     if failure_context is None:
         failure_context = {}
     parser = argparse.ArgumentParser(description="Autoresearch pipeline")
-    parser.add_argument("--thesis", required=True, help="Natural-language trading thesis")
-    parser.add_argument("--doc", help="Optional research document (PDF/DOCX/URL)")
-    parser.add_argument("--event-id", required=True, help="Explicit catalog event id from events.csv")
+    parser.add_argument(
+        "--lane",
+        choices=("event", "continuous"),
+        default="event",
+        help="Pipeline lane: event-driven (default) or continuous CME microstructure",
+    )
+    parser.add_argument("--thesis", default=None, help="Natural-language trading thesis (event lane)")
+    parser.add_argument("--doc", type=Path, help="Optional research document (PDF/DOCX/URL)")
+    parser.add_argument("--event-id", default=None, help="Explicit catalog event id from events.csv (event lane)")
+    parser.add_argument(
+        "--rithmic-week",
+        default=None,
+        help="ISO week label e.g. 2026-W27 (continuous lane)",
+    )
+    parser.add_argument(
+        "--universe-profile",
+        default="full_cme_research",
+        help="Continuous lane universe profile (default full_cme_research)",
+    )
+    parser.add_argument(
+        "--build-relationship-graph",
+        action="store_true",
+        help="Continuous lane: also write relationship graph stub for --rithmic-week",
+    )
+    parser.add_argument(
+        "--build-feature-store",
+        action="store_true",
+        help="Continuous lane: also write PIT-validated feature store stub for --rithmic-week",
+    )
+    parser.add_argument(
+        "--scan-continuous-candidates",
+        action="store_true",
+        help="Continuous lane: scan graph edges + registry param ranges for candidates",
+    )
+    parser.add_argument(
+        "--continuous-scan-max",
+        type=int,
+        default=5000,
+        help="Max candidates for --scan-continuous-candidates (default 5000)",
+    )
     parser.add_argument(
         "--symbol",
         default=None,
@@ -2112,6 +2243,18 @@ def _main_impl(
         help="Abort on first unit failure (CI mode). Default: continue past failures for multi-event runs.",
     )
     args = parser.parse_args(argv)
+
+    # Lane validation: event lane requires --thesis + --event-id; continuous does not.
+    if args.lane == "continuous":
+        return _run_continuous_lane(args)
+    if not args.thesis or not args.event_id:
+        parser.error("--thesis and --event-id are required for --lane event")
+    if args.scan_continuous_candidates:
+        parser.error("--scan-continuous-candidates requires --lane continuous")
+    if args.build_relationship_graph:
+        parser.error("--build-relationship-graph requires --lane continuous")
+    if args.build_feature_store:
+        parser.error("--build-feature-store requires --lane continuous")
 
     try:
         runtime_config = load_pipeline_runtime_config(args.pipeline_config)

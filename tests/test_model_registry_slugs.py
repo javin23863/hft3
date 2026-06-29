@@ -15,10 +15,10 @@ from features_engine.src.model_registry import (
 )
 
 
-def test_sixty_one_unique_slugs() -> None:
+def test_seventy_two_unique_slugs() -> None:
     slugs = all_slugs()
-    assert len(slugs) == 61
-    assert len(set(slugs)) == 61
+    assert len(slugs) == 72
+    assert len(set(slugs)) == 72
 
 
 def test_legacy_to_slug_bijection() -> None:

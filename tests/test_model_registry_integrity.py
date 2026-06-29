@@ -11,6 +11,7 @@ from features_engine.src.model_registry import (
     get_hyp_id_for_slug,
     get_slug_for_hyp_id,
     legacy_to_slug,
+    load_model_registry,
     resolve_model_id,
     slug_to_legacy,
 )
@@ -98,6 +99,10 @@ class TestModelRegistryIntegrity:
         cross_asset_slugs = {"ES_MES_LEAD_LAG", "NQ_MNQ_LEAD_LAG",
                               "ES_NQ_DIVERGENCE_SNAPBACK", "ZN_ZB_ES_NQ_MACRO_IMPULSE",
                               "MICRO_CONTRACT_RETAIL_LAG"}
-        all_implemented = structural_ids | hyp_legacy_ids | hyp_slugs | cross_asset_slugs
+        continuous_slugs = {
+            slug for slug in slugs
+            if load_model_registry()["models"][slug].get("kind") == "continuous_microstructure"
+        }
+        all_implemented = structural_ids | hyp_legacy_ids | hyp_slugs | cross_asset_slugs | continuous_slugs
         unaccounted = [s for s in slugs if s not in all_implemented]
         assert len(unaccounted) == 0, f"Dead slugs: {unaccounted}"

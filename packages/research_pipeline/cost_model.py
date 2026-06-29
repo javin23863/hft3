@@ -193,6 +193,134 @@ def _market_price(market_data: Mapping[str, Any] | None) -> float | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Continuous-lane cost API (PDF section 10). Trade-list driven; produces
+# gross/net/fill-adjusted PnL, turnover, spread paid, slippage, impact,
+# adverse selection. Distinct names so the scalar edge-eval API above is
+# unaffected.
+# ---------------------------------------------------------------------------
+
+from dataclasses import dataclass, field as _dc_field
+
+
+@dataclass
+class ContinuousCostBreakdown:
+    gross_pnl: float
+    spread_paid: float
+    fees_paid: float
+    slippage_cost: float
+    impact_cost: float
+    adverse_selection_cost: float
+    net_pnl: float
+    fill_adjusted_pnl: float
+    turnover: float
+    num_trades: int
+
+    def to_dict(self) -> dict:
+        return {
+            "gross_pnl": self.gross_pnl, "spread_paid": self.spread_paid,
+            "fees_paid": self.fees_paid, "slippage_cost": self.slippage_cost,
+            "impact_cost": self.impact_cost, "adverse_selection_cost": self.adverse_selection_cost,
+            "net_pnl": self.net_pnl, "fill_adjusted_pnl": self.fill_adjusted_pnl,
+            "turnover": self.turnover, "num_trades": self.num_trades,
+        }
+
+
+@dataclass(frozen=True)
+class CostModelConfig:
+    """Per-contract execution cost parameters for the continuous lane."""
+
+    tick_value: float = 1.0
+    contract_multiplier: float = 1.0
+    exchange_fee_per_lot: float = 0.0
+    clearing_fee_per_lot: float = 0.0
+    commission_per_lot: float = 0.0
+    slippage_ticks: float = 0.0
+    spread_ticks: float = 0.0
+    impact_coefficient: float = 0.0
+    adverse_selection_bps: float = 0.0
+
+
+def _cost_per_lot(cfg: CostModelConfig) -> float:
+    return (cfg.exchange_fee_per_lot + cfg.clearing_fee_per_lot + cfg.commission_per_lot) * cfg.contract_multiplier
+
+
+def apply_continuous_costs(
+    gross_pnl: float,
+    trades: Sequence[Mapping[str, Any]],
+    cfg: CostModelConfig,
+) -> ContinuousCostBreakdown:
+    """Apply the continuous-lane cost model to a list of trade records."""
+    trade_list = [t for t in trades if isinstance(t, Mapping)]
+    num_trades = len(trade_list)
+    turnover = 0.0
+    spread_paid = 0.0
+    fees_paid = 0.0
+    slippage_cost = 0.0
+    impact_cost = 0.0
+    adverse_selection_cost = 0.0
+    per_lot_fee = _cost_per_lot(cfg)
+    for t in trade_list:
+        qty = float(t.get("qty", 1.0))
+        notional = abs(float(t.get("notional", qty * t.get("fill_price", 1.0))))
+        turnover += notional
+        spread_paid += cfg.spread_ticks * cfg.tick_value * cfg.contract_multiplier * qty
+        fees_paid += per_lot_fee * qty
+        slippage_cost += cfg.slippage_ticks * cfg.tick_value * cfg.contract_multiplier * qty
+        impact_cost += cfg.impact_coefficient * qty * notional
+        adverse_selection_cost += notional * (cfg.adverse_selection_bps / 10000.0)
+    total_cost = spread_paid + fees_paid + slippage_cost + impact_cost + adverse_selection_cost
+    net_pnl = gross_pnl - total_cost
+    fill_adjusted_pnl = gross_pnl - (slippage_cost + impact_cost + adverse_selection_cost)
+    return ContinuousCostBreakdown(
+        gross_pnl=gross_pnl, spread_paid=spread_paid, fees_paid=fees_paid,
+        slippage_cost=slippage_cost, impact_cost=impact_cost,
+        adverse_selection_cost=adverse_selection_cost, net_pnl=net_pnl,
+        fill_adjusted_pnl=fill_adjusted_pnl, turnover=turnover, num_trades=num_trades,
+    )
+
+
+def cost_adjusted_returns(
+    gross_returns: Sequence[float],
+    trades: Sequence[Mapping[str, Any]],
+    cfg: CostModelConfig,
+) -> list[float]:
+    """Subtract per-period cost fraction from a gross return stream."""
+    import numpy as np
+
+    gross = np.asarray(list(gross_returns), dtype=np.float64)
+    breakdown = apply_continuous_costs(0.0, list(trades), cfg)
+    total_cost = (breakdown.spread_paid + breakdown.fees_paid + breakdown.slippage_cost
+                  + breakdown.impact_cost + breakdown.adverse_selection_cost)
+    if total_cost <= 0.0 or gross.size == 0:
+        return gross.tolist()
+    abs_sum = float(np.sum(np.abs(gross)))
+    if abs_sum <= 0.0:
+        return (gross - (total_cost / gross.size)).tolist()
+    weights = np.abs(gross) / abs_sum
+    return (gross - weights * total_cost).tolist()
+
+
+def micro_standard_cost_config(tick_value: float = 5.0, multiplier: float = 5.0) -> CostModelConfig:
+    """CME micro-standard contract (MES/MNQ/MGC/MCL) default cost config."""
+    return CostModelConfig(
+        tick_value=tick_value, contract_multiplier=multiplier,
+        exchange_fee_per_lot=0.35, clearing_fee_per_lot=0.10, commission_per_lot=0.25,
+        slippage_ticks=0.25, spread_ticks=1.0, impact_coefficient=0.000001,
+        adverse_selection_bps=0.5,
+    )
+
+
+def standard_contract_cost_config(tick_value: float = 12.5, multiplier: float = 50.0) -> CostModelConfig:
+    """CME standard contract (ES/NQ/GC/CL) default cost config."""
+    return CostModelConfig(
+        tick_value=tick_value, contract_multiplier=multiplier,
+        exchange_fee_per_lot=1.10, clearing_fee_per_lot=0.25, commission_per_lot=0.50,
+        slippage_ticks=0.5, spread_ticks=1.0, impact_coefficient=0.00001,
+        adverse_selection_bps=0.75,
+    )
+
+
 __all__ = [
     "CostBreakdown",
     "CostModel",
@@ -201,4 +329,7 @@ __all__ = [
     "commission_cost",
     "market_impact_cost",
     "slippage_cost",
+    # Continuous-lane API
+    "ContinuousCostBreakdown", "CostModelConfig", "apply_continuous_costs",
+    "cost_adjusted_returns", "micro_standard_cost_config", "standard_contract_cost_config",
 ]

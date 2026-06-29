@@ -44,30 +44,29 @@ def test_valid_mbo_npz(tmp_path: Path) -> None:
 
 
 def test_missing_file(tmp_path: Path) -> None:
-    """A non-existent file returns (False, file_not_found:...)."""
+    """A non-existent file returns (False, missing_npz)."""
     ok, reason = check_npz_ohlcv(tmp_path / "nonexistent.npz")
     assert ok is False
-    assert "file_not_found" in reason
+    assert reason == "missing_npz"
 
 
 def test_empty_data_array(tmp_path: Path) -> None:
-    """An NPZ with an empty data array is invalid (no_ohlcv_data)."""
+    """An NPZ with an empty data array is invalid (insufficient_events)."""
     npz = tmp_path / "empty.npz"
     data = np.zeros(0, dtype=_MBO_DTYPE)
     np.savez(npz, data=data)
     ok, reason = check_npz_ohlcv(npz)
     assert ok is False
-    assert "no_ohlcv_data" in reason
+    assert reason == "insufficient_events"
 
 
 def test_single_event(tmp_path: Path) -> None:
-    """An NPZ with only 1 event cannot build a bar (need >=2)."""
+    """An NPZ with only 1 event cannot build a bar (insufficient_events)."""
     npz = tmp_path / "one_event.npz"
     _write_mbo_npz(npz, 1)
     ok, reason = check_npz_ohlcv(npz)
     assert ok is False
-    assert "no_ohlcv_data" in reason
-    assert "need" in reason
+    assert reason == "insufficient_events"
 
 
 def test_missing_data_member(tmp_path: Path) -> None:
@@ -76,7 +75,7 @@ def test_missing_data_member(tmp_path: Path) -> None:
     np.savez(npz, other=np.array([1, 2, 3]))
     ok, reason = check_npz_ohlcv(npz)
     assert ok is False
-    assert "missing 'data'" in reason
+    assert "missing_data_array" in reason
 
 
 def test_missing_required_fields(tmp_path: Path) -> None:
@@ -87,7 +86,7 @@ def test_missing_required_fields(tmp_path: Path) -> None:
     np.savez(npz, data=data)
     ok, reason = check_npz_ohlcv(npz)
     assert ok is False
-    assert "missing fields" in reason
+    assert "missing_fields" in reason
 
 
 def test_prebuilt_ohlcv_arrays(tmp_path: Path) -> None:

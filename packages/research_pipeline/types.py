@@ -29,6 +29,20 @@ class ParsedHypothesis:
 
 
 @dataclass
+class ContinuousLaneProfile:
+    """Continuous microstructure lane parse result (Phase 4)."""
+
+    thesis: str
+    lane: str
+    primary_model_id: str
+    model_family: str
+    universe_profile: str
+    relationship_family: Optional[str]
+    param_ranges: Dict[str, List[float]]
+    source: str = "heuristic"
+
+
+@dataclass
 class CandidateModel:
     candidate_id: str
     model_id: str
@@ -150,6 +164,7 @@ class EvaluationResult:
     event_results: List[Dict[str, Any]] = field(default_factory=list)
     workbench_out: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    failure_class: Optional[str] = None  # data_quality | model
     gross_pnl: Optional[float] = None
     cost_total: float = 0.0
     cost_breakdown: Dict[str, float] = field(default_factory=dict)
@@ -178,6 +193,12 @@ class EvaluationResult:
     def passes_all_gates(self) -> bool:
         if self.error:
             return False
+        cont = (self.workbench_out or {}).get("continuous_evaluation")
+        if isinstance(cont, dict) and cont.get("lane") == "continuous_microstructure":
+            if cont.get("status") != "evaluated":
+                return False
+            gate = cont.get("gates") or {}
+            return bool(gate.get("all_pass"))
         if self.gates.requires_gateable_risk_metrics() and not self.risk_metrics_gateable:
             return False
         return self.gates.passes(

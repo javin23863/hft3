@@ -1,10 +1,17 @@
-"""Chronological validation and CSCV helpers for edge evaluation."""
+"""Chronological validation and CSCV helpers for edge evaluation.
+
+Two API layers:
+- Edge-evaluation panel API: ``combinatorially_symmetric_cv(performance_matrix)`` — rows are chronological blocks, columns are strategies. Pure-Python.
+- Continuous-lane stream API: ``cscv_pbo(returns)``, ``cscv_pbo_panel(panel)``, ``walk_forward_split``, ``walk_forward_eval`` — accepts a single return stream or a strategy panel; uses NumPy.
+"""
 
 from __future__ import annotations
 
 from itertools import combinations, islice
 import math
-from typing import Any, Sequence
+from typing import Any, Iterable, Sequence
+
+import numpy as np
 
 
 Window = tuple[int, int, int, int]
@@ -250,4 +257,160 @@ __all__ = [
     "expanding_windows",
     "rolling_window_validation",
     "rolling_windows",
+    # Continuous-lane stream API
+    "cscv_pbo", "cscv_pbo_panel", "walk_forward_split", "walk_forward_eval",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Continuous-lane stream API (PDF section 10). Single-stream and panel PBO
+# plus PIT-safe chronological walk-forward split/eval.
+# ---------------------------------------------------------------------------
+
+
+def _as_returns(returns: Iterable[float]) -> np.ndarray:
+    arr = np.asarray(list(returns), dtype=np.float64)
+    if arr.size == 0:
+        return arr
+    return arr[np.isfinite(arr)]
+
+
+def _stream_sharpe(arr: np.ndarray) -> float:
+    if arr.size < 2:
+        return 0.0
+    std = float(arr.std(ddof=1))
+    if std <= 0.0:
+        return 0.0
+    return float(arr.mean() / std)
+
+
+def cscv_pbo(
+    returns: Iterable[float],
+    *,
+    num_blocks: int = 16,
+    random_state: int | None = None,
+) -> dict:
+    """Estimate PBO for a single strategy via block-bootstrap pseudo-panel."""
+    arr = _as_returns(returns)
+    n = arr.size
+    if n < num_blocks * 2:
+        return {"pbo": 0.5, "num_blocks": num_blocks, "folds": 0, "lambda": 0.5}
+    rng = np.random.default_rng(random_state)
+    block_size = max(1, n // num_blocks)
+    blocks = [arr[i * block_size : (i + 1) * block_size] for i in range(num_blocks)]
+    blocks = [b for b in blocks if b.size >= 2]
+    if len(blocks) < 2:
+        return {"pbo": 0.5, "num_blocks": num_blocks, "folds": 0, "lambda": 0.5}
+    pseudo_strategies = [blocks[int(rng.integers(0, len(blocks)))] for _ in range(num_blocks)]
+    min_len = min(s.size for s in pseudo_strategies)
+    if min_len < 2:
+        return {"pbo": 0.5, "num_blocks": num_blocks, "folds": 0, "lambda": 0.5}
+    panel = np.array([s[:min_len] for s in pseudo_strategies])
+    num_strategies = panel.shape[0]
+    processed_ranks: list[float] = []
+    count_worst = 0
+    folds = 0
+    for holdout in range(num_strategies):
+        in_sample_idx = [j for j in range(num_strategies) if j != holdout]
+        if not in_sample_idx:
+            continue
+        in_sample_sharpes = np.array([_stream_sharpe(panel[j]) for j in in_sample_idx])
+        best_local = int(np.argmax(in_sample_sharpes))
+        best_strategy_global_idx = in_sample_idx[best_local]
+        all_out_sharpes = np.array([_stream_sharpe(panel[j]) for j in range(num_strategies)])
+        if all_out_sharpes.std() <= 0.0:
+            continue
+        ranks = np.argsort(np.argsort(all_out_sharpes))
+        percentile = ranks[best_strategy_global_idx] / max(num_strategies - 1, 1)
+        processed_ranks.append(float(percentile))
+        if percentile <= 0.5:
+            count_worst += 1
+        folds += 1
+    if folds == 0:
+        return {"pbo": 0.5, "num_blocks": num_blocks, "folds": 0, "lambda": 0.5}
+    pbo = count_worst / folds
+    # Mean only over holdouts actually processed — skipped holdouts (zero-variance
+    # out-of-sample) must not contribute a synthetic 0.0 that would bias lambda.
+    arr_ranks = np.asarray(processed_ranks, dtype=np.float64)
+    lam = float(np.mean(arr_ranks)) if arr_ranks.size > 0 else 0.5
+    return {"pbo": float(pbo), "num_blocks": int(num_blocks), "folds": int(folds), "lambda": float(lam)}
+
+
+def cscv_pbo_panel(
+    panel: Iterable[Iterable[float]],
+    *,
+    num_blocks: int = 16,
+) -> dict:
+    """CSCV PBO for a panel (rows = strategies, cols = time). Canonical Bailey et al."""
+    mat = np.array([_as_returns(row) for row in panel], dtype=np.float64)
+    if mat.ndim != 2 or mat.shape[0] < 2 or mat.shape[1] < num_blocks * 2:
+        return {"pbo": 0.5, "num_blocks": num_blocks, "folds": 0, "lambda": 0.5}
+    num_strategies, total_len = mat.shape
+    block_size = max(1, total_len // num_blocks)
+    blocks = [mat[:, i * block_size : (i + 1) * block_size] for i in range(num_blocks)]
+    blocks = [b for b in blocks if b.shape[1] >= 2]
+    if len(blocks) < 2:
+        return {"pbo": 0.5, "num_blocks": num_blocks, "folds": 0, "lambda": 0.5}
+    ranks_out_of_sample = []
+    count_worst = 0
+    folds = 0
+    for holdout in range(len(blocks)):
+        in_sample_idx = [j for j in range(len(blocks)) if j != holdout]
+        if not in_sample_idx:
+            continue
+        in_sample = np.concatenate([blocks[j] for j in in_sample_idx], axis=1)
+        out_sample = blocks[holdout]
+        in_sample_sharpes = np.array([_stream_sharpe(in_sample[s]) for s in range(num_strategies)])
+        best_strategy = int(np.argmax(in_sample_sharpes))
+        out_sample_sharpes = np.array([_stream_sharpe(out_sample[s]) for s in range(num_strategies)])
+        if out_sample_sharpes.std() <= 0.0:
+            continue
+        ranks = np.argsort(np.argsort(out_sample_sharpes))
+        percentile = ranks[best_strategy] / max(num_strategies - 1, 1)
+        ranks_out_of_sample.append(percentile)
+        if percentile <= 0.5:
+            count_worst += 1
+        folds += 1
+    if folds == 0:
+        return {"pbo": 0.5, "num_blocks": num_blocks, "folds": 0, "lambda": 0.5}
+    pbo = count_worst / folds
+    arr_ranks = np.array(ranks_out_of_sample)
+    lam = float(np.mean(arr_ranks)) if arr_ranks.size > 0 else 0.5
+    return {"pbo": float(pbo), "num_blocks": int(num_blocks), "folds": int(folds), "lambda": float(lam)}
+
+
+def walk_forward_split(
+    returns: Iterable[float],
+    *,
+    train_fraction: float = 0.7,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Deterministic chronological train/test split (no shuffle — PIT safe)."""
+    if not 0.0 < train_fraction < 1.0:
+        raise ValueError("train_fraction must be in (0, 1)")
+    arr = _as_returns(returns)
+    if arr.size < 4:
+        return arr, np.array([], dtype=np.float64)
+    cut = max(2, int(arr.size * train_fraction))
+    return arr[:cut], arr[cut:]
+
+
+def walk_forward_eval(
+    returns: Iterable[float],
+    *,
+    train_fraction: float = 0.7,
+) -> dict:
+    """Walk-forward in-sample vs out-of-sample Sharpe comparison."""
+    arr = _as_returns(returns)
+    if arr.size < 4:
+        return {"in_sample_sharpe": 0.0, "out_sample_sharpe": 0.0, "degradation": 0.0, "overfit_flag": False}
+    train, test = walk_forward_split(arr, train_fraction=train_fraction)
+    if train.size < 2 or test.size < 2:
+        return {"in_sample_sharpe": 0.0, "out_sample_sharpe": 0.0, "degradation": 0.0, "overfit_flag": False}
+    in_sr = _stream_sharpe(train)
+    out_sr = _stream_sharpe(test)
+    degradation = in_sr - out_sr if in_sr > 0.0 else 0.0
+    overfit = bool(in_sr > 0.0 and out_sr <= 0.0 and in_sr > abs(out_sr) * 2)
+    return {
+        "in_sample_sharpe": float(in_sr), "out_sample_sharpe": float(out_sr),
+        "degradation": float(degradation), "overfit_flag": overfit,
+    }
