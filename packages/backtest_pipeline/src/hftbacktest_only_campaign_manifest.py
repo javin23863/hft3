@@ -473,6 +473,7 @@ def stream_parameter_surface_manifest(
     checkpoint_output = Path(checkpoint_path) if checkpoint_path is not None else None
     tmp = _path_with_added_suffix(out_path, ".tmp")
     sqlite_path = _path_with_added_suffix(out_path, ".dedupe.sqlite.tmp")
+    summary: dict[str, Any] | None = None
     try:
         with _SqliteUniqueTracker(sqlite_path) as unique_tracker:
             summary_builder = _ParameterSurfaceSummaryBuilder(unique_tracker=unique_tracker)
@@ -495,15 +496,17 @@ def stream_parameter_surface_manifest(
                 if summary_builder.row_count == 0:
                     raise HftBacktestOnlyCampaignManifestError("parameter_surface_empty")
                 handle.flush()
-            os.replace(tmp, out_path)
-            summary = summary_builder.summary(partial=False)
-            if summary_path is not None:
-                _write_json_atomic(Path(summary_path), summary)
-            if checkpoint_output is not None:
-                _write_json_atomic(checkpoint_output, summary)
+                summary = summary_builder.summary(partial=False)
+        os.replace(tmp, out_path)
     except Exception:
         _cleanup_partial_outputs(tmp, checkpoint_output)
         raise
+    if summary is None:
+        raise HftBacktestOnlyCampaignManifestError("parameter_surface_summary_missing")
+    if summary_path is not None:
+        _write_json_atomic(Path(summary_path), summary)
+    if checkpoint_output is not None:
+        _write_json_atomic(checkpoint_output, summary)
     return summary
 
 

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import backtest_pipeline.src.hftbacktest_only_campaign_manifest as manifest_module
 from backtest_pipeline.src.hftbacktest_only_campaign_manifest import (
     REQUIRED_ROW_FIELDS,
     REQUIRED_PARAMETER_SURFACE_ROW_FIELDS,
@@ -1053,6 +1054,49 @@ def test_stream_parameter_surface_cleans_tmp_on_duplicate(
     assert not out_path.exists()
     assert not (tmp_path / "parameter_surface.jsonl.tmp").exists()
     assert not checkpoint_path.exists()
+
+
+def test_stream_parameter_surface_keeps_output_on_final_checkpoint_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)
+    campaign_rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+    )
+    surface_rows = build_parameter_surface_rows(
+        campaign_rows=campaign_rows,
+        parameter_sets=_parameter_sets()[:1],
+    )
+    out_path = tmp_path / "parameter_surface.jsonl"
+    checkpoint_path = tmp_path / "parameter_surface.checkpoint.json"
+    original_write_json_atomic = manifest_module._write_json_atomic
+
+    def fail_final_checkpoint(path: Path, payload: dict[str, object]) -> None:
+        if Path(path) == checkpoint_path and payload.get("partial") is False:
+            raise RuntimeError("final checkpoint write failed")
+        original_write_json_atomic(path, payload)
+
+    monkeypatch.setattr(
+        manifest_module,
+        "_write_json_atomic",
+        fail_final_checkpoint,
+    )
+
+    with pytest.raises(RuntimeError, match="final checkpoint write failed"):
+        stream_parameter_surface_manifest(
+            surface_rows,
+            out_path=out_path,
+            checkpoint_path=checkpoint_path,
+            checkpoint_every_rows=1,
+        )
+    assert out_path.exists()
+    assert not (tmp_path / "parameter_surface.jsonl.tmp").exists()
 
 
 def test_parameter_surface_rejects_optimizer_claim_before_hbt_evidence(
