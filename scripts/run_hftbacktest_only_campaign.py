@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any, Mapping
@@ -18,6 +17,7 @@ from typing import Any, Mapping
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages")]
 
+from backtest_pipeline.src.hftbacktest_only_io import safe_stem, write_json_atomic
 from backtest_pipeline.src.hftbacktest_only_pipeline import (  # noqa: E402
     HftBacktestOnlyRunConfig,
     run_hftbacktest_only,
@@ -46,7 +46,7 @@ def run_campaign(
     if not rows:
         raise SystemExit("--campaign-manifest has no rows")
     campaign_id = str(rows[0].get("campaign_id") or "hbt_campaign")
-    campaign_root = Path(out_root) / _safe_stem(campaign_id)
+    campaign_root = Path(out_root) / safe_stem(campaign_id)
     campaign_root.mkdir(parents=True, exist_ok=True)
     settings = {
         "strategy_id": strategy_id,
@@ -86,7 +86,7 @@ def run_campaign(
         "blocker_counts": dict(sorted(blocker_counts.items())),
         "failed_count": status_counts.get("runner_failed", 0),
     }
-    _write_json_atomic(campaign_root / "campaign_run_summary.json", summary)
+    write_json_atomic(campaign_root / "campaign_run_summary.json", summary)
     return summary
 
 
@@ -96,24 +96,24 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
     row_key = str(row.get("surface_unit_id") or row.get("unit_id") or "")
     if not row_key:
         row_key = _hash_json(row)
-    run_dir = campaign_root / _safe_stem(row_key)
+    run_dir = campaign_root / safe_stem(row_key)
     result_path = run_dir / "campaign_row_result.json"
     if settings.get("resume") and result_path.is_file():
         return json.loads(result_path.read_text(encoding="utf-8"))
     run_dir.mkdir(parents=True, exist_ok=True)
 
     blocker_code = str(row.get("blocker_code") or "")
+    metadata_blocker = _metadata_blocker(row)
     if blocker_code or row.get("admissibility_status") not in ("", "admissible"):
         return _write_row_result(
             result_path,
             row,
             status="blocked_before_hbt",
             blocker_code=blocker_code or str(row.get("admissibility_status") or "pre_hbt_blocker"),
-            blocker_detail=str(row.get("blocker_detail") or ""),
+            blocker_detail=_join_blocker_details(row.get("blocker_detail"), metadata_blocker),
             hbt_run_id="",
         )
 
-    metadata_blocker = _metadata_blocker(row)
     if metadata_blocker:
         return _write_row_result(
             result_path,
@@ -124,7 +124,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
             hbt_run_id="",
         )
 
-    run_id = _safe_stem(row_key)
+    run_id = safe_stem(row_key)
     strategy_params = dict(row.get("strategy_params") or {})
     strategy_params["model_id"] = str(row["canonical_model_id"])
     config = HftBacktestOnlyRunConfig(
@@ -206,6 +206,10 @@ def _metadata_blocker(row: Mapping[str, Any]) -> str:
     return "missing_hbt_run_metadata:" + ",".join(missing) if missing else ""
 
 
+def _join_blocker_details(*details: Any) -> str:
+    return ";".join(str(detail) for detail in details if str(detail or "").strip())
+
+
 def _fail_closed_blocker(status: str, reasons: list[str]) -> str:
     reason = reasons[0] if reasons else status
     if status == "data_invalid" or reason.startswith(
@@ -273,7 +277,7 @@ def _write_row_result(
         if (path.parent / "promotion_decision.json").is_file()
         else "",
     }
-    _write_json_atomic(path, payload)
+    write_json_atomic(path, payload)
     return payload
 
 
@@ -303,19 +307,6 @@ def _hash_json(payload: Mapping[str, Any]) -> str:
 
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:24]
-
-
-def _safe_stem(value: str) -> str:
-    safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in str(value).strip())
-    return safe.strip("._-") or "hbt"
-
-
-def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
 
 
 def main(argv: list[str] | None = None) -> int:

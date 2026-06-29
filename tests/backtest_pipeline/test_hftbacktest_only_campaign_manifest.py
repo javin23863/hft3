@@ -291,6 +291,9 @@ def test_prepared_blocker_manifest_enters_campaign_not_model_rejection(tmp_path:
     assert {row["admissibility_status"] for row in rows} == {"authority_missing"}
     assert {row["blocker_code"] for row in rows} == {"authority_missing"}
     assert all("instrument_metadata_missing:contract_size" in row["blocker_detail"] for row in rows)
+    assert all("product_metadata_source" in row["blocker_detail"] for row in rows)
+    assert all("metadata_policy" in row["blocker_detail"] for row in rows)
+    assert all("product_authority_refs" in row["blocker_detail"] for row in rows)
     assert "model_" + "rejected" not in json.dumps(rows)
 
 
@@ -332,6 +335,47 @@ def test_missing_product_metadata_authority_blocks_prepared_unit(tmp_path: Path)
     assert all("product_metadata_source" in row["blocker_detail"] for row in rows)
     assert all("metadata_policy" in row["blocker_detail"] for row in rows)
     assert all("product_authority_refs" in row["blocker_detail"] for row in rows)
+
+
+def test_whitespace_product_authority_ref_is_missing_authority(tmp_path: Path) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_dir = tmp_path / "prepared" / "MES" / "2024-09-11"
+    prepared_dir.mkdir(parents=True)
+    normalized = prepared_dir / "event_l3.npz"
+    snapshot = prepared_dir / "initial_snapshot.npz"
+    normalized.write_bytes(b"hbt-normalized")
+    snapshot.write_bytes(b"hbt-initial-snapshot")
+    (prepared_dir / "CPI_2024_09_11_TIGHT_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "hft3_hbt_only_lake_prepare_v1",
+                "symbol": "MES",
+                "contract": "MESU4",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "trade_date": "2024-09-11",
+                "normalized_npz": str(normalized),
+                "initial_snapshot": str(snapshot),
+                "tick_size": 0.25,
+                "lot_size": 1.0,
+                "contract_size": 5.0,
+                "product_metadata_source": "config/hftbacktest/cme_lake_product_metadata.yaml",
+                "metadata_policy": "explicit_per_symbol_contract_tick_lot_contract_required",
+                "authority_refs": " ",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=tmp_path / "prepared",
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+    )
+
+    assert {row["blocker_code"] for row in rows} == {"authority_missing"}
+    assert all("product_authority_refs" in row["blocker_detail"] for row in rows)
+    assert all(" " not in row["authority_refs"] for row in rows)
 
 
 def test_invalid_adapter_status_override_fails_closed(tmp_path: Path) -> None:

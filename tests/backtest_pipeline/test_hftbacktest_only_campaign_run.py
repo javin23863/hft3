@@ -222,3 +222,29 @@ def test_campaign_runner_blocks_missing_product_metadata_authority(tmp_path: Pat
     receipt = next(Path(summary["out_root"]).glob("*/campaign_row_result.json"))
     payload = json.loads(receipt.read_text(encoding="utf-8"))
     assert payload["blocker_detail"] == "missing_hbt_run_metadata:product_metadata_source,metadata_policy"
+
+
+def test_campaign_runner_augments_preblocked_rows_with_metadata_blockers(tmp_path: Path) -> None:
+    _install_fake_hftbacktest()
+    module = _load_runner_module()
+    _write_valid_npz(tmp_path / "data.npz")
+    _write_valid_npz(tmp_path / "snapshot.npz")
+    row = _campaign_row(tmp_path, blocker_code="authority_missing")
+    row["blocker_detail"] = "instrument_metadata_missing:contract_size"
+    row["product_metadata_source"] = ""
+    row["metadata_policy"] = ""
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=tmp_path / "runs",
+        dry_run=True,
+        workers=1,
+    )
+
+    assert summary["status_counts"] == {"blocked_before_hbt": 1}
+    receipt = next(Path(summary["out_root"]).glob("*/campaign_row_result.json"))
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    assert "instrument_metadata_missing:contract_size" in payload["blocker_detail"]
+    assert "missing_hbt_run_metadata:product_metadata_source,metadata_policy" in payload["blocker_detail"]

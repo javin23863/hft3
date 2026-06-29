@@ -527,12 +527,15 @@ def _build_row(
         missing_metadata.append("metadata_policy")
     if not prepared_authority_refs:
         missing_metadata.append("product_authority_refs")
-    if not blocker_code and (missing_metadata or not combined_authority_refs):
-        blocker_code = "authority_missing"
-        if missing_metadata:
-            blocker_details.append("missing_metadata=" + ",".join(missing_metadata))
-        if not combined_authority_refs:
-            blocker_details.append("authority_refs=<missing>")
+    authority_details: list[str] = []
+    if missing_metadata:
+        authority_details.append("missing_metadata=" + ",".join(missing_metadata))
+    if not combined_authority_refs:
+        authority_details.append("authority_refs=<missing>")
+    if authority_details:
+        blocker_details.extend(authority_details)
+        if not blocker_code:
+            blocker_code = "authority_missing"
 
     if not blocker_code and adapter_status in {
         "missing_uniform_hbt_adapter",
@@ -601,7 +604,8 @@ def _combine_authority_refs(
         refs.extend(str(ref) for ref in prepared_refs if str(ref).strip())
         return tuple(dict.fromkeys(refs))
     if isinstance(prepared_refs, str):
-        refs.append(prepared_refs)
+        if prepared_refs.strip():
+            refs.append(prepared_refs)
     elif isinstance(prepared_refs, IterableABC):
         refs.extend(str(ref) for ref in prepared_refs if str(ref).strip())
     return tuple(dict.fromkeys(refs))

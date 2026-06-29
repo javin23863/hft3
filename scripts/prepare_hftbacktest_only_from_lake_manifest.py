@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -22,6 +21,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages")]
 
 from backtest_pipeline.src.hftbacktest_only_campaign_manifest import DEFAULT_AUTHORITY_REFS
+from backtest_pipeline.src.hftbacktest_only_io import safe_stem, write_json_atomic
 from backtest_pipeline.src.hftbacktest_only_pipeline import (
     HftBacktestOnlyPipelineError,
     HftBacktestOnlyPrepareConfig,
@@ -344,7 +344,7 @@ def _stamp_prepared_manifest(prepared: Mapping[str, Any], metadata: Mapping[str,
     if manifest_path.is_file():
         persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
         persisted.update(additions)
-        _write_json_atomic(manifest_path, persisted)
+        write_json_atomic(manifest_path, persisted)
     return payload
 
 
@@ -363,13 +363,13 @@ def _write_blocker_manifest(
         "blocker_code": blocker_code,
         "blocker_detail": blocker_detail,
     }
-    _write_json_atomic(path, payload)
+    write_json_atomic(path, payload)
     return {**payload, "manifest_path": str(path), "reused_existing": False}
 
 
 def _manifest_path(out_root: Path, symbol: str, trade_date: str, event_id: str) -> Path:
-    stem = _safe_stem(event_id)
-    return Path(out_root) / "prepared" / _safe_stem(symbol) / trade_date / f"{stem}_manifest.json"
+    stem = safe_stem(event_id)
+    return Path(out_root) / "prepared" / safe_stem(symbol) / trade_date / f"{stem}_manifest.json"
 
 
 def _trade_date_from_event_id(event_id: str) -> str:
@@ -377,19 +377,6 @@ def _trade_date_from_event_id(event_id: str) -> str:
     if not match:
         return "unknown-date"
     return "-".join(match.groups())
-
-
-def _safe_stem(value: str) -> str:
-    safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in str(value).strip())
-    return safe.strip("._-") or "hbt"
-
-
-def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -416,7 +403,7 @@ def main(argv: list[str] | None = None) -> int:
         force_rebuild=args.force_rebuild,
     )
     if args.summary_out is not None:
-        _write_json_atomic(args.summary_out, summary)
+        write_json_atomic(args.summary_out, summary)
     print(json.dumps(summary, indent=2, sort_keys=True, default=str))
     return 0 if summary["row_count"] > 0 else 2
 
