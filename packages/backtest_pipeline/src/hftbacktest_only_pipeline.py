@@ -495,7 +495,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         side = str(params.get("side", "BUY")).upper()
     try:
         quantity = _positive_float(params.get("quantity", 1.0), "strategy_params.quantity")
-        max_steps = _positive_int(params.get("max_steps", params.get("max_feed_steps", 3)), "strategy_params.max_steps")
+        max_steps = _strategy_max_steps(params)
         interval_ns = _positive_int(params.get("interval_ns", 1_000_000_000), "strategy_params.interval_ns")
         order_id = _positive_int(params.get("order_id", 9001), "strategy_params.order_id")
         signal_threshold = _positive_float(params.get("signal_threshold", 0.15), "strategy_params.signal_threshold")
@@ -1515,6 +1515,16 @@ def _positive_float(value: Any, name: str) -> float:
     if parsed <= 0.0:
         raise HftBacktestOnlyPipelineError(f"{name} must be positive")
     return parsed
+
+
+def _strategy_max_steps(params: Mapping[str, Any]) -> int:
+    if "max_steps" in params:
+        return _positive_int(params.get("max_steps"), "strategy_params.max_steps")
+    if "max_feed_steps" in params:
+        return _positive_int(params.get("max_feed_steps"), "strategy_params.max_feed_steps")
+    if "holding_period_bars" in params:
+        return _positive_int(params.get("holding_period_bars"), "strategy_params.holding_period_bars")
+    return 3
 
 
 def _positive_int(value: Any, name: str) -> int:

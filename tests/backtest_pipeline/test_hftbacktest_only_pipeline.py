@@ -152,6 +152,7 @@ def _install_fake_hftbacktest(
     *,
     passive_fill_after_elapse: bool = False,
     wait_response_code: int = 0,
+    successful_elapses: int = 2,
 ) -> None:
     dtype, constants = _event_contract()
 
@@ -212,7 +213,7 @@ def _install_fake_hftbacktest(
         def elapse(self, _interval_ns: int) -> int:
             self.steps += 1
             self.current_timestamp += int(_interval_ns)
-            return 0 if self.steps <= 2 else 1
+            return 0 if self.steps <= successful_elapses else 1
 
         def clear_inactive_orders(self, _asset_no: int) -> None:
             return None
@@ -319,6 +320,38 @@ def test_active_hftbacktest_only_run_records_passive_fill_after_later_elapse(
     assert stats["orders_acknowledged"] == 1
     assert stats["net_pnl"] == 12.5
     assert recorder["fill_quantities"].tolist() == [1.0]
+
+
+def test_hbt_loop_uses_holding_period_bars_after_explicit_step_params(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch, successful_elapses=10)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+
+    def max_replay_step(name: str, strategy_params: dict[str, object]) -> int:
+        out_dir = tmp_path / "artifacts" / "hbt_runs" / name
+        result = run_hftbacktest_only(
+            _config(tmp_path, data_path, snapshot_path, strategy_params=strategy_params),
+            out_dir=out_dir,
+        )
+        assert result["status"] == "completed"
+        replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+        return max(int(row["step"]) for row in replay["orders"] if "step" in row)
+
+    assert max_replay_step(
+        "holding_period",
+        {"side": "BUY", "quantity": 1.0, "holding_period_bars": 4},
+    ) == 4
+    assert max_replay_step(
+        "max_feed_steps",
+        {"side": "BUY", "quantity": 1.0, "max_feed_steps": 3, "holding_period_bars": 4},
+    ) == 3
+    assert max_replay_step(
+        "max_steps",
+        {"side": "BUY", "quantity": 1.0, "max_steps": 2, "max_feed_steps": 3, "holding_period_bars": 4},
+    ) == 2
 
 
 def test_hypothesis_limit_order_evaluates_canonical_model_signal(
