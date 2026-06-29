@@ -570,14 +570,24 @@ Implementation progress as of 2026-06-29:
 - Full-lake HBT preparation now uses
   `scripts/prepare_hftbacktest_only_from_lake_manifest.py` plus explicit
   `config/hftbacktest/cme_lake_product_metadata.yaml`.
-- Full campaign execution now uses
-  `scripts/run_hftbacktest_only_campaign.py` over the generated manifest;
-  pre-HBT blockers write campaign row receipts rather than disappearing or
-  becoming model rejections.
+- The full base campaign manifest is the no-cherry-pick universe receipt, not
+  an immediate execution queue. It must stream to disk, checkpoint progress, and
+  write a pre-execution summary with `hbt_jobs_started=0`.
+- HBT execution uses `scripts/run_hftbacktest_only_campaign.py` only after the
+  summary proves the base universe and after a deterministic first-N eligible
+  canary manifest is derived from manifest order. Pre-HBT blockers write
+  campaign row receipts rather than disappearing or becoming model rejections.
+- The deterministic canary manifest is built by
+  `scripts/build_hftbacktest_only_campaign_manifest.py --canary-out
+  --canary-count`; it filters only by data admissibility, adapter readiness,
+  authority pass, and base/configured parameter-surface status, and records
+  `manual_filter_used=false` plus `hbt_jobs_started=0`.
 - Vast execution instructions are recorded in
   `docs/operations/VAST_HFT_CAMPAIGN.md`: build `hft3_features_cpp`, prepare
-  the full lake, build canonical campaign/parameter-surface manifests, then run
-  the HBT campaign executor with receipts.
+  the full lake, build the streaming canonical manifest summary, record missing
+  `config/hftbacktest/parameter_sets.json` as a pipeline/config blocker when
+  absent, then run only the deterministic eligible canary before any broad HBT
+  executor campaign.
 
 ### Step 1: Freeze VectorBT Active Path
 
@@ -772,7 +782,16 @@ The HftBacktest-only active pipeline is accepted only when all are true:
     fallback warnings block the full Vast campaign until fixed.
 12. No active proof path depends on a local subset, handpicked symbol, or
     preferred model.
-13. Plan Drift Review passes against this document.
-14. PR GrepLoop is last and clean on the current review head, or the handoff
+13. The base manifest summary proves `canonical_model_count`,
+    `prepared_unit_count`, `executable_unit_count`, `blocker_unit_count`,
+    `expected_base_rows`, `emitted_base_rows`, adapter/authority/applicability
+    counts, all legacy dependency booleans as false, and `hbt_jobs_started=0`.
+14. Missing `config/hftbacktest/parameter_sets.json` is a pipeline/config
+    blocker for parameter-surface expansion; no grid is invented.
+15. The next execution manifest is a deterministic first-N eligible canary from
+    manifest order: data admissible, adapter ready/available, authority pass,
+    parameter surface base-only or config-present, and no manual preference.
+16. Plan Drift Review passes against this document.
+17. PR GrepLoop is last and clean on the current review head, or the handoff
     reports the exact unavailable or waived state with `merge-ready: no`.
 ```

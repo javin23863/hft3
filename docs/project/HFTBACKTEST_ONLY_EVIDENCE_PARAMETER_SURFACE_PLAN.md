@@ -263,16 +263,21 @@ The active full campaign order is:
 
 ```text
 1. Build canonical campaign manifest from registry slugs x HBT-normalized events.
-2. Expand parameter-surface manifest by deterministic declared parameter sets.
-3. Fail closed missing data, missing authority, and missing adapters as blockers.
-4. Run HBT for admissible model/event/parameter rows.
-5. Write recorder_result.npz and stats_summary.json.
-6. Write promotion_decision.json only after both required HBT outputs exist.
-7. Build HBT evidence ledger, family readiness, candidate readiness,
+2. Write a pre-execution summary proving base universe counts and
+   `hbt_jobs_started=0`; the base manifest is not the immediate execution queue.
+3. Expand parameter-surface manifest only when deterministic declared parameter
+   sets exist. Missing `config/hftbacktest/parameter_sets.json` is a
+   pipeline/config blocker; do not invent a grid.
+4. Fail closed missing data, missing authority, and missing adapters as blockers.
+5. Run only a deterministic first-N eligible canary before broad HBT execution.
+6. Run HBT for admissible model/event/parameter rows after canary receipts pass.
+7. Write recorder_result.npz and stats_summary.json.
+8. Write promotion_decision.json only after both required HBT outputs exist.
+9. Build HBT evidence ledger, family readiness, candidate readiness,
    raw diagnostics, blocker summary, and data-vs-pipeline audit.
-8. Evaluate parameter regions only from completed HBT evidence.
-9. Run Plan Drift Review.
-10. Run PR GrepLoop last on the current review surface when merge-ready is intended.
+10. Evaluate parameter regions only from completed HBT evidence.
+11. Run Plan Drift Review.
+12. Run PR GrepLoop last on the current review surface when merge-ready is intended.
 ```
 
 ## Acceptance Tests
@@ -303,7 +308,16 @@ Implemented scope:
 
 - expands campaign rows into
   `canonical_model_id x source_npz/event x parameter_hash`;
-- writes JSONL plus summary receipts for the parameter surface;
+- streams the base campaign manifest to temporary JSONL, checkpoints progress,
+  and atomically promotes the final manifest without holding the full base
+  universe in memory;
+- writes a pre-execution summary with canonical/prepared/executable/blocker
+  counts, expected/emitted base rows, adapter/authority/applicability counts,
+  legacy dependency booleans set false, and `hbt_jobs_started=0`;
+- streams parameter-surface JSONL plus summary receipts when real parameter
+  sets are supplied;
+- writes a deterministic first-N canary manifest from manifest order through
+  the same builder CLI, with `manual_filter_used=false` and no HBT jobs started;
 - restricts pre-HBT proposal families to `grid`, `bayesian-prior`, and
   `evolutionary-prior`;
 - records `parameter_proposal_status=declared_pre_hbt`,
@@ -328,7 +342,9 @@ As of this plan addendum:
 
 ```text
 1. RL canonical slugs are preserved but still need uniform HBT order adapters.
-2. Vast full prepared-data manifest has not run for the current HBT-only campaign.
-3. Vast remote compiled feature path still needs verification for the full campaign.
+2. `config/hftbacktest/parameter_sets.json` is missing, so parameter-surface
+   expansion is blocked by configuration until declared proposals are supplied.
+3. Vast pre-execution base summary exists for the full lake; broad HBT execution
+   waits behind the deterministic eligible canary receipt.
 4. PR GrepLoop/review surface has not run on the current head, so merge-ready is no.
 ```

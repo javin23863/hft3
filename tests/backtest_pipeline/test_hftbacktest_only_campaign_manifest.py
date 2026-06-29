@@ -15,9 +15,14 @@ from backtest_pipeline.src.hftbacktest_only_campaign_manifest import (
     build_campaign_manifest_rows,
     build_parameter_surface_rows,
     campaign_manifest_summary,
+    iter_parameter_surface_rows,
     parameter_surface_summary,
+    stream_campaign_manifest,
+    stream_first_eligible_canary_manifest,
+    stream_parameter_surface_manifest,
     validate_campaign_manifest_rows,
     validate_parameter_surface_rows,
+    write_campaign_manifest,
     write_parameter_surface_manifest,
 )
 from features_engine.src.model_registry import resolve_model_id
@@ -85,6 +90,39 @@ def _write_prepared_unit(root: Path) -> Path:
         ],
     }
     manifest_path = prepared_dir / "CPI_2024_09_11_TIGHT_manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return manifest_path
+
+
+def _write_second_prepared_unit(root: Path) -> Path:
+    prepared_dir = root / "MES" / "2024-09-12"
+    prepared_dir.mkdir(parents=True)
+    normalized = prepared_dir / "event_l3.npz"
+    snapshot = prepared_dir / "initial_snapshot.npz"
+    normalized.write_bytes(b"hbt-normalized-second")
+    snapshot.write_bytes(b"hbt-initial-snapshot-second")
+    manifest = {
+        "schema_version": "hft3_hbt_only_lake_prepare_v1",
+        "symbol": "MES",
+        "contract": "MESU4",
+        "event_id": "PPI_2024_09_12_TIGHT",
+        "trade_date": "2024-09-12",
+        "start_ts_ns": 4,
+        "cutoff_ts_ns": 5,
+        "end_ts_ns": 6,
+        "normalized_npz": str(normalized),
+        "initial_snapshot": str(snapshot),
+        "tick_size": 0.25,
+        "lot_size": 1.0,
+        "contract_size": 5.0,
+        "product_metadata_source": "config/hftbacktest/cme_lake_product_metadata.yaml",
+        "metadata_policy": "explicit_per_symbol_contract_tick_lot_contract_required",
+        "authority_refs": [
+            "config/hftbacktest/cme_lake_product_metadata.yaml",
+            "product-authority:MES",
+        ],
+    }
+    manifest_path = prepared_dir / "PPI_2024_09_12_TIGHT_manifest.json"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     return manifest_path
 
@@ -202,6 +240,132 @@ def test_manifest_uses_canonical_slugs_and_legacy_aliases_only(tmp_path: Path) -
     assert summary["canonical_model_count"] == 3
     assert summary["source_npz_count"] == 1
     assert summary["manifest_order"] == "registry_file_order_then_prepared_manifest_path"
+
+
+def test_stream_campaign_manifest_writes_pre_execution_summary_and_checkpoint(
+    tmp_path: Path,
+) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)
+
+    summary = stream_campaign_manifest(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+        out_path=tmp_path / "campaign_manifest.jsonl",
+        summary_path=tmp_path / "campaign_pre_execution_summary.json",
+        checkpoint_path=tmp_path / "campaign_manifest.checkpoint.json",
+        checkpoint_every_rows=2,
+        parameter_surface_config_status="pipeline_blocker:parameter_sets_config_missing",
+        parameter_sets_json=tmp_path / "parameter_sets.json",
+    )
+
+    assert summary["canonical_model_count"] == 3
+    assert summary["prepared_unit_count"] == 1
+    assert summary["executable_unit_count"] == 1
+    assert summary["blocker_unit_count"] == 0
+    assert summary["expected_base_rows"] == 3
+    assert summary["emitted_base_rows"] == 3
+    assert summary["row_count_matches_expected"] is True
+    assert summary["adapter_status_counts"] == {
+        "available": 2,
+        "missing_uniform_hbt_adapter": 1,
+    }
+    assert summary["model_applicability_counts"] == {
+        "adapter_status:available": 2,
+        "adapter_status:missing_uniform_hbt_adapter": 1,
+    }
+    assert summary["instrument_applicability_counts"] == {
+        "hbt_executable_prepared_unit": 1,
+    }
+    assert summary["manual_filter_used"] is False
+    assert summary["vectorbt_dependency"] is False
+    assert summary["stage_a_dependency"] is False
+    assert summary["screening_artifact_dependency"] is False
+    assert summary["hbt_jobs_started"] == 0
+    assert summary["parameter_surface_config_status"] == (
+        "pipeline_blocker:parameter_sets_config_missing"
+    )
+    assert (tmp_path / "campaign_manifest.jsonl").read_text(encoding="utf-8").count("\n") == 3
+    checkpoint = json.loads(
+        (tmp_path / "campaign_manifest.checkpoint.json").read_text(encoding="utf-8")
+    )
+    assert checkpoint["partial"] is False
+    assert checkpoint["emitted_base_rows"] == 3
+
+
+def test_stream_campaign_manifest_fails_closed_on_row_count_mismatch(
+    tmp_path: Path,
+) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)
+    _write_second_prepared_unit(prepared_root)
+    rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+    )
+    one_prepared_for_each_model = [rows[0], rows[2], rows[4]]
+
+    with pytest.raises(
+        HftBacktestOnlyCampaignManifestError,
+        match="campaign_manifest_row_count_mismatch",
+    ):
+        write_campaign_manifest(
+            one_prepared_for_each_model,
+            out_path=tmp_path / "campaign_manifest.jsonl",
+            expected_canonical_model_ids=[
+                "SPREAD_BLOWOUT_RECOMPRESSION",
+                "QUEUE_TOXICITY_HAWKES",
+                "RL_EXECUTION_POLICY",
+            ],
+            prepared_unit_count=2,
+        )
+    assert not (tmp_path / "campaign_manifest.jsonl").exists()
+
+
+def test_first_eligible_canary_uses_manifest_order_without_manual_filter(
+    tmp_path: Path,
+) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)
+    base_path = tmp_path / "campaign_manifest.jsonl"
+    stream_campaign_manifest(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+        out_path=base_path,
+        parameter_surface_config_status="pipeline_blocker:parameter_sets_config_missing",
+    )
+
+    summary = stream_first_eligible_canary_manifest(
+        (json.loads(line) for line in base_path.read_text(encoding="utf-8").splitlines()),
+        out_path=tmp_path / "canary_manifest.jsonl",
+        count=2,
+        summary_path=tmp_path / "canary_summary.json",
+        source_manifest=base_path,
+        parameter_surface_status="base_only",
+        parameter_surface_config_status="pipeline_blocker:parameter_sets_config_missing",
+    )
+
+    canary_rows = [
+        json.loads(line)
+        for line in (tmp_path / "canary_manifest.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert [row["canonical_model_id"] for row in canary_rows] == [
+        "SPREAD_BLOWOUT_RECOMPRESSION",
+        "QUEUE_TOXICITY_HAWKES",
+    ]
+    assert summary["selector"] == "first_n_manifest_order_after_readiness_predicates"
+    assert summary["manual_filter_used"] is False
+    assert summary["hbt_jobs_started"] == 0
+    assert summary["eligibility_counts"]["eligible"] == 2
 
 
 def test_manifest_omissions_fail_closed(tmp_path: Path) -> None:
@@ -1045,6 +1209,93 @@ def test_cli_writes_parameter_surface_manifest(tmp_path: Path, capsys: pytest.Ca
         (tmp_path / "parameter_surface_summary.json").read_text(encoding="utf-8")
     )
     assert surface_summary["parameter_family_counts"] == {"grid": 3}
+
+
+def test_stream_parameter_surface_manifest_reads_base_rows_without_materializing(
+    tmp_path: Path,
+) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)
+    base_path = tmp_path / "campaign_manifest.jsonl"
+    stream_campaign_manifest(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+        out_path=base_path,
+    )
+
+    summary = stream_parameter_surface_manifest(
+        iter_parameter_surface_rows(
+            campaign_rows=(json.loads(line) for line in base_path.read_text(encoding="utf-8").splitlines()),
+            parameter_sets=_parameter_sets()[:1],
+        ),
+        out_path=tmp_path / "parameter_surface.jsonl",
+        summary_path=tmp_path / "parameter_surface_summary.json",
+        checkpoint_every_rows=2,
+    )
+
+    assert summary["row_count"] == 3
+    assert summary["campaign_unit_count"] == 3
+    assert summary["parameter_family_counts"] == {"grid": 3}
+    assert (tmp_path / "parameter_surface.jsonl").read_text(encoding="utf-8").count("\n") == 3
+
+
+def test_cli_missing_default_parameter_sets_is_config_blocker_not_grid_invention(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = Path(__file__).resolve().parents[2]
+    script = repo / "scripts" / "build_hftbacktest_only_campaign_manifest.py"
+    spec = importlib.util.spec_from_file_location("build_hbt_campaign_manifest_cli", script)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)
+    missing_parameter_sets = tmp_path / "missing_parameter_sets.json"
+    module.DEFAULT_PARAMETER_SETS = missing_parameter_sets
+
+    assert module.main(
+        [
+            "--campaign-id",
+            "hbt_campaign_test",
+            "--prepared-root",
+            str(prepared_root),
+            "--model-registry",
+            str(registry),
+            "--adapter-status-json",
+            str(_write_adapter_status_json(tmp_path)),
+            "--out",
+            str(tmp_path / "campaign_manifest.jsonl"),
+            "--summary-out",
+            str(tmp_path / "campaign_manifest_summary.json"),
+            "--canary-out",
+            str(tmp_path / "canary_manifest.jsonl"),
+            "--canary-count",
+            "2",
+            "--canary-summary-out",
+            str(tmp_path / "canary_manifest_summary.json"),
+        ]
+    ) == 0
+
+    output = json.loads(capsys.readouterr().out)
+    summary = output["campaign_manifest"]
+    assert summary["row_count"] == 3
+    assert summary["parameter_surface_status"] == "base_only"
+    assert summary["parameter_surface_config_status"] == (
+        "pipeline_blocker:parameter_sets_config_missing"
+    )
+    canary_summary = output["canary_manifest"]
+    assert canary_summary["emitted_count"] == 2
+    assert canary_summary["hbt_jobs_started"] == 0
+    assert canary_summary["manual_filter_used"] is False
+    assert (tmp_path / "canary_manifest.jsonl").read_text(encoding="utf-8").count("\n") == 2
+    assert not (tmp_path / "parameter_surface.jsonl").exists()
 
 
 def _write_adapter_status_json(tmp_path: Path) -> Path:
