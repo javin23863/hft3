@@ -488,7 +488,35 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     submit_ret = None
     response_ret = None
     cancel_ret = None
+    cancel_response_ret = None
     order_snapshot: dict[str, Any] = {}
+    last_recorded_exec_qty = 0.0
+
+    def record_order_state(event_type: str, state: Any, step: int) -> None:
+        nonlocal last_recorded_exec_qty, order_snapshot
+        active_orders = hbt.orders(0)
+        api_calls.append("HashMapMarketDepthBacktest.orders")
+        order_obj = _get_order(active_orders, order_id)
+        snapshot = _order_snapshot(order_obj)
+        if not snapshot:
+            return
+        order_snapshot = snapshot
+        orders.append({"order_id": order_id, "event_type": event_type, "step": step, **snapshot})
+        exec_qty = float(snapshot.get("exec_qty") or 0.0)
+        if exec_qty <= last_recorded_exec_qty:
+            return
+        fill_delta = exec_qty - last_recorded_exec_qty
+        last_recorded_exec_qty = exec_qty
+        fills.append(
+            {
+                "order_id": order_id,
+                "step": step,
+                "filled_quantity": fill_delta,
+                "cumulative_exec_qty": exec_qty,
+                "avg_fill_price": float(snapshot.get("exec_price") or 0.0),
+                "fees": _float_field(state, "fee"),
+            }
+        )
 
     try:
         for step in range(max_steps):
@@ -496,16 +524,19 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             api_calls.append(api_name)
             if ret != 0:
                 break
-            _maybe_call(hbt, "clear_inactive_orders", 0)
-            api_calls.append("HashMapMarketDepthBacktest.clear_inactive_orders")
-            depth = hbt.depth(0)
-            api_calls.append("HashMapMarketDepthBacktest.depth")
             state = _state_values(hbt)
             api_calls.append("HashMapMarketDepthBacktest.state_values")
             positions.append({"step": step, "position": _float_field(state, "position"), "balance": _float_field(state, "balance"), "fee": _float_field(state, "fee")})
             equity.append({"step": step, "net_pnl": _float_field(state, "balance")})
             if submitted:
+                record_order_state("ORDER_STATE_AFTER_ELAPSE", state, step)
+                _maybe_call(hbt, "clear_inactive_orders", 0)
+                api_calls.append("HashMapMarketDepthBacktest.clear_inactive_orders")
                 continue
+            _maybe_call(hbt, "clear_inactive_orders", 0)
+            api_calls.append("HashMapMarketDepthBacktest.clear_inactive_orders")
+            depth = hbt.depth(0)
+            api_calls.append("HashMapMarketDepthBacktest.depth")
             price = _price_from_depth(depth, side, price_mode)
             if price is None:
                 continue
@@ -529,28 +560,25 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                     "response_return_code": response_ret,
                 }
             )
-            active_orders = hbt.orders(0)
-            api_calls.append("HashMapMarketDepthBacktest.orders")
-            order_obj = _get_order(active_orders, order_id)
-            order_snapshot = _order_snapshot(order_obj)
-            if order_snapshot:
-                orders.append({"order_id": order_id, "event_type": "ORDER_STATE", **order_snapshot})
-                exec_qty = float(order_snapshot.get("exec_qty") or 0.0)
-                if exec_qty > 0:
-                    fills.append(
-                        {
-                            "order_id": order_id,
-                            "filled_quantity": exec_qty,
-                            "avg_fill_price": float(order_snapshot.get("exec_price") or 0.0),
-                            "fees": _float_field(state, "fee"),
-                        }
-                    )
+            state = _state_values(hbt)
+            api_calls.append("HashMapMarketDepthBacktest.state_values")
+            record_order_state("ORDER_STATE", state, step)
         if submitted and float(order_snapshot.get("leaves_qty") or 0.0) > 0 and hasattr(hbt, "cancel"):
             cancel_ret = int(hbt.cancel(0, order_id, False))
             api_calls.append("HashMapMarketDepthBacktest.cancel")
-            hbt.wait_order_response(0, order_id, interval_ns)
+            cancel_response_ret = int(hbt.wait_order_response(0, order_id, interval_ns))
             api_calls.append("HashMapMarketDepthBacktest.wait_order_response")
-            orders.append({"order_id": order_id, "event_type": "ORDER_CANCEL_REQUESTED", "cancel_return_code": cancel_ret})
+            orders.append(
+                {
+                    "order_id": order_id,
+                    "event_type": "ORDER_CANCEL_REQUESTED",
+                    "cancel_return_code": cancel_ret,
+                    "cancel_response_return_code": cancel_response_ret,
+                }
+            )
+            state = _state_values(hbt)
+            api_calls.append("HashMapMarketDepthBacktest.state_values")
+            record_order_state("ORDER_STATE_AFTER_CANCEL", state, max_steps)
         _maybe_call(hbt, "clear_inactive_orders", 0)
         final_state = _state_values(hbt)
     except Exception as exc:
@@ -573,7 +601,8 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     orders_intended = 1
     orders_submitted = 1 if submitted and submit_ret == 0 else 0
     orders_acknowledged = 1 if response_ret in (0, 3) else 0
-    filled_orders = 1 if fills_count else 0
+    total_filled_qty = sum(float(row.get("filled_quantity") or 0.0) for row in fills)
+    filled_orders = 1 if total_filled_qty > 0 else 0
     fill_rate = filled_orders / orders_submitted if orders_submitted else 0.0
     replay = {
         "schema_version": "hft3_hftbacktest_only_official_replay_v1",
@@ -595,7 +624,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "orders_cancelled": 1 if cancel_ret == 0 else 0,
         "fills_count": fills_count,
         "partial_fills_count": _partial_fill_count(fills, quantity),
-        "unfilled_count": 1 if submitted and not fills else 0,
+        "unfilled_count": 1 if submitted and total_filled_qty <= 0 else 0,
         "fill_rate": fill_rate,
         "gross_pnl": gross_pnl,
         "net_pnl": net_pnl,

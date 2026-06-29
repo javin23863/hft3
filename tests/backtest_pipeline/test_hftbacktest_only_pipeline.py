@@ -131,7 +131,12 @@ def _config(tmp_path: Path, data_path: Path, snapshot_path: Path) -> HftBacktest
     )
 
 
-def _install_fake_hftbacktest(monkeypatch: pytest.MonkeyPatch) -> None:
+def _install_fake_hftbacktest(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    passive_fill_after_elapse: bool = False,
+    wait_response_code: int = 0,
+) -> None:
     dtype, constants = _event_contract()
 
     class RecordingAsset:
@@ -163,19 +168,21 @@ def _install_fake_hftbacktest(monkeypatch: pytest.MonkeyPatch) -> None:
             return self
 
     class RecordingOrderDict:
-        def __init__(self, order_id: int) -> None:
+        def __init__(self, order_id: int, *, filled: bool) -> None:
             self.order_id = order_id
+            self.filled = filled
 
         def get(self, order_id: int) -> dict[str, object] | None:
             if order_id != self.order_id:
                 return None
+            exec_qty = 1.0 if self.filled else 0.0
             return {
                 "status": 1,
                 "qty": 1.0,
-                "leaves_qty": 1.0,
-                "exec_qty": 0.0,
+                "leaves_qty": 0.0 if self.filled else 1.0,
+                "exec_qty": exec_qty,
                 "price": 5000.0,
-                "exec_price": 0.0,
+                "exec_price": 5000.0 if self.filled else 0.0,
                 "exch_timestamp": 1_000_000_000,
                 "local_timestamp": 1_000_000_100,
             }
@@ -196,6 +203,8 @@ def _install_fake_hftbacktest(monkeypatch: pytest.MonkeyPatch) -> None:
             return SimpleNamespace(best_bid=5000.0, best_ask=5000.25, tick_size=0.25)
 
         def state_values(self, _asset_no: int) -> dict[str, float]:
+            if passive_fill_after_elapse and self.order_id and self.steps >= 2:
+                return {"position": 1.0, "balance": 12.5, "fee": 0.47}
             return {"position": 0.0, "balance": 0.0, "fee": 0.0}
 
         def submit_buy_order(self, _asset_no: int, order_id: int, *_args: object) -> int:
@@ -207,10 +216,11 @@ def _install_fake_hftbacktest(monkeypatch: pytest.MonkeyPatch) -> None:
             return 0
 
         def wait_order_response(self, *_args: object) -> int:
-            return 0
+            return wait_response_code
 
         def orders(self, _asset_no: int) -> RecordingOrderDict:
-            return RecordingOrderDict(self.order_id)
+            filled = passive_fill_after_elapse and self.order_id != 0 and self.steps >= 2
+            return RecordingOrderDict(self.order_id, filled=filled)
 
         def cancel(self, *_args: object) -> int:
             return 0
@@ -260,6 +270,32 @@ def test_active_hftbacktest_only_run_writes_outputs_without_vectorbt(
     assert manifest["vectorbt_dependency"] == "forbidden_active_path"
     assert decision["promotion_allowed"] is False
     assert "backtest_pipeline.src.vectorbt_adapter" not in sys.modules
+
+
+def test_active_hftbacktest_only_run_records_passive_fill_after_later_elapse(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(
+        monkeypatch,
+        passive_fill_after_elapse=True,
+        wait_response_code=3,
+    )
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "hbt_passive_fill"
+
+    result = run_hftbacktest_only(_config(tmp_path, data_path, snapshot_path), out_dir=out_dir)
+
+    assert result["status"] == "completed"
+    stats = json.loads((out_dir / "stats_summary.json").read_text(encoding="utf-8"))
+    recorder = np.load(out_dir / "recorder_result.npz")
+    assert stats["fills_count"] == 1
+    assert stats["fill_rate"] == 1.0
+    assert stats["unfilled_count"] == 0
+    assert stats["orders_acknowledged"] == 1
+    assert stats["net_pnl"] == 12.5
+    assert recorder["fill_quantities"].tolist() == [1.0]
 
 
 def test_invalid_data_does_not_write_promotion_decision(
