@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Iterable as IterableABC
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -22,6 +23,7 @@ PARAMETER_SURFACE_SCHEMA_VERSION = "hft3_hftbacktest_only_parameter_surface_mani
 PARAMETER_SURFACE_SUMMARY_SCHEMA_VERSION = (
     "hft3_hftbacktest_only_parameter_surface_manifest_summary_v1"
 )
+PRODUCT_METADATA_POLICY = "explicit_per_symbol_contract_tick_lot_contract_required"
 DEFAULT_REGISTRY_PATH = (
     Path(__file__).resolve().parents[2]
     / "features_engine"
@@ -49,6 +51,12 @@ REQUIRED_ROW_FIELDS = (
     "event_window",
     "initial_snapshot",
     "initial_snapshot_sha256",
+    "prepared_manifest",
+    "tick_size",
+    "lot_size",
+    "contract_size",
+    "product_metadata_source",
+    "metadata_policy",
     "admissibility_status",
     "blocker_code",
     "blocker_detail",
@@ -73,6 +81,12 @@ REQUIRED_PARAMETER_SURFACE_ROW_FIELDS = (
     "event_window",
     "initial_snapshot",
     "initial_snapshot_sha256",
+    "prepared_manifest",
+    "tick_size",
+    "lot_size",
+    "contract_size",
+    "product_metadata_source",
+    "metadata_policy",
     "parameter_family",
     "parameter_hash",
     "strategy_params",
@@ -420,17 +434,6 @@ def validate_parameter_surface_rows(rows: Iterable[Mapping[str, Any]]) -> None:
             )
 
 
-def select_canary_rows(
-    rows: Iterable[Mapping[str, Any]],
-    *,
-    limit: int,
-) -> list[dict[str, Any]]:
-    """Return the first rows by manifest order for local canaries."""
-    if limit <= 0:
-        raise HftBacktestOnlyCampaignManifestError("canary_limit_must_be_positive")
-    return [dict(row) for row in list(rows)[:limit]]
-
-
 def _build_parameter_surface_row(
     *,
     campaign_row: Mapping[str, Any],
@@ -456,6 +459,12 @@ def _build_parameter_surface_row(
         "event_window": dict(campaign_row["event_window"]),
         "initial_snapshot": campaign_row["initial_snapshot"],
         "initial_snapshot_sha256": campaign_row["initial_snapshot_sha256"],
+        "prepared_manifest": campaign_row.get("prepared_manifest", ""),
+        "tick_size": campaign_row.get("tick_size"),
+        "lot_size": campaign_row.get("lot_size"),
+        "contract_size": campaign_row.get("contract_size"),
+        "product_metadata_source": campaign_row.get("product_metadata_source", ""),
+        "metadata_policy": campaign_row.get("metadata_policy", ""),
         "parameter_family": parameter_set["parameter_family"],
         "parameter_hash": parameter_hash,
         "strategy_params": dict(parameter_set["strategy_params"]),
@@ -485,33 +494,44 @@ def _build_row(
     adapter_status: str,
     authority_refs: tuple[str, ...],
 ) -> dict[str, Any]:
-    source_npz = str(prepared.get("normalized_npz") or "")
+    source_npz = str(prepared.get("normalized_npz") or prepared.get("source_npz") or "")
     initial_snapshot = str(prepared.get("initial_snapshot") or "")
     source_path = Path(source_npz) if source_npz else None
     snapshot_path = Path(initial_snapshot) if initial_snapshot else None
     source_exists = bool(source_path and source_path.is_file())
     snapshot_exists = bool(snapshot_path and snapshot_path.is_file())
     blocker_details: list[str] = []
-    blocker_code = ""
+    blocker_code = str(prepared.get("blocker_code") or "")
     admissibility_status = "admissible"
+    prepared_authority_refs = _authority_ref_tuple(prepared.get("authority_refs"))
+    combined_authority_refs = _combine_authority_refs(
+        authority_refs,
+        prepared_authority_refs,
+    )
+    if blocker_code and prepared.get("blocker_detail"):
+        blocker_details.append(str(prepared.get("blocker_detail")))
 
-    if not source_exists:
+    if not blocker_code and not source_exists:
         blocker_code = "data_blocker:source_npz_missing"
         blocker_details.append(f"source_npz={source_npz or '<missing>'}")
-    elif not snapshot_exists:
+    elif not blocker_code and not snapshot_exists:
         blocker_code = "data_blocker:initial_snapshot_missing"
         blocker_details.append(f"initial_snapshot={initial_snapshot or '<missing>'}")
 
     missing_metadata = [
         field
-        for field in ("symbol", "contract", "event_id")
+        for field in ("symbol", "contract", "event_id", "product_metadata_source")
         if not str(prepared.get(field) or "").strip()
     ]
-    if not blocker_code and (missing_metadata or not authority_refs):
+    if str(prepared.get("metadata_policy") or "") != PRODUCT_METADATA_POLICY:
+        missing_metadata.append("metadata_policy")
+    if not prepared_authority_refs:
+        missing_metadata.append("product_authority_refs")
+    if not blocker_code and (missing_metadata or not combined_authority_refs):
         blocker_code = "authority_missing"
         if missing_metadata:
             blocker_details.append("missing_metadata=" + ",".join(missing_metadata))
-        if not authority_refs:
+        if not combined_authority_refs:
             blocker_details.append("authority_refs=<missing>")
 
     if not blocker_code and adapter_status in {
@@ -524,7 +544,11 @@ def _build_row(
     if blocker_code:
         admissibility_status = blocker_code.split(":", 1)[0]
 
-    source_hash = _sha256_file(source_path) if source_exists and source_path else ""
+    source_hash = (
+        _sha256_file(source_path)
+        if source_exists and source_path
+        else str(prepared.get("source_npz_sha256") or "")
+    )
     snapshot_hash = _sha256_file(snapshot_path) if snapshot_exists and snapshot_path else ""
     unit_id = _unit_id(
         canonical_model_id=canonical_model_id,
@@ -551,15 +575,44 @@ def _build_row(
         "event_window": _event_window(prepared),
         "initial_snapshot": initial_snapshot,
         "initial_snapshot_sha256": snapshot_hash,
+        "prepared_manifest": str(prepared.get("prepared_manifest") or ""),
+        "tick_size": prepared.get("tick_size"),
+        "lot_size": prepared.get("lot_size"),
+        "contract_size": prepared.get("contract_size"),
+        "product_metadata_source": str(prepared.get("product_metadata_source") or ""),
+        "metadata_policy": str(prepared.get("metadata_policy") or ""),
         "admissibility_status": admissibility_status,
         "blocker_code": blocker_code,
         "blocker_detail": "; ".join(blocker_details),
-        "authority_refs": list(authority_refs),
+        "authority_refs": list(combined_authority_refs),
         "adapter_status": adapter_status,
         "hbt_run_status": "not_started",
         "hbt_run_id": "",
         "promotion_decision_path": "",
     }
+
+
+def _combine_authority_refs(
+    default_refs: Iterable[str],
+    prepared_refs: Any,
+) -> tuple[str, ...]:
+    refs: list[str] = [str(ref) for ref in default_refs if str(ref).strip()]
+    if isinstance(prepared_refs, tuple):
+        refs.extend(str(ref) for ref in prepared_refs if str(ref).strip())
+        return tuple(dict.fromkeys(refs))
+    if isinstance(prepared_refs, str):
+        refs.append(prepared_refs)
+    elif isinstance(prepared_refs, IterableABC):
+        refs.extend(str(ref) for ref in prepared_refs if str(ref).strip())
+    return tuple(dict.fromkeys(refs))
+
+
+def _authority_ref_tuple(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,) if value.strip() else ()
+    if isinstance(value, IterableABC):
+        return tuple(str(ref) for ref in value if str(ref).strip())
+    return ()
 
 
 def _normalize_parameter_set(spec: Mapping[str, Any]) -> dict[str, Any]:
@@ -630,8 +683,6 @@ def _load_prepared_units(prepared_root: Path) -> list[dict[str, Any]]:
     units: list[dict[str, Any]] = []
     for manifest_path in paths:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if not manifest.get("normalized_npz") or not manifest.get("initial_snapshot"):
-            continue
         normalized_npz = _resolve_manifest_path(manifest_path, manifest.get("normalized_npz"))
         initial_snapshot = _resolve_manifest_path(manifest_path, manifest.get("initial_snapshot"))
         units.append(

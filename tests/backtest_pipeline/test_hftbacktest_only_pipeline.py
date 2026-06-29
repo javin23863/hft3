@@ -650,6 +650,7 @@ def test_prepare_lake_source_builds_snapshot_and_replay_pair(
             trade_date="2024-09-11",
             out_root=tmp_path / "hbt",
             warmup_seconds=1,
+            replay_mode="added_orders_only",
         )
     )
 
@@ -693,9 +694,73 @@ def test_prepare_lake_source_builds_snapshot_and_replay_pair(
             trade_date="2024-09-11",
             out_root=tmp_path / "hbt",
             warmup_seconds=1,
+            replay_mode="added_orders_only",
         )
     )
     assert reused["reused_existing"] is True
+
+
+def test_prepare_lake_source_default_preserves_full_l3_replay(tmp_path: Path) -> None:
+    dtype, constants = _event_contract()
+    base_ns = int(datetime(2024, 9, 11, 12, 29, tzinfo=timezone.utc).timestamp() * 1_000_000_000)
+
+    def row(event_type: int, offset_ns: int, order_id: int, price: float) -> dict[str, object]:
+        ts = base_ns + offset_ns
+        return {
+            "ev": event_type | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+            "exch_ts": ts,
+            "local_ts": ts + 100,
+            "px": price,
+            "qty": 1.0,
+            "order_id": order_id,
+            "ival": 0,
+            "fval": 0.0,
+        }
+
+    source_rows = [
+        row(constants["ADD_ORDER_EVENT"], 0, 1001, 5000.0),
+        row(constants["CANCEL_ORDER_EVENT"], 1_000_000_000, 1001, 5000.0),
+        row(constants["TRADE_EVENT"], 1_000_000_100, 9999, 5001.0),
+        row(constants["ADD_ORDER_EVENT"], 1_000_000_200, 0, 5001.25),
+        row(constants["ADD_ORDER_EVENT"], 1_000_000_300, 1002, 5002.0),
+        row(constants["ADD_ORDER_EVENT"], 1_000_000_400, 1002, 5002.25),
+    ]
+    source = tmp_path / "full_replay_source.npz"
+    events = np.zeros(len(source_rows), dtype=dtype)
+    for index, source_row in enumerate(source_rows):
+        for field, value in source_row.items():
+            events[index][field] = value
+    np.savez_compressed(source, data=events)
+
+    prepared = prepare_hftbacktest_only_l3_from_lake(
+        HftBacktestOnlyPrepareConfig(
+            source_npz=source,
+            symbol="NQ",
+            contract="NQU4",
+            event_id="CPI_2024_09_11_TIGHT",
+            trade_date="2024-09-11",
+            out_root=tmp_path / "hbt",
+            warmup_seconds=1,
+        )
+    )
+
+    with np.load(prepared["normalized_npz"], allow_pickle=False) as payload:
+        replay = payload["data"]
+    assert [(int(row["ev"]) & 0xFF, int(row["order_id"])) for row in replay] == [
+        (constants["CANCEL_ORDER_EVENT"], 1001),
+        (constants["TRADE_EVENT"], 9999),
+        (constants["ADD_ORDER_EVENT"], 0),
+        (constants["ADD_ORDER_EVENT"], 1002),
+        (constants["ADD_ORDER_EVENT"], 1002),
+    ]
+    assert prepared["status"] == "hbt_full_l3_event_replay_prepared"
+    assert prepared["replay_mode"] == "full_l3_event_replay"
+    assert prepared["dropped_rows"] == {
+        "preexisting_or_unknown_lifecycle": 0,
+        "duplicate_add": 0,
+        "zero_order_id": 0,
+    }
+    assert "Not full-market replay" not in prepared["caveat"]
 
 
 def test_prepare_lake_source_keeps_partial_trade_order_active(tmp_path: Path) -> None:

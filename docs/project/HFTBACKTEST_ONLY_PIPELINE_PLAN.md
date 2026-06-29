@@ -344,8 +344,10 @@ Uniform campaign manifest rule:
   `source_npz_sha256`, `initial_snapshot_sha256`, symbol/contract/event
   metadata, `adapter_status`, `authority_refs`, `hbt_run_status`, and
   `promotion_decision_path`;
-- local canaries select the first bounded rows by manifest order, not by model
-  preference.
+- local subsets are not an active proof path for this plan. The active campaign
+  unit is the full deterministic manifest; any later subset requires an explicit
+  owner order and must still be selected by manifest order, not model,
+  instrument, or expected result.
 
 Evidence-ledger and parameter-surface rule:
 
@@ -364,6 +366,18 @@ Evidence-ledger and parameter-surface rule:
 - missing adapter, missing data, missing authority, or feature-surface mismatch
   remains a `pipeline_blocker`, `data_blocker`, or `authority_missing` state,
   never a model rejection state.
+
+Product-metadata authority rule:
+
+- full-lake HBT preparation uses explicit product metadata from
+  `config/hftbacktest/cme_lake_product_metadata.yaml`;
+- the policy is
+  `explicit_per_symbol_contract_tick_lot_contract_required`;
+- no HBT active path may inherit an ES-shaped default, turn `symbol` into
+  `contract`, or map `VIX.OPT` into a futures product;
+- missing product metadata, missing contract metadata, or a non-executable
+  instrument writes an authority/data blocker manifest and still appears in the
+  campaign evidence surface.
 
 Required interface:
 
@@ -553,6 +567,17 @@ Implementation progress as of 2026-06-29:
   `artifacts/hbt_runs/<run_id>/`.
 - Step 6 historical VectorBT/Stage A docs are reclassified as legacy or
   inactive where they previously described active-path prerequisites.
+- Full-lake HBT preparation now uses
+  `scripts/prepare_hftbacktest_only_from_lake_manifest.py` plus explicit
+  `config/hftbacktest/cme_lake_product_metadata.yaml`.
+- Full campaign execution now uses
+  `scripts/run_hftbacktest_only_campaign.py` over the generated manifest;
+  pre-HBT blockers write campaign row receipts rather than disappearing or
+  becoming model rejections.
+- Vast execution instructions are recorded in
+  `docs/operations/VAST_HFT_CAMPAIGN.md`: build `hft3_features_cpp`, prepare
+  the full lake, build canonical campaign/parameter-surface manifests, then run
+  the HBT campaign executor with receipts.
 
 ### Step 1: Freeze VectorBT Active Path
 
@@ -638,6 +663,43 @@ Searches for active-path docs no longer present VectorBT survivors, Stage A, or
 screening_artifact promotion as HftBacktest prerequisites.
 ```
 
+### Step 7: Prepare Full Lake HBT Units
+
+Convert every row in the lake manifest into either a prepared HBT unit or an
+explicit blocker manifest. Do not choose a symbol manually.
+
+Acceptance:
+
+```text
+The prepare summary accounts for every lake manifest row and records product
+metadata status for every symbol/event.
+```
+
+### Step 8: Build Uniform Campaign And Parameter Surface
+
+Build the deterministic manifest from every canonical registry slug and every
+prepared HBT source/event unit, then expand declared parameter proposals by
+`parameter_hash` before the full campaign.
+
+Acceptance:
+
+```text
+The manifest contains every canonical registry slug. Parameter rows are proposal
+rows only until their HBT artifacts exist.
+```
+
+### Step 9: Run Full HBT Campaign
+
+Execute the whole manifest through HftBacktest. Blockers are preserved as
+blockers, and completed rows write HBT artifacts.
+
+Acceptance:
+
+```text
+Every manifest row has a campaign receipt. Completed rows have
+recorder_result.npz and stats_summary.json before promotion_decision.json.
+```
+
 ## Required HFT Workflow
 
 Every implementation slice under this plan uses the hft3 workflow from Fable,
@@ -704,7 +766,13 @@ The HftBacktest-only active pipeline is accepted only when all are true:
    explicit in every run artifact.
 9. The uniform campaign manifest includes every canonical registry slug and
    records omissions or adapter failures as blockers, never model rejection.
-10. Plan Drift Review passes against this document.
-11. PR GrepLoop is last and clean on the current review head, or the handoff
+10. Full-lake preparation accounts for every lake manifest row using explicit
+    product metadata or an authority/data blocker manifest.
+11. The compiled feature extension is available on the execution host; Python
+    fallback warnings block the full Vast campaign until fixed.
+12. No active proof path depends on a local subset, handpicked symbol, or
+    preferred model.
+13. Plan Drift Review passes against this document.
+14. PR GrepLoop is last and clean on the current review head, or the handoff
     reports the exact unavailable or waived state with `merge-ready: no`.
 ```

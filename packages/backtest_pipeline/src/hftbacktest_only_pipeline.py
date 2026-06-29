@@ -143,6 +143,7 @@ class HftBacktestOnlyPrepareConfig:
     tick_size: float = 0.25
     lot_size: float = 1.0
     contract_size: float = 1.0
+    replay_mode: str = "full_l3_event_replay"
     force_rebuild: bool = False
 
 
@@ -153,8 +154,10 @@ def prepare_hftbacktest_only_l3_from_lake(config: HftBacktestOnlyPrepareConfig) 
         raise HftBacktestOnlyPipelineError(f"source_npz_missing:{source_npz}")
     if config.warmup_seconds <= 0:
         raise HftBacktestOnlyPipelineError("warmup_seconds_must_be_positive")
+    if config.replay_mode not in {"full_l3_event_replay", "added_orders_only"}:
+        raise HftBacktestOnlyPipelineError(f"unknown_prepare_replay_mode:{config.replay_mode}")
 
-    stem = config.output_stem or f"{_safe_stem(config.event_id)}_warmup_{config.warmup_seconds}s_replay_added_orders_only"
+    stem = config.output_stem or f"{_safe_stem(config.event_id)}_warmup_{config.warmup_seconds}s_{config.replay_mode}"
     out_dir = Path(config.out_root) / "prepared" / _safe_stem(config.symbol) / config.trade_date
     normalized_npz = out_dir / f"{stem}_l3.npz"
     initial_snapshot = out_dir / f"{stem}_initial_snapshot.npz"
@@ -171,6 +174,7 @@ def prepare_hftbacktest_only_l3_from_lake(config: HftBacktestOnlyPrepareConfig) 
         if (
             manifest.get("source_npz_sha256") == source_hash
             and int(manifest.get("warmup_seconds", -1)) == int(config.warmup_seconds)
+            and manifest.get("replay_mode") == config.replay_mode
             and manifest.get("normalized_npz") == str(normalized_npz)
             and manifest.get("initial_snapshot") == str(initial_snapshot)
         ):
@@ -192,20 +196,39 @@ def prepare_hftbacktest_only_l3_from_lake(config: HftBacktestOnlyPrepareConfig) 
     replay = events[events["exch_ts"] >= cutoff_ts_ns]
 
     snapshot = _snapshot_from_warmup(warmup, cutoff_ts_ns)
-    prepared_replay, dropped = _filter_replay_added_orders_only(replay)
+    if config.replay_mode == "added_orders_only":
+        prepared_replay, dropped = _filter_replay_added_orders_only(replay)
+        status = "research_smoke_derived_subset"
+        caveat = (
+            "Derived smoke subset: snapshot supplies depth; replay keeps only order IDs "
+            "added after cutoff. Not full-market replay or promotion evidence."
+        )
+    else:
+        prepared_replay = replay.copy()
+        dropped = {
+            "preexisting_or_unknown_lifecycle": 0,
+            "duplicate_add": 0,
+            "zero_order_id": 0,
+        }
+        status = "hbt_full_l3_event_replay_prepared"
+        caveat = (
+            "Full L3 replay rows are preserved after the warmup cutoff; the initial "
+            "snapshot is derived from warmup rows before cutoff."
+        )
 
     _save_npz_atomic(normalized_npz, data=prepared_replay, timestamp_units="nanoseconds")
     _save_npz_atomic(initial_snapshot, data=snapshot, timestamp_units="nanoseconds")
 
     manifest = {
         "schema_version": "hft3_hbt_only_lake_prepare_v1",
-        "status": "research_smoke_derived_subset",
+        "status": status,
         "plan": PLAN_PATH,
         "source": config.source,
         "source_npz": str(source_npz),
         "source_npz_sha256": source_hash,
         "source_rows": int(len(events)),
         "warmup_seconds": int(config.warmup_seconds),
+        "replay_mode": config.replay_mode,
         "start_ts_ns": start_ts_ns,
         "cutoff_ts_ns": cutoff_ts_ns,
         "end_ts_ns": end_ts_ns,
@@ -229,10 +252,7 @@ def prepare_hftbacktest_only_l3_from_lake(config: HftBacktestOnlyPrepareConfig) 
         "timezone": "UTC",
         "validation_status": "pending_hftbacktest_only_validation",
         "timestamp_units": "nanoseconds",
-        "caveat": (
-            "Derived smoke subset: snapshot supplies depth; replay keeps only order IDs "
-            "added after cutoff. Not full-market replay or promotion evidence."
-        ),
+        "caveat": caveat,
     }
     _write_json(manifest_path, manifest)
     return {**manifest, "manifest_path": str(manifest_path), "reused_existing": False}

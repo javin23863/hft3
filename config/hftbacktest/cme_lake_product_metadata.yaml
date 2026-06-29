@@ -1,0 +1,333 @@
+schema_version: hft3_hbt_lake_product_metadata_v1
+metadata_policy: explicit_per_symbol_contract_tick_lot_contract_required
+source_note: >
+  HFTBacktest-only prepared-data authority for the current C:\hft3-lake\npz
+  JSON manifest symbols. Values are product metadata for replay economics; the
+  lake symbols are Databento continuous symbols, so contract is an explicit
+  continuous-front replay label, not a dated expiry claim. Future dated-contract
+  source manifests must supply dated contract metadata explicitly. VIX.OPT is a
+  sensor/clue source, not an executable HBT futures target.
+authority_refs:
+  - docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md
+  - vault:decisions/2026-06-29 HBT-only all-model uniform-flow rule.md
+  - https://databento.com/docs/standards-and-conventions/symbology
+  - https://www.cmegroup.com/markets/products
+  - https://www.cmegroup.com/markets/equities/sp/e-mini-sandp500.contractSpecs.html
+  - https://www.cmegroup.com/markets/equities/nasdaq/e-mini-nasdaq-100.contractSpecs.html
+  - https://www.cmegroup.com/markets/energy/crude-oil/light-sweet-crude.contractSpecs.html
+  - https://www.cmegroup.com/markets/interest-rates/us-treasury/10-year-us-treasury-note.contractSpecs.html
+
+symbols:
+  CL.v.0:
+    canonical_internal_symbol: CL
+    contract: CL.v.0
+    contract_role: continuous_front
+    exchange: NYMEX
+    venue: GLBX
+    asset_class: energy
+    tradable: true
+    order_book_available: true
+    tick_size: 0.01
+    lot_size: 1.0
+    contract_size: 1000.0
+    tick_value: 10.0
+    authority_refs:
+      - https://www.cmegroup.com/markets/energy/crude-oil/light-sweet-crude.contractSpecs.html
+  ES.v.0:
+    canonical_internal_symbol: ES
+    contract: ES.v.0
+    contract_role: continuous_front
+    exchange: CME
+    venue: GLBX
+    asset_class: equity_index
+    tradable: true
+    order_book_available: true
+    tick_size: 0.25
+    lot_size: 1.0
+    contract_size: 50.0
+    tick_value: 12.5
+    authority_refs:
+      - https://www.cmegroup.com/markets/equities/sp/e-mini-sandp500.contractSpecs.html
+  GC.v.0:
+    canonical_internal_symbol: GC
+    contract: GC.v.0
+    contract_role: continuous_front
+    exchange: COMEX
+    venue: GLBX
+    asset_class: metals
+    tradable: true
+    order_book_available: true
+    tick_size: 0.10
+    lot_size: 1.0
+    contract_size: 100.0
+    tick_value: 10.0
+    authority_refs:
+      - https://www.cmegroup.com/markets/metals/precious/gold.contractSpecs.html
+  M2K.v.0:
+    canonical_internal_symbol: M2K
+    contract: M2K.v.0
+    contract_role: continuous_front
+    exchange: CME
+    venue: GLBX
+    asset_class: equity_index
+    tradable: true
+    order_book_available: true
+    tick_size: 0.10
+    lot_size: 1.0
+    contract_size: 5.0
+    tick_value: 0.50
+    authority_refs:
+      - https://www.cmegroup.com/markets/equities/russell/micro-e-mini-russell-2000.contractSpecs.html
+  MCL.v.0:
+    canonical_internal_symbol: MCL
+    contract: MCL.v.0
+    contract_role: continuous_front
+    exchange: NYMEX
+    venue: GLBX
+    asset_class: energy
+    tradable: true
+    order_book_available: true
+    tick_size: 0.01
+    lot_size: 1.0
+    contract_size: 100.0
+    tick_value: 1.0
+    authority_refs:
+      - https://www.cmegroup.com/markets/energy/crude-oil/micro-wti-crude-oil.contractSpecs.html
+  MES.v.0:
+    canonical_internal_symbol: MES
+    contract: MES.v.0
+    contract_role: continuous_front
+    exchange: CME
+    venue: GLBX
+    asset_class: equity_index
+    tradable: true
+    order_book_available: true
+    tick_size: 0.25
+    lot_size: 1.0
+    contract_size: 5.0
+    tick_value: 1.25
+    authority_refs:
+      - https://www.cmegroup.com/markets/equities/sp/micro-e-mini-sandp500.contractSpecs.html
+  MGC.v.0:
+    canonical_internal_symbol: MGC
+    contract: MGC.v.0
+    contract_role: continuous_front
+    exchange: COMEX
+    venue: GLBX
+    asset_class: metals
+    tradable: true
+    order_book_available: true
+    tick_size: 0.10
+    lot_size: 1.0
+    contract_size: 10.0
+    tick_value: 1.0
+    authority_refs:
+      - https://www.cmegroup.com/markets/metals/precious/micro-gold.contractSpecs.html
+  MNQ.v.0:
+    canonical_internal_symbol: MNQ
+    contract: MNQ.v.0
+    contract_role: continuous_front
+    exchange: CME
+    venue: GLBX
+    asset_class: equity_index
+    tradable: true
+    order_book_available: true
+    tick_size: 0.25
+    lot_size: 1.0
+    contract_size: 2.0
+    tick_value: 0.50
+    authority_refs:
+      - https://www.cmegroup.com/markets/equities/nasdaq/micro-e-mini-nasdaq-100.contractSpecs.html
+  MYM.v.0:
+    canonical_internal_symbol: MYM
+    contract: MYM.v.0
+    contract_role: continuous_front
+    exchange: CBOT
+    venue: GLBX
+    asset_class: equity_index
+    tradable: true
+    order_book_available: true
+    tick_size: 1.0
+    lot_size: 1.0
+    contract_size: 0.5
+    tick_value: 0.50
+    authority_refs:
+      - https://www.cmegroup.com/markets/equities/dow-jones/micro-e-mini-dow.contractSpecs.html
+  NG.v.0:
+    canonical_internal_symbol: NG
+    contract: NG.v.0
+    contract_role: continuous_front
+    exchange: NYMEX
+    venue: GLBX
+    asset_class: energy
+    tradable: true
+    order_book_available: true
+    tick_size: 0.001
+    lot_size: 1.0
+    contract_size: 10000.0
+    tick_value: 10.0
+    authority_refs:
+      - https://www.cmegroup.com/markets/energy/natural-gas/natural-gas.contractSpecs.html
+  NQ.v.0:
+    canonical_internal_symbol: NQ
+    contract: NQ.v.0
+    contract_role: continuous_front
+    exchange: CME
+    venue: GLBX
+    asset_class: equity_index
+    tradable: true
+    order_book_available: true
+    tick_size: 0.25
+    lot_size: 1.0
+    contract_size: 20.0
+    tick_value: 5.0
+    authority_refs:
+      - https://www.cmegroup.com/markets/equities/nasdaq/e-mini-nasdaq-100.contractSpecs.html
+  RTY.v.0:
+    canonical_internal_symbol: RTY
+    contract: RTY.v.0
+    contract_role: continuous_front
+    exchange: CME
+    venue: GLBX
+    asset_class: equity_index
+    tradable: true
+    order_book_available: true
+    tick_size: 0.10
+    lot_size: 1.0
+    contract_size: 50.0
+    tick_value: 5.0
+    authority_refs:
+      - https://www.cmegroup.com/markets/equities/russell/e-mini-russell-2000.contractSpecs.html
+  SR3.v.0:
+    canonical_internal_symbol: SR3
+    contract: SR3.v.0
+    contract_role: continuous_front
+    exchange: CME
+    venue: GLBX
+    asset_class: rates
+    tradable: true
+    order_book_available: true
+    tick_size: 0.0025
+    lot_size: 1.0
+    contract_size: 2500.0
+    tick_value: 6.25
+    authority_refs:
+      - https://www.cmegroup.com/markets/interest-rates/stirs/three-month-sofr.contractSpecs.html
+  UB.v.0:
+    canonical_internal_symbol: UB
+    contract: UB.v.0
+    contract_role: continuous_front
+    exchange: CBOT
+    venue: GLBX
+    asset_class: rates
+    tradable: true
+    order_book_available: true
+    tick_size: 0.03125
+    lot_size: 1.0
+    contract_size: 1000.0
+    tick_value: 31.25
+    authority_refs:
+      - https://www.cmegroup.com/markets/interest-rates/us-treasury/ultra-t-bond.contractSpecs.html
+  VIX.OPT:
+    canonical_internal_symbol: VIX.OPT
+    contract: ""
+    contract_role: options_clue_sensor
+    exchange: CBOE
+    venue: CBOE
+    asset_class: volatility_options
+    tradable: false
+    order_book_available: false
+    blocker_code: authority_missing:vix_options_clue_not_hbt_executable_target
+    blocker_detail: vix_options_clue_not_hbt_executable_target
+    authority_refs:
+      - https://www.cboe.com/tradable_products/vix/vix_options/specifications/
+  YM.v.0:
+    canonical_internal_symbol: YM
+    contract: YM.v.0
+    contract_role: continuous_front
+    exchange: CBOT
+    venue: GLBX
+    asset_class: equity_index
+    tradable: true
+    order_book_available: true
+    tick_size: 1.0
+    lot_size: 1.0
+    contract_size: 5.0
+    tick_value: 5.0
+    authority_refs:
+      - https://www.cmegroup.com/markets/equities/dow-jones/e-mini-dow.contractSpecs.html
+  ZB.v.0:
+    canonical_internal_symbol: ZB
+    contract: ZB.v.0
+    contract_role: continuous_front
+    exchange: CBOT
+    venue: GLBX
+    asset_class: rates
+    tradable: true
+    order_book_available: true
+    tick_size: 0.03125
+    lot_size: 1.0
+    contract_size: 1000.0
+    tick_value: 31.25
+    authority_refs:
+      - https://www.cmegroup.com/markets/interest-rates/us-treasury/30-year-us-treasury-bond.contractSpecs.html
+  ZF.v.0:
+    canonical_internal_symbol: ZF
+    contract: ZF.v.0
+    contract_role: continuous_front
+    exchange: CBOT
+    venue: GLBX
+    asset_class: rates
+    tradable: true
+    order_book_available: true
+    tick_size: 0.0078125
+    lot_size: 1.0
+    contract_size: 1000.0
+    tick_value: 7.8125
+    authority_refs:
+      - https://www.cmegroup.com/markets/interest-rates/us-treasury/5-year-us-treasury-note.contractSpecs.html
+  ZN.v.0:
+    canonical_internal_symbol: ZN
+    contract: ZN.v.0
+    contract_role: continuous_front
+    exchange: CBOT
+    venue: GLBX
+    asset_class: rates
+    tradable: true
+    order_book_available: true
+    tick_size: 0.015625
+    lot_size: 1.0
+    contract_size: 1000.0
+    tick_value: 15.625
+    authority_refs:
+      - https://www.cmegroup.com/markets/interest-rates/us-treasury/10-year-us-treasury-note.contractSpecs.html
+  ZQ.v.0:
+    canonical_internal_symbol: ZQ
+    contract: ZQ.v.0
+    contract_role: continuous_front
+    exchange: CME
+    venue: GLBX
+    asset_class: rates
+    tradable: true
+    order_book_available: true
+    tick_size: 0.0025
+    lot_size: 1.0
+    contract_size: 4167.0
+    tick_value: 10.4175
+    authority_refs:
+      - https://www.cmegroup.com/markets/interest-rates/stirs/30-day-federal-fund.contractSpecs.html
+  ZT.v.0:
+    canonical_internal_symbol: ZT
+    contract: ZT.v.0
+    contract_role: continuous_front
+    exchange: CBOT
+    venue: GLBX
+    asset_class: rates
+    tradable: true
+    order_book_available: true
+    tick_size: 0.00390625
+    lot_size: 1.0
+    contract_size: 2000.0
+    tick_value: 7.8125
+    authority_refs:
+      - https://www.cmegroup.com/markets/interest-rates/us-treasury/2-year-us-treasury-note.contractSpecs.html

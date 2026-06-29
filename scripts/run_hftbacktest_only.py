@@ -65,6 +65,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-npz", type=Path, default=None)
     parser.add_argument("--trade-date", default=None)
     parser.add_argument("--warmup-seconds", type=int, default=30)
+    parser.add_argument(
+        "--prepare-replay-mode",
+        choices=("full_l3_event_replay", "added_orders_only"),
+        default="full_l3_event_replay",
+    )
     parser.add_argument("--prepare-out-root", type=Path, default=REPO / "data" / "hbt")
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--force-prepare", action="store_true")
@@ -101,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
                 trade_date=args.trade_date or _trade_date_from_event_id(args.event_id),
                 out_root=args.prepare_out_root.resolve(),
                 warmup_seconds=args.warmup_seconds,
+                replay_mode=args.prepare_replay_mode,
                 tick_size=args.tick_size,
                 lot_size=args.lot_size,
                 contract_size=args.contract_size,

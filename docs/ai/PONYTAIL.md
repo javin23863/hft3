@@ -70,6 +70,16 @@ If the answer to 3 or 4 is yes, stop and repair the plan before implementation.
 Parameter proposals with `objective_evaluations=0` are proposal manifests only,
 not adaptive optimizers or pre-HBT rejection evidence.
 
+Full-campaign HBT work is not a place for local proof shortcuts. Do not add a
+handpicked-symbol subset, hidden preference filter, or permanent shortcut path
+unless the owner explicitly orders that diagnostic. Keep the minimum code shape
+by extending the manifest/runner already present.
+
+Contract metadata must be explicit per executable HBT product. Do not inherit
+ES-shaped defaults, fall back from missing `contract` to `symbol`, or substitute
+nearby instruments for authority gaps. Missing product metadata writes a blocker
+receipt and remains in the evidence surface.
+
 ## Vast operations (hft3 — not ponytail)
 
 Use `vastai` CLI + `scripts/vast_ssh_run_vbt_paid_screen.sh` or direct SSH (`VAST_SSH_HOST`, `VAST_SSH_PORT`). Resolve instance: `vastai show instances --raw` or REST `https://console.vast.ai/api/v0/instances/`.
