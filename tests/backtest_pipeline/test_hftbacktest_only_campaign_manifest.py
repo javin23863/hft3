@@ -16,7 +16,6 @@ from backtest_pipeline.src.hftbacktest_only_campaign_manifest import (
     build_parameter_surface_rows,
     campaign_manifest_summary,
     parameter_surface_summary,
-    select_canary_rows,
     validate_campaign_manifest_rows,
     validate_parameter_surface_rows,
     write_parameter_surface_manifest,
@@ -75,6 +74,15 @@ def _write_prepared_unit(root: Path) -> Path:
         "end_ts_ns": 3,
         "normalized_npz": str(normalized),
         "initial_snapshot": str(snapshot),
+        "tick_size": 0.25,
+        "lot_size": 1.0,
+        "contract_size": 5.0,
+        "product_metadata_source": "config/hftbacktest/cme_lake_product_metadata.yaml",
+        "metadata_policy": "explicit_per_symbol_contract_tick_lot_contract_required",
+        "authority_refs": [
+            "config/hftbacktest/cme_lake_product_metadata.yaml",
+            "product-authority:MES",
+        ],
     }
     manifest_path = prepared_dir / "CPI_2024_09_11_TIGHT_manifest.json"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -101,6 +109,15 @@ def _write_prepared_unit_with_bytes(
         "trade_date": "2024-09-11",
         "normalized_npz": str(normalized),
         "initial_snapshot": str(snapshot),
+        "tick_size": 0.25,
+        "lot_size": 1.0,
+        "contract_size": 5.0,
+        "product_metadata_source": "config/hftbacktest/cme_lake_product_metadata.yaml",
+        "metadata_policy": "explicit_per_symbol_contract_tick_lot_contract_required",
+        "authority_refs": [
+            "config/hftbacktest/cme_lake_product_metadata.yaml",
+            "product-authority:MES",
+        ],
     }
     manifest_path = prepared_dir / "CPI_2024_09_11_TIGHT_manifest.json"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -173,6 +190,11 @@ def test_manifest_uses_canonical_slugs_and_legacy_aliases_only(tmp_path: Path) -
     assert rows[0]["admissibility_status"] == "admissible"
     assert rows[0]["blocker_code"] == ""
     assert rows[0]["source_npz_sha256"] == hashlib.sha256(b"hbt-normalized").hexdigest()
+    assert rows[0]["tick_size"] == 0.25
+    assert rows[0]["lot_size"] == 1.0
+    assert rows[0]["contract_size"] == 5.0
+    assert rows[0]["product_metadata_source"] == "config/hftbacktest/cme_lake_product_metadata.yaml"
+    assert "product-authority:MES" in rows[0]["authority_refs"]
     assert "HYP_5" not in {row["canonical_model_id"] for row in rows}
     assert "PDF_MODEL_11" not in {row["canonical_model_id"] for row in rows}
 
@@ -227,6 +249,133 @@ def test_adapter_failure_is_pipeline_blocker_not_model_rejection(tmp_path: Path)
     assert blocked["blocker_code"] == "pipeline_blocker:missing_uniform_hbt_adapter"
     assert "model_" + "rejected" not in json.dumps(blocked)
     assert "model_" + "untradable" not in json.dumps(blocked)
+
+
+def test_prepared_blocker_manifest_enters_campaign_not_model_rejection(tmp_path: Path) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_dir = tmp_path / "prepared" / "NQ" / "2024-09-11"
+    prepared_dir.mkdir(parents=True)
+    source = prepared_dir / "source_lake.npz"
+    source.write_bytes(b"source-lake")
+    source_hash = hashlib.sha256(b"source-lake").hexdigest()
+    (prepared_dir / "CPI_2024_09_11_TIGHT_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "hft3_hbt_only_lake_prepare_v1",
+                "status": "blocked",
+                "symbol": "NQ",
+                "contract": "NQU4",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "trade_date": "2024-09-11",
+                "source_npz": str(source),
+                "source_npz_sha256": source_hash,
+                "normalized_npz": "",
+                "initial_snapshot": "",
+                "blocker_code": "authority_missing",
+                "blocker_detail": "instrument_metadata_missing:contract_size",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=tmp_path / "prepared",
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+    )
+
+    assert len(rows) == 3
+    assert {row["source_npz"] for row in rows} == {str(source)}
+    assert {row["source_npz_sha256"] for row in rows} == {source_hash}
+    assert {row["admissibility_status"] for row in rows} == {"authority_missing"}
+    assert {row["blocker_code"] for row in rows} == {"authority_missing"}
+    assert all("instrument_metadata_missing:contract_size" in row["blocker_detail"] for row in rows)
+    assert all("product_metadata_source" in row["blocker_detail"] for row in rows)
+    assert all("metadata_policy" in row["blocker_detail"] for row in rows)
+    assert all("product_authority_refs" in row["blocker_detail"] for row in rows)
+    assert "model_" + "rejected" not in json.dumps(rows)
+
+
+def test_missing_product_metadata_authority_blocks_prepared_unit(tmp_path: Path) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_dir = tmp_path / "prepared" / "MES" / "2024-09-11"
+    prepared_dir.mkdir(parents=True)
+    normalized = prepared_dir / "event_l3.npz"
+    snapshot = prepared_dir / "initial_snapshot.npz"
+    normalized.write_bytes(b"hbt-normalized")
+    snapshot.write_bytes(b"hbt-initial-snapshot")
+    (prepared_dir / "CPI_2024_09_11_TIGHT_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "hft3_hbt_only_lake_prepare_v1",
+                "symbol": "MES",
+                "contract": "MESU4",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "trade_date": "2024-09-11",
+                "normalized_npz": str(normalized),
+                "initial_snapshot": str(snapshot),
+                "tick_size": 0.25,
+                "lot_size": 1.0,
+                "contract_size": 5.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=tmp_path / "prepared",
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+    )
+
+    assert {row["admissibility_status"] for row in rows} == {"authority_missing"}
+    assert {row["blocker_code"] for row in rows} == {"authority_missing"}
+    assert all("product_metadata_source" in row["blocker_detail"] for row in rows)
+    assert all("metadata_policy" in row["blocker_detail"] for row in rows)
+    assert all("product_authority_refs" in row["blocker_detail"] for row in rows)
+
+
+def test_whitespace_product_authority_ref_is_missing_authority(tmp_path: Path) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_dir = tmp_path / "prepared" / "MES" / "2024-09-11"
+    prepared_dir.mkdir(parents=True)
+    normalized = prepared_dir / "event_l3.npz"
+    snapshot = prepared_dir / "initial_snapshot.npz"
+    normalized.write_bytes(b"hbt-normalized")
+    snapshot.write_bytes(b"hbt-initial-snapshot")
+    (prepared_dir / "CPI_2024_09_11_TIGHT_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "hft3_hbt_only_lake_prepare_v1",
+                "symbol": "MES",
+                "contract": "MESU4",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "trade_date": "2024-09-11",
+                "normalized_npz": str(normalized),
+                "initial_snapshot": str(snapshot),
+                "tick_size": 0.25,
+                "lot_size": 1.0,
+                "contract_size": 5.0,
+                "product_metadata_source": "config/hftbacktest/cme_lake_product_metadata.yaml",
+                "metadata_policy": "explicit_per_symbol_contract_tick_lot_contract_required",
+                "authority_refs": " ",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=tmp_path / "prepared",
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+    )
+
+    assert {row["blocker_code"] for row in rows} == {"authority_missing"}
+    assert all("product_authority_refs" in row["blocker_detail"] for row in rows)
+    assert all(" " not in row["authority_refs"] for row in rows)
 
 
 def test_invalid_adapter_status_override_fails_closed(tmp_path: Path) -> None:
@@ -422,7 +571,9 @@ def test_active_hbt_path_does_not_use_legacy_eligibility_selectors() -> None:
         repo / "packages" / "backtest_pipeline" / "src" / "hftbacktest_only_pipeline.py",
         repo / "packages" / "backtest_pipeline" / "src" / "hftbacktest_only_campaign_manifest.py",
         repo / "scripts" / "run_hftbacktest_only.py",
+        repo / "scripts" / "run_hftbacktest_only_campaign.py",
         repo / "scripts" / "build_hftbacktest_only_campaign_manifest.py",
+        repo / "scripts" / "prepare_hftbacktest_only_from_lake_manifest.py",
     ]
     source = "\n".join(path.read_text(encoding="utf-8") for path in active_paths)
 
@@ -431,23 +582,6 @@ def test_active_hbt_path_does_not_use_legacy_eligibility_selectors() -> None:
     assert "screening_artifact.json" not in source
     assert "kind:hypothesis" not in source
     assert "kind:pdf_structural" not in source
-
-
-def test_canary_subset_uses_manifest_order(tmp_path: Path) -> None:
-    registry = _write_registry(tmp_path / "model_registry.yaml")
-    prepared_root = tmp_path / "prepared"
-    _write_prepared_unit(prepared_root)
-    rows = build_campaign_manifest_rows(
-        campaign_id="hbt_campaign_test",
-        prepared_root=prepared_root,
-        registry_path=registry,
-        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
-    )
-
-    canary = select_canary_rows(rows, limit=1)
-
-    assert canary == [rows[0]]
-
 
 def test_parameter_surface_expands_campaign_rows_by_parameter_hash(
     tmp_path: Path,
@@ -482,6 +616,11 @@ def test_parameter_surface_expands_campaign_rows_by_parameter_hash(
     assert surface_rows[0]["parameter_proposal_status"] == "declared_pre_hbt"
     assert surface_rows[0]["objective_evaluations"] == 0
     assert surface_rows[0]["optimizer_claim"] is False
+    assert surface_rows[0]["tick_size"] == campaign_rows[0]["tick_size"]
+    assert surface_rows[0]["lot_size"] == campaign_rows[0]["lot_size"]
+    assert surface_rows[0]["contract_size"] == campaign_rows[0]["contract_size"]
+    assert surface_rows[0]["product_metadata_source"] == campaign_rows[0]["product_metadata_source"]
+    assert "product-authority:MES" in surface_rows[0]["authority_refs"]
     assert surface_rows[0]["recorder_result_path"] == ""
     assert surface_rows[0]["stats_summary_path"] == ""
     assert surface_rows[0]["promotion_decision_path"] == ""

@@ -23,7 +23,7 @@ Canonical repo: `C:\Users\MSI\repos\hft3`. Full Fable reference: `C:\Users\MSI\.
 
 ## 2. Ponytail mindset (mandatory second — before codebase)
 
-Apply the ponytail lazy-senior-dev ladder on every implementation: YAGNI → stdlib → native → installed dep → one line → minimum that works. **Cursor runtime (#2):** `.cursor/rules/01-ponytail-mindset.mdc`. Upstream: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/` · Charter: `docs/ai/PONYTAIL.md`. Never cut validation, security, or finance/math invariants. Vast rent/SSH: `vastai` CLI + `scripts/vast_ssh_run_vbt_paid_screen.sh`.
+Apply the ponytail lazy-senior-dev ladder on every implementation: YAGNI → stdlib → native → installed dep → one line → minimum that works. **Cursor runtime (#2):** `.cursor/rules/01-ponytail-mindset.mdc`. Upstream: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/` · Charter: `docs/ai/PONYTAIL.md`. Never cut validation, security, or finance/math invariants. Vast rent/SSH: use `vastai` CLI; for HBT-only work follow `docs/operations/VAST_HFT_CAMPAIGN.md`.
 
 ## HBT-only plan drift guard
 
@@ -46,6 +46,16 @@ Evidence-ledger, family/candidate readiness, raw diagnostics, blocker reason
 codes, and data-vs-pipeline audits may be ported only after they are rewritten
 against the HBT-only identity above. A bridge, adapter, data, or feature-shape
 failure is pipeline/data/authority evidence, not model failure.
+
+For full-campaign work, do not replace the campaign with a local subset or a
+preferred symbol. The active unit is the deterministic full-lake manifest. Any
+bounded subset requires an explicit owner order and must still be selected by
+manifest order, not by expected result.
+
+HBT data preparation must use explicit product metadata authority. Do not
+inherit ES-shaped defaults, use `symbol` as `contract`, or map an options sensor
+such as `VIX.OPT` into a futures product. Missing metadata is an
+`authority_missing` or `data_blocker` receipt, not a model decision.
 
 ## 3. When the operator says **“latency test”**
 
