@@ -18,6 +18,12 @@ from typing import Any, Iterable, Iterator, Mapping
 
 import yaml
 
+from hft3.hbt_parameter_sets import (
+    HBT_PARAMETER_SET_PRE_HBT_STATUS as _PRE_HBT_PROPOSAL_STATUS,
+    HBT_PARAMETER_SET_SCHEMA_VERSION as HBT_SELF_LEARNING_PARAMETER_SET_SCHEMA_VERSION,
+    HBT_PARAMETER_SET_SOURCE as HBT_SELF_LEARNING_PARAMETER_SET_SOURCE,
+)
+
 
 SCHEMA_VERSION = "hft3_hftbacktest_only_campaign_manifest_v1"
 SUMMARY_SCHEMA_VERSION = "hft3_hftbacktest_only_campaign_manifest_summary_v1"
@@ -27,6 +33,12 @@ PARAMETER_SURFACE_SUMMARY_SCHEMA_VERSION = (
     "hft3_hftbacktest_only_parameter_surface_manifest_summary_v1"
 )
 CANARY_SUMMARY_SCHEMA_VERSION = "hft3_hftbacktest_only_canary_manifest_summary_v1"
+HBT_SELF_LEARNING_PARAMETER_SET_AUTHORITY_REFS = (
+    "packages/research_pipeline/parameter_search.py",
+    "packages/research_pipeline/model_generation.py",
+    "packages/research_pipeline/elite_refinement.py",
+    "packages/research_pipeline/generation_loop.py",
+)
 PRODUCT_METADATA_POLICY = "explicit_per_symbol_contract_tick_lot_contract_required"
 DEFAULT_REGISTRY_PATH = (
     Path(__file__).resolve().parents[2]
@@ -93,6 +105,7 @@ REQUIRED_PARAMETER_SURFACE_ROW_FIELDS = (
     "metadata_policy",
     "parameter_family",
     "parameter_hash",
+    "source_candidate_id",
     "strategy_params",
     "parameter_proposal_status",
     "objective_evaluations",
@@ -115,7 +128,6 @@ _ALLOWED_PARAMETER_FAMILIES = frozenset(
 _ALLOWED_ADAPTER_STATUSES = frozenset(
     ("available", "missing_uniform_hbt_adapter", "feature_surface_mismatch")
 )
-_PRE_HBT_PROPOSAL_STATUS = "declared_pre_hbt"
 _FORBIDDEN_PRE_HBT_DECISION_TOKENS = (
     "model_" + "rejected",
     "model_" + "untradable",
@@ -396,8 +408,13 @@ def build_parameter_surface_rows(
 
     rows: list[dict[str, Any]] = []
     for campaign_row in materialized_campaign_rows:
+        applied = False
         for parameter_set in materialized_parameter_sets:
+            if not _parameter_set_applies_to_row(parameter_set, campaign_row):
+                continue
+            applied = True
             parameter_hash = _parameter_hash(
+                canonical_model_id=str(parameter_set.get("canonical_model_id") or ""),
                 parameter_family=parameter_set["parameter_family"],
                 strategy_params=parameter_set["strategy_params"],
             )
@@ -408,6 +425,7 @@ def build_parameter_surface_rows(
                     parameter_hash=parameter_hash,
                 )
             )
+        _raise_if_missing_executable_parameter_set(campaign_row, applied=applied)
     validate_parameter_surface_rows(rows)
     return rows
 
@@ -429,8 +447,13 @@ def iter_parameter_surface_rows(
             required_fields=REQUIRED_ROW_FIELDS,
             error_prefix="campaign_manifest",
         )
+        applied = False
         for parameter_set in materialized_parameter_sets:
+            if not _parameter_set_applies_to_row(parameter_set, campaign_row):
+                continue
+            applied = True
             parameter_hash = _parameter_hash(
+                canonical_model_id=str(parameter_set.get("canonical_model_id") or ""),
                 parameter_family=parameter_set["parameter_family"],
                 strategy_params=parameter_set["strategy_params"],
             )
@@ -439,6 +462,7 @@ def iter_parameter_surface_rows(
                 parameter_set=parameter_set,
                 parameter_hash=parameter_hash,
             )
+        _raise_if_missing_executable_parameter_set(campaign_row, applied=applied)
     if not saw_campaign_row:
         raise HftBacktestOnlyCampaignManifestError("campaign_manifest_empty")
 
@@ -1085,6 +1109,10 @@ def _build_parameter_surface_row(
     parameter_set: Mapping[str, Any],
     parameter_hash: str,
 ) -> dict[str, Any]:
+    authority_refs = _combine_authority_refs(
+        campaign_row["authority_refs"],
+        parameter_set.get("authority_refs"),
+    )
     return {
         "schema_version": PARAMETER_SURFACE_SCHEMA_VERSION,
         "campaign_id": campaign_row["campaign_id"],
@@ -1112,6 +1140,7 @@ def _build_parameter_surface_row(
         "metadata_policy": campaign_row.get("metadata_policy", ""),
         "parameter_family": parameter_set["parameter_family"],
         "parameter_hash": parameter_hash,
+        "source_candidate_id": parameter_set.get("source_candidate_id", ""),
         "strategy_params": dict(parameter_set["strategy_params"]),
         "parameter_proposal_status": parameter_set["parameter_proposal_status"],
         "objective_evaluations": parameter_set["objective_evaluations"],
@@ -1120,7 +1149,7 @@ def _build_parameter_surface_row(
         "admissibility_status": campaign_row["admissibility_status"],
         "blocker_code": campaign_row["blocker_code"],
         "blocker_detail": campaign_row["blocker_detail"],
-        "authority_refs": list(campaign_row["authority_refs"]),
+        "authority_refs": list(authority_refs),
         "hbt_run_status": campaign_row["hbt_run_status"],
         "hbt_run_id": campaign_row["hbt_run_id"],
         "recorder_result_path": "",
@@ -1272,7 +1301,111 @@ def _authority_ref_tuple(value: Any) -> tuple[str, ...]:
     return ()
 
 
+def normalize_self_learning_parameter_sets_payload(payload: Any) -> list[dict[str, Any]]:
+    """Validate and normalize the self-learning parameter-set export envelope."""
+    if not isinstance(payload, Mapping):
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_self_learning_payload_must_be_object"
+        )
+    schema_version = str(payload.get("schema_version") or "").strip()
+    if schema_version != HBT_SELF_LEARNING_PARAMETER_SET_SCHEMA_VERSION:
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_invalid_self_learning_schema_version"
+        )
+    source = str(payload.get("source") or "").strip()
+    if source != HBT_SELF_LEARNING_PARAMETER_SET_SOURCE:
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_invalid_self_learning_source"
+        )
+    raw_parameter_sets = payload.get("parameter_sets")
+    if not isinstance(raw_parameter_sets, list):
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_self_learning_parameter_sets_must_be_list"
+        )
+    envelope_status = str(payload.get("parameter_proposal_status") or "").strip()
+    if envelope_status != _PRE_HBT_PROPOSAL_STATUS:
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_invalid_self_learning_proposal_status"
+        )
+    envelope_objective_evaluations = payload.get("objective_evaluations")
+    if not isinstance(envelope_objective_evaluations, int) or isinstance(
+        envelope_objective_evaluations,
+        bool,
+    ):
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_pre_hbt_objective_evaluations_must_be_zero"
+        )
+    if envelope_objective_evaluations != 0:
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_pre_hbt_objective_evaluations_must_be_zero"
+        )
+    if payload.get("optimizer_claim") is not False:
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_self_learning_optimizer_claim_must_be_false"
+        )
+    declared_parameter_set_count = payload.get("parameter_set_count")
+    if not isinstance(declared_parameter_set_count, int) or isinstance(
+        declared_parameter_set_count,
+        bool,
+    ):
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_self_learning_parameter_set_count_mismatch"
+        )
+    if declared_parameter_set_count != len(raw_parameter_sets):
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_self_learning_parameter_set_count_mismatch"
+        )
+    envelope_authority_refs = _authority_ref_tuple(payload.get("authority_refs") or ())
+    missing_envelope_refs = _missing_self_learning_authority_refs(envelope_authority_refs)
+    if missing_envelope_refs:
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_missing_self_learning_authority_refs:"
+            + ",".join(missing_envelope_refs)
+        )
+    out: list[dict[str, Any]] = []
+    for raw_spec in raw_parameter_sets:
+        if not isinstance(raw_spec, Mapping):
+            raise HftBacktestOnlyCampaignManifestError(
+                "parameter_surface_self_learning_parameter_set_must_be_object"
+            )
+        spec = dict(raw_spec)
+        spec.setdefault("schema_version", schema_version)
+        spec.setdefault("source", source)
+        spec["authority_refs"] = list(
+            dict.fromkeys(
+                [
+                    *envelope_authority_refs,
+                    *_authority_ref_tuple(spec.get("authority_refs") or ()),
+                ]
+            )
+        )
+        out.append(_normalize_parameter_set(spec))
+    return out
+
+
 def _normalize_parameter_set(spec: Mapping[str, Any]) -> dict[str, Any]:
+    schema_version = str(spec.get("schema_version") or "").strip()
+    if schema_version != HBT_SELF_LEARNING_PARAMETER_SET_SCHEMA_VERSION:
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_invalid_self_learning_schema_version"
+        )
+    source = str(spec.get("source") or "").strip()
+    if source != HBT_SELF_LEARNING_PARAMETER_SET_SOURCE:
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_invalid_self_learning_source"
+        )
+    authority_refs = _authority_ref_tuple(spec.get("authority_refs") or ())
+    missing_refs = _missing_self_learning_authority_refs(authority_refs)
+    if missing_refs:
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_missing_self_learning_authority_refs:"
+            + ",".join(missing_refs)
+        )
+    canonical_model_id = str(spec.get("canonical_model_id") or "").strip()
+    if canonical_model_id and _LEGACY_MODEL_ID_RE.match(canonical_model_id):
+        raise HftBacktestOnlyCampaignManifestError(
+            f"parameter_surface_legacy_model_id_as_active:{canonical_model_id}"
+        )
     parameter_family = str(spec.get("parameter_family") or "").strip()
     if not parameter_family:
         raise HftBacktestOnlyCampaignManifestError(
@@ -1310,19 +1443,55 @@ def _normalize_parameter_set(spec: Mapping[str, Any]) -> dict[str, Any]:
         raise HftBacktestOnlyCampaignManifestError(
             "parameter_surface_optimizer_claim_without_objective_evaluations"
         )
+    source_candidate_id = str(spec.get("source_candidate_id") or "").strip()
     return {
+        "schema_version": schema_version,
+        "source": source,
+        "canonical_model_id": canonical_model_id,
         "parameter_family": parameter_family,
+        "source_candidate_id": source_candidate_id,
         "strategy_params": dict(strategy_params),
         "parameter_proposal_status": status,
         "objective_evaluations": objective_evaluations,
         "optimizer_claim": optimizer_claim,
+        "authority_refs": list(authority_refs),
     }
+
+
+def _missing_self_learning_authority_refs(authority_refs: Iterable[str]) -> list[str]:
+    refs = set(authority_refs)
+    return [ref for ref in HBT_SELF_LEARNING_PARAMETER_SET_AUTHORITY_REFS if ref not in refs]
 
 
 def _normalize_parameter_sets(
     parameter_sets: Iterable[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     return [_normalize_parameter_set(spec) for spec in parameter_sets]
+
+
+def _parameter_set_applies_to_row(
+    parameter_set: Mapping[str, Any],
+    campaign_row: Mapping[str, Any],
+) -> bool:
+    canonical_model_id = str(parameter_set.get("canonical_model_id") or "")
+    return not canonical_model_id or canonical_model_id == str(campaign_row["canonical_model_id"])
+
+
+def _raise_if_missing_executable_parameter_set(
+    campaign_row: Mapping[str, Any],
+    *,
+    applied: bool,
+) -> None:
+    if applied:
+        return
+    if (
+        str(campaign_row.get("admissibility_status") or "") == "admissible"
+        and str(campaign_row.get("adapter_status") or "") in READY_ADAPTER_STATUSES
+    ):
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_missing_for_executable_model:"
+            f"{campaign_row.get('canonical_model_id')}"
+        )
 
 
 def _load_canonical_models(registry_path: Path) -> list[tuple[str, Mapping[str, Any]]]:
@@ -1462,11 +1631,18 @@ def _surface_unit_id(*, unit_id: str, parameter_hash: str) -> str:
     return f"{unit_id}_{parameter_hash[:16]}"
 
 
-def _parameter_hash(*, parameter_family: str, strategy_params: Mapping[str, Any]) -> str:
+def _parameter_hash(
+    *,
+    parameter_family: str,
+    strategy_params: Mapping[str, Any],
+    canonical_model_id: str = "",
+) -> str:
     payload = {
         "parameter_family": parameter_family,
         "strategy_params": dict(strategy_params),
     }
+    if canonical_model_id:
+        payload["canonical_model_id"] = canonical_model_id
     return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
 
 

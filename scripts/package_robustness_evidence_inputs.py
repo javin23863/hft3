@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package raw robustness inputs for the VectorBT -> HftBacktest handoff."""
+"""Package raw robustness inputs for the historical VectorBT/HftBacktest handoff."""
 from __future__ import annotations
 
 import argparse

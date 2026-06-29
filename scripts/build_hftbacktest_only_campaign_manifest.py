@@ -7,7 +7,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages")]
@@ -15,14 +15,16 @@ sys.path[:0] = [str(REPO), str(REPO / "packages")]
 from backtest_pipeline.src.hftbacktest_only_campaign_manifest import (
     DEFAULT_CHECKPOINT_EVERY_ROWS,
     DEFAULT_REGISTRY_PATH,
+    HftBacktestOnlyCampaignManifestError,
     iter_parameter_surface_rows,
+    normalize_self_learning_parameter_sets_payload,
     stream_campaign_manifest,
     stream_first_eligible_canary_manifest,
     stream_parameter_surface_manifest,
 )
 
 
-DEFAULT_PARAMETER_SETS = REPO / "config" / "hftbacktest" / "parameter_sets.json"
+DEFAULT_PARAMETER_SETS = REPO / "runtime" / "hbt" / "hbt_parameter_sets.json"
 
 
 def _load_adapter_status(path: Path | None) -> dict[str, str] | None:
@@ -38,16 +40,21 @@ def _load_parameter_sets(path: Path | None) -> list[dict[str, Any]] | None:
     if path is None:
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if isinstance(payload, Mapping):
-        payload = payload.get("parameter_sets")
-    if not isinstance(payload, list):
-        raise SystemExit("--parameter-sets-json must be a list or object with parameter_sets")
-    parameter_sets: list[dict[str, Any]] = []
-    for item in payload:
-        if not isinstance(item, Mapping):
-            raise SystemExit("--parameter-sets-json entries must be objects")
-        parameter_sets.append(dict(item))
-    return parameter_sets
+    try:
+        return normalize_self_learning_parameter_sets_payload(payload)
+    except HftBacktestOnlyCampaignManifestError as exc:
+        raise SystemExit(f"--parameter-sets-json must be a self-learning export: {exc}") from exc
+
+
+def _parameter_surface_config_status(path: Path) -> str:
+    if not path.is_file():
+        return "pipeline_blocker:parameter_sets_config_missing"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        normalize_self_learning_parameter_sets_payload(payload)
+    except (OSError, json.JSONDecodeError, HftBacktestOnlyCampaignManifestError) as exc:
+        return f"pipeline_blocker:parameter_sets_config_invalid:{exc}"
+    return "parameter_config_present"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -76,7 +83,10 @@ def main(argv: list[str] | None = None) -> int:
         "--parameter-sets-json",
         type=Path,
         default=None,
-        help="JSON list, or object with parameter_sets, of declared pre-HBT parameter proposals.",
+        help=(
+            "JSON self-learning export envelope of declared pre-HBT parameter proposals "
+            "from the existing autoresearch/self-learning loop."
+        ),
     )
     parser.add_argument("--parameter-surface-out", type=Path, default=None)
     parser.add_argument("--parameter-surface-summary-out", type=Path, default=None)
@@ -96,10 +106,9 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--canary-count requires --canary-out")
 
     declared_parameter_sets_path = args.parameter_sets_json or DEFAULT_PARAMETER_SETS
-    if declared_parameter_sets_path.is_file():
-        parameter_surface_config_status = "parameter_config_present"
-    else:
-        parameter_surface_config_status = "pipeline_blocker:parameter_sets_config_missing"
+    parameter_surface_config_status = _parameter_surface_config_status(
+        declared_parameter_sets_path
+    )
 
     summary = stream_campaign_manifest(
         campaign_id=args.campaign_id,
@@ -131,6 +140,7 @@ def main(argv: list[str] | None = None) -> int:
             checkpoint_every_rows=args.checkpoint_every_rows,
         )
         canary_source = args.parameter_surface_out
+        canary_parameter_surface_status = "parameter_surface_expanded"
         canary_parameter_surface_config_status = "parameter_config_present"
     if args.canary_out is not None and args.canary_count is not None:
         output["canary_manifest"] = stream_first_eligible_canary_manifest(

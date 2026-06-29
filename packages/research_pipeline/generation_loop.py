@@ -58,6 +58,13 @@ from research_pipeline.generation_summary import (
 )
 from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.model_generation import generate_candidates
+from research_pipeline.parameter_search import (
+    HBT_PARAMETER_SET_AUTHORITY_REFS,
+    HBT_PARAMETER_SET_PRE_HBT_STATUS,
+    HBT_PARAMETER_SET_SCHEMA_VERSION,
+    HBT_PARAMETER_SET_SOURCE,
+    hbt_parameter_sets_from_candidates,
+)
 from research_pipeline.review_memory import append_generation_memory
 from research_pipeline.types import CandidateModel, ParsedHypothesis
 from research_pipeline.feature_recipe import attach_feature_recipe_to_candidate, candidate_identity_hash
@@ -224,6 +231,29 @@ def _write_generation_checkpoint(
             json.dumps(_serialize_candidates(candidates), indent=2) + "\n",
             encoding="utf-8",
         )
+    return path
+
+
+def _write_hbt_parameter_sets(path: Path, candidates: list[CandidateModel]) -> Path:
+    parameter_sets = hbt_parameter_sets_from_candidates(candidates)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": HBT_PARAMETER_SET_SCHEMA_VERSION,
+                "source": HBT_PARAMETER_SET_SOURCE,
+                "parameter_proposal_status": HBT_PARAMETER_SET_PRE_HBT_STATUS,
+                "objective_evaluations": 0,
+                "optimizer_claim": False,
+                "authority_refs": list(HBT_PARAMETER_SET_AUTHORITY_REFS),
+                "parameter_set_count": len(parameter_sets),
+                "parameter_sets": parameter_sets,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     return path
 
 
@@ -809,6 +839,12 @@ def run_single_generation(
             for c in ontology_pass
         ]
         write_frozen_manifests(frozen_manifest_path, frozen_manifests)
+    hbt_parameter_sets_path = _write_hbt_parameter_sets(
+        gen_dir / "hbt_parameter_sets.json",
+        ontology_pass,
+    )
+    append_pointer(manifest, "hbt_parameter_set_paths", str(hbt_parameter_sets_path))
+    save_manifest(repo_root, manifest)
     manifest_receipts: dict[str, dict[str, Any]] = {}
     for cand_manifest in frozen_manifests:
         cid = str(cand_manifest["candidate_id"])

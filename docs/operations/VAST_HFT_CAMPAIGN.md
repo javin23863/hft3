@@ -92,8 +92,11 @@ counts, `manual_filter_used=false`, `vectorbt_dependency=false`,
 `stage_a_dependency=false`, `screening_artifact_dependency=false`, and
 `hbt_jobs_started=0`.
 
-If parameter proposals are declared, expand the campaign surface before the
-full run:
+If parameter proposals are declared by the existing autoresearch/self-learning
+loop, expand the campaign surface before the full run. The input must be the
+exported `hbt_parameter_sets.json` envelope with
+`schema_version=hft3_hbt_parameter_sets_from_self_learning_v1`,
+`source=autoresearch_self_learning_loop`, and self-learning authority refs:
 
 ```bash
 python scripts/build_hftbacktest_only_campaign_manifest.py \
@@ -101,14 +104,15 @@ python scripts/build_hftbacktest_only_campaign_manifest.py \
   --prepared-root /data/hbt/prepared \
   --out /data/hbt/hbt_full_lake_campaign_manifest.jsonl \
   --summary-out /data/hbt/hbt_full_lake_campaign_summary.json \
-  --parameter-sets-json config/hftbacktest/parameter_sets.json \
+  --parameter-sets-json /data/hbt/hbt_parameter_sets.json \
   --parameter-surface-out /data/hbt/hbt_full_lake_parameter_surface.jsonl \
   --parameter-surface-summary-out /data/hbt/hbt_full_lake_parameter_surface_summary.json
 ```
 
-If `config/hftbacktest/parameter_sets.json` is missing, record
-`pipeline_blocker:parameter_sets_config_missing` in the base manifest summary.
-Do not synthesize a search grid inside the builder or runner.
+If the self-learning export is missing or invalid, record
+`pipeline_blocker:parameter_sets_config_missing` or the validation error in the
+base manifest summary/run receipt. Do not synthesize a search grid inside the
+builder or runner.
 
 Parameter proposals with `objective_evaluations=0` are deterministic proposal
 rows only. They are not adaptive optimizer evidence and cannot rank, reject, or
@@ -122,7 +126,8 @@ from manifest order. It must use only rows with:
 - `admissibility_status=admissible` / data admissible;
 - `adapter_status=available` or `adapter_status=ready`;
 - `blocker_code=""` and non-empty `authority_refs`;
-- base summary `parameter_surface_status=base_only` or
+- canary source has `parameter_surface_status=base_only` or
+  `parameter_surface_status=parameter_surface_expanded` with
   `parameter_surface_config_status=parameter_config_present`;
 - no manual model, symbol, or instrument preference.
 

@@ -138,6 +138,32 @@ optimizer_claim=false
 No parameter region may be ranked, accepted, rejected for economics, or promoted
 until the corresponding HftBacktest artifacts exist.
 
+The active proposal source is the existing autoresearch/self-learning loop:
+
+```text
+parameter_search.py -> model_generation.py -> elite_refinement.py
+```
+
+That loop may export HBT parameter-set specs as `hbt_parameter_sets.json` with:
+
+```text
+schema_version=hft3_hbt_parameter_sets_from_self_learning_v1
+source=autoresearch_self_learning_loop
+parameter_proposal_status=declared_pre_hbt
+objective_evaluations=0
+optimizer_claim=false
+```
+
+The HBT manifest builder treats this file as a trust-boundary input. It must
+be an envelope from the existing self-learning loop with the schema, source, and
+self-learning authority refs; a bare list or hand-written `parameter_sets`
+object is rejected before parameter-surface rows are emitted.
+
+Workbench WFC matrix and plateau-selection artifacts are measured post-run
+evidence. They may inform later post-HBT analysis, but they are not a pre-HBT
+winner selector for this HBT-only campaign. HBT runner code must not mutate
+`strategy_params` after seeing a no-order or no-fill receipt.
+
 ## HBT Evidence Ledger
 
 The HBT evidence ledger is written after HBT run attempts, not before. It records
@@ -266,8 +292,9 @@ The active full campaign order is:
 2. Write a pre-execution summary proving base universe counts and
    `hbt_jobs_started=0`; the base manifest is not the immediate execution queue.
 3. Expand parameter-surface manifest only when deterministic declared parameter
-   sets exist. Missing `config/hftbacktest/parameter_sets.json` is a
-   pipeline/config blocker; do not invent a grid.
+   sets exported by the existing self-learning/autoresearch loop exist. Missing
+   self-learning parameter-set export/config is a pipeline/config blocker; do
+   not invent a grid.
 4. Fail closed missing data, missing authority, and missing adapters as blockers.
 5. Run only a deterministic first-N eligible canary before broad HBT execution.
 6. Run HBT for admissible model/event/parameter rows after canary receipts pass.
@@ -322,6 +349,15 @@ Implemented scope:
   `evolutionary-prior`;
 - records `parameter_proposal_status=declared_pre_hbt`,
   `objective_evaluations=0`, and `optimizer_claim=false`;
+- exports self-learning/autoresearch candidate strategy params to
+  `hbt_parameter_sets.json` and preserves their authority refs for HBT
+  expansion;
+- rejects non-self-learning parameter-set inputs at the builder trust boundary:
+  no bare list, no ad hoc `parameter_sets` object, no missing schema/source, and
+  no missing self-learning authority refs;
+- supports canonical-model-scoped parameter sets and fails closed if an
+  admissible, adapter-ready canonical model has no matching self-learning
+  parameter proposal;
 - hashes strict canonical JSON with the parameter-family label included;
 - preserves data, authority, adapter, and feature-shape blockers as
   non-economic blockers;
@@ -342,8 +378,9 @@ As of this plan addendum:
 
 ```text
 1. RL canonical slugs are preserved but still need uniform HBT order adapters.
-2. `config/hftbacktest/parameter_sets.json` is missing, so parameter-surface
-   expansion is blocked by configuration until declared proposals are supplied.
+2. Campaign-wide self-learning parameter-set export/config is missing for the
+   full HBT universe, so parameter-surface expansion is blocked until declared
+   proposals from the existing loop are supplied.
 3. Vast pre-execution base summary exists for the full lake; broad HBT execution
    waits behind the deterministic eligible canary receipt.
 4. PR GrepLoop/review surface has not run on the current head, so merge-ready is no.
