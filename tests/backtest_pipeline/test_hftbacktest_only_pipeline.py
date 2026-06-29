@@ -13,6 +13,7 @@ from backtest_pipeline.src.hftbacktest_only_pipeline import (
     HftBacktestOnlyPipelineError,
     HftBacktestOnlyPrepareConfig,
     HftBacktestOnlyRunConfig,
+    _save_npz_atomic,
     prepare_hftbacktest_only_l3_from_lake,
     run_hftbacktest_only,
     validate_hftbacktest_only_input,
@@ -296,6 +297,28 @@ def test_active_hftbacktest_only_run_records_passive_fill_after_later_elapse(
     assert stats["orders_acknowledged"] == 1
     assert stats["net_pnl"] == 12.5
     assert recorder["fill_quantities"].tolist() == [1.0]
+
+
+def test_save_npz_atomic_avoids_multi_dot_with_suffix(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_with_suffix = Path.with_suffix
+
+    def strict_with_suffix(self: Path, suffix: str) -> Path:
+        if suffix.count(".") > 1:
+            raise ValueError("Invalid suffix")
+        return original_with_suffix(self, suffix)
+
+    monkeypatch.setattr(Path, "with_suffix", strict_with_suffix)
+    out_path = tmp_path / "prepared.sample.npz"
+
+    _save_npz_atomic(out_path, data=np.array([1, 2, 3], dtype=np.int64))
+
+    with np.load(out_path, allow_pickle=False) as payload:
+        assert payload["data"].tolist() == [1, 2, 3]
+    assert not (tmp_path / "prepared.sample.npz.tmp").exists()
+    assert not (tmp_path / "prepared.sample.npz.tmp.npz").exists()
 
 
 def test_invalid_data_does_not_write_promotion_decision(

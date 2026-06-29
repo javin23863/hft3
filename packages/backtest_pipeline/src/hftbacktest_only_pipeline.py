@@ -808,7 +808,7 @@ def _write_optional_parquet(path: Path, rows: Any) -> None:
         fallback = path.with_suffix(".jsonl")
         _write_jsonl(fallback, list(rows or []))
         _write_json(
-            path.with_suffix(path.suffix + ".fallback.json"),
+            _path_with_added_suffix(path, ".fallback.json"),
             {"status": "fallback_jsonl", "fallback": str(fallback), "reason": f"{type(exc).__name__}:{exc}"},
         )
 
@@ -981,9 +981,15 @@ def _safe_stem(value: str) -> str:
 def _save_npz_atomic(path: Path, **payload: Any) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_base = path.with_suffix(path.suffix + ".tmp")
-    np.savez_compressed(tmp_base, **payload)
-    os.replace(tmp_base.with_suffix(tmp_base.suffix + ".npz"), path)
+    tmp = _path_with_added_suffix(path, ".tmp")
+    with tmp.open("wb") as handle:
+        np.savez_compressed(handle, **payload)
+    os.replace(tmp, path)
+
+
+def _path_with_added_suffix(path: Path, suffix: str) -> Path:
+    path = Path(path)
+    return path.with_name(path.name + suffix)
 
 
 def _timestamp_units_value(value: Any) -> str:
@@ -1191,7 +1197,7 @@ def _positive_int(value: Any, name: str) -> int:
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp = _path_with_added_suffix(path, ".tmp")
     tmp.write_text(json.dumps(dict(payload), indent=2, default=str) + "\n", encoding="utf-8")
     os.replace(tmp, path)
 
@@ -1199,7 +1205,7 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
 def _write_jsonl(path: Path, rows: list[Mapping[str, Any]]) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp = _path_with_added_suffix(path, ".tmp")
     with tmp.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(dict(row), default=str) + "\n")
