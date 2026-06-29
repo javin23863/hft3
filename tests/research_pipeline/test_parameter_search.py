@@ -4,6 +4,8 @@ import pytest
 
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.parameter_search import (
+    HBT_PARAMETER_SET_PRE_HBT_STATUS,
+    HBT_PARAMETER_SET_SOURCE,
     hbt_parameter_sets_from_candidates,
     parameter_grid,
     select_parameters,
@@ -95,8 +97,10 @@ def test_hbt_parameter_sets_export_self_learning_proposals() -> None:
     assert {spec["canonical_model_id"] for spec in specs} == {
         "SPREAD_BLOWOUT_RECOMPRESSION"
     }
-    assert {spec["source"] for spec in specs} == {"autoresearch_self_learning_loop"}
-    assert {spec["parameter_proposal_status"] for spec in specs} == {"declared_pre_hbt"}
+    assert {spec["source"] for spec in specs} == {HBT_PARAMETER_SET_SOURCE}
+    assert {spec["parameter_proposal_status"] for spec in specs} == {
+        HBT_PARAMETER_SET_PRE_HBT_STATUS
+    }
     assert {spec["objective_evaluations"] for spec in specs} == {0}
     assert {spec["optimizer_claim"] for spec in specs} == {False}
     assert all(

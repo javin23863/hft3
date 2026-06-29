@@ -18,6 +18,12 @@ from typing import Any, Iterable, Iterator, Mapping
 
 import yaml
 
+from hft3.hbt_parameter_sets import (
+    HBT_PARAMETER_SET_PRE_HBT_STATUS as _PRE_HBT_PROPOSAL_STATUS,
+    HBT_PARAMETER_SET_SCHEMA_VERSION as HBT_SELF_LEARNING_PARAMETER_SET_SCHEMA_VERSION,
+    HBT_PARAMETER_SET_SOURCE as HBT_SELF_LEARNING_PARAMETER_SET_SOURCE,
+)
+
 
 SCHEMA_VERSION = "hft3_hftbacktest_only_campaign_manifest_v1"
 SUMMARY_SCHEMA_VERSION = "hft3_hftbacktest_only_campaign_manifest_summary_v1"
@@ -27,10 +33,6 @@ PARAMETER_SURFACE_SUMMARY_SCHEMA_VERSION = (
     "hft3_hftbacktest_only_parameter_surface_manifest_summary_v1"
 )
 CANARY_SUMMARY_SCHEMA_VERSION = "hft3_hftbacktest_only_canary_manifest_summary_v1"
-HBT_SELF_LEARNING_PARAMETER_SET_SCHEMA_VERSION = (
-    "hft3_hbt_parameter_sets_from_self_learning_v1"
-)
-HBT_SELF_LEARNING_PARAMETER_SET_SOURCE = "autoresearch_self_learning_loop"
 HBT_SELF_LEARNING_PARAMETER_SET_AUTHORITY_REFS = (
     "packages/research_pipeline/parameter_search.py",
     "packages/research_pipeline/model_generation.py",
@@ -103,6 +105,7 @@ REQUIRED_PARAMETER_SURFACE_ROW_FIELDS = (
     "metadata_policy",
     "parameter_family",
     "parameter_hash",
+    "source_candidate_id",
     "strategy_params",
     "parameter_proposal_status",
     "objective_evaluations",
@@ -125,7 +128,6 @@ _ALLOWED_PARAMETER_FAMILIES = frozenset(
 _ALLOWED_ADAPTER_STATUSES = frozenset(
     ("available", "missing_uniform_hbt_adapter", "feature_surface_mismatch")
 )
-_PRE_HBT_PROPOSAL_STATUS = "declared_pre_hbt"
 _FORBIDDEN_PRE_HBT_DECISION_TOKENS = (
     "model_" + "rejected",
     "model_" + "untradable",
@@ -1138,6 +1140,7 @@ def _build_parameter_surface_row(
         "metadata_policy": campaign_row.get("metadata_policy", ""),
         "parameter_family": parameter_set["parameter_family"],
         "parameter_hash": parameter_hash,
+        "source_candidate_id": parameter_set.get("source_candidate_id", ""),
         "strategy_params": dict(parameter_set["strategy_params"]),
         "parameter_proposal_status": parameter_set["parameter_proposal_status"],
         "objective_evaluations": parameter_set["objective_evaluations"],
@@ -1440,11 +1443,13 @@ def _normalize_parameter_set(spec: Mapping[str, Any]) -> dict[str, Any]:
         raise HftBacktestOnlyCampaignManifestError(
             "parameter_surface_optimizer_claim_without_objective_evaluations"
         )
+    source_candidate_id = str(spec.get("source_candidate_id") or "").strip()
     return {
         "schema_version": schema_version,
         "source": source,
         "canonical_model_id": canonical_model_id,
         "parameter_family": parameter_family,
+        "source_candidate_id": source_candidate_id,
         "strategy_params": dict(strategy_params),
         "parameter_proposal_status": status,
         "objective_evaluations": objective_evaluations,

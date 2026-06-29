@@ -867,6 +867,7 @@ def test_parameter_surface_expands_campaign_rows_by_parameter_hash(
     assert surface_rows[0]["surface_unit_id"].startswith(campaign_rows[0]["unit_id"])
     assert surface_rows[0]["parameter_family"] == "grid"
     assert len(surface_rows[0]["parameter_hash"]) == 64
+    assert surface_rows[0]["source_candidate_id"] == ""
     assert surface_rows[0]["parameter_proposal_status"] == "declared_pre_hbt"
     assert surface_rows[0]["objective_evaluations"] == 0
     assert surface_rows[0]["optimizer_claim"] is False
@@ -900,6 +901,39 @@ def test_parameter_surface_expands_campaign_rows_by_parameter_hash(
         "grid": 3,
     }
     assert summary["objective_evaluation_counts"] == {"0": 9}
+
+
+def test_parameter_surface_preserves_source_candidate_id(tmp_path: Path) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)
+    campaign_rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+    )
+    parameter_sets = manifest_module.normalize_self_learning_parameter_sets_payload(
+        _parameter_sets_payload(
+            [
+                _parameter_set(
+                    "grid",
+                    {"entry_threshold": 0.25, "max_position": 1},
+                    source_candidate_id="candidate-grid-001",
+                )
+            ]
+        )
+    )
+
+    surface_rows = build_parameter_surface_rows(
+        campaign_rows=campaign_rows,
+        parameter_sets=parameter_sets,
+    )
+
+    assert surface_rows
+    assert {row["source_candidate_id"] for row in surface_rows} == {
+        "candidate-grid-001"
+    }
 
 
 def test_parameter_hash_canonicalizes_strategy_params(tmp_path: Path) -> None:

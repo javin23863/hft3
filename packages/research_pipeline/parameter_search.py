@@ -15,14 +15,17 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
 from features_engine.src.model_registry import load_model_registry, resolve_model_id
+from hft3.hbt_parameter_sets import (
+    HBT_PARAMETER_SET_PRE_HBT_STATUS,
+    HBT_PARAMETER_SET_SCHEMA_VERSION,
+    HBT_PARAMETER_SET_SOURCE,
+)
 
 from research_pipeline.types import CandidateModel, ParsedHypothesis
 
 DEFAULT_HOLDING_PERIODS_BARS = [15, 30, 60]
 DEFAULT_THRESHOLDS = [0.10, 0.15, 0.20, 0.25]
 SUPPORTED_SEARCH_METHODS = {"grid", "bayesian", "evolutionary"}
-HBT_PARAMETER_SET_SCHEMA_VERSION = "hft3_hbt_parameter_sets_from_self_learning_v1"
-HBT_PARAMETER_SET_SOURCE = "autoresearch_self_learning_loop"
 HBT_PARAMETER_SET_AUTHORITY_REFS = (
     "packages/research_pipeline/parameter_search.py",
     "packages/research_pipeline/model_generation.py",
@@ -196,7 +199,7 @@ def hbt_parameter_set_from_candidate(candidate: CandidateModel) -> dict[str, Any
         "canonical_model_id": canonical_model_id,
         "parameter_family": family,
         "strategy_params": dict(candidate.strategy_params or {}),
-        "parameter_proposal_status": "declared_pre_hbt",
+        "parameter_proposal_status": HBT_PARAMETER_SET_PRE_HBT_STATUS,
         "objective_evaluations": 0,
         "optimizer_claim": False,
         "source_candidate_id": candidate.candidate_id,
@@ -428,6 +431,7 @@ __all__ = [
     "SUPPORTED_SEARCH_METHODS",
     "SearchSelection",
     "HBT_PARAMETER_SET_AUTHORITY_REFS",
+    "HBT_PARAMETER_SET_PRE_HBT_STATUS",
     "HBT_PARAMETER_SET_SCHEMA_VERSION",
     "hbt_parameter_set_from_candidate",
     "hbt_parameter_sets_from_candidates",

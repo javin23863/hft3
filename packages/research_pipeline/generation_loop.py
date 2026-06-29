@@ -60,6 +60,7 @@ from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.parameter_search import (
     HBT_PARAMETER_SET_AUTHORITY_REFS,
+    HBT_PARAMETER_SET_PRE_HBT_STATUS,
     HBT_PARAMETER_SET_SCHEMA_VERSION,
     HBT_PARAMETER_SET_SOURCE,
     hbt_parameter_sets_from_candidates,
@@ -240,7 +241,7 @@ def _write_hbt_parameter_sets(path: Path, candidates: list[CandidateModel]) -> P
             {
                 "schema_version": HBT_PARAMETER_SET_SCHEMA_VERSION,
                 "source": HBT_PARAMETER_SET_SOURCE,
-                "parameter_proposal_status": "declared_pre_hbt",
+                "parameter_proposal_status": HBT_PARAMETER_SET_PRE_HBT_STATUS,
                 "objective_evaluations": 0,
                 "optimizer_claim": False,
                 "authority_refs": list(HBT_PARAMETER_SET_AUTHORITY_REFS),
