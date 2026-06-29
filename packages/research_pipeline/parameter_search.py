@@ -433,6 +433,7 @@ __all__ = [
     "HBT_PARAMETER_SET_AUTHORITY_REFS",
     "HBT_PARAMETER_SET_PRE_HBT_STATUS",
     "HBT_PARAMETER_SET_SCHEMA_VERSION",
+    "HBT_PARAMETER_SET_SOURCE",
     "hbt_parameter_set_from_candidate",
     "hbt_parameter_sets_from_candidates",
     "model_ids_for_search",
