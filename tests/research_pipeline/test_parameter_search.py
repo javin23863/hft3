@@ -6,6 +6,7 @@ import pytest
 
 from features_engine.src.model_registry import load_model_registry
 from research_pipeline.model_generation import generate_candidates
+import research_pipeline.parameter_search as parameter_search
 from research_pipeline.parameter_search import (
     HBT_PARAMETER_SET_PRE_HBT_STATUS,
     HBT_PARAMETER_SET_SCHEMA_VERSION,
@@ -123,8 +124,7 @@ def test_hbt_registry_parameter_sets_cover_all_canonical_slugs() -> None:
 
     specs = hbt_parameter_sets_from_model_registry()
 
-    assert len(registry_models) == 65
-    assert len(specs) == 65
+    assert len(specs) == len(registry_models)
     assert [spec["canonical_model_id"] for spec in specs] == list(registry_models)
     legacy_ids = {
         str(entry["legacy_id"])
@@ -132,6 +132,24 @@ def test_hbt_registry_parameter_sets_cover_all_canonical_slugs() -> None:
         if entry.get("legacy_id")
     }
     assert {spec["canonical_model_id"] for spec in specs}.isdisjoint(legacy_ids)
+
+
+def test_hbt_registry_parameter_sets_dedupe_normalized_aliases(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        parameter_search,
+        "load_model_registry",
+        lambda: {"models": {"BOOK_PRESSURE": {}, "BOOK_PRESSURE_ALIAS": {}}},
+    )
+    monkeypatch.setattr(
+        parameter_search,
+        "resolve_model_id",
+        lambda model_id: "BOOK_PRESSURE",
+    )
+
+    specs = parameter_search.hbt_parameter_sets_from_model_registry()
+
+    assert len(specs) == 1
+    assert specs[0]["canonical_model_id"] == "BOOK_PRESSURE"
 
 
 def test_hbt_registry_parameter_sets_use_valid_pre_hbt_fields() -> None:
@@ -155,15 +173,16 @@ def test_hbt_registry_parameter_sets_use_valid_pre_hbt_fields() -> None:
 
 
 def test_hbt_registry_parameter_sets_support_explicit_prior_methods() -> None:
+    search_methods = ("grid", "bayesian", "evolutionary")
     specs = hbt_parameter_sets_from_model_registry(
-        search_methods=("grid", "bayesian", "evolutionary")
+        search_methods=search_methods
     )
     registry_models = load_model_registry()["models"]
     families_by_slug = {slug: [] for slug in registry_models}
     for spec in specs:
         families_by_slug[spec["canonical_model_id"]].append(spec["parameter_family"])
 
-    assert len(specs) == 65 * 3
+    assert len(specs) == len(registry_models) * len(search_methods)
     assert all(
         families == ["grid", "bayesian-prior", "evolutionary-prior"]
         for families in families_by_slug.values()

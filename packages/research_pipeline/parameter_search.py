@@ -235,6 +235,7 @@ def hbt_parameter_sets_from_model_registry(
     methods = _normalise_search_methods(search_methods)
     models = load_model_registry().get("models", {})
     out: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for slug, entry in models.items():
         model_entry = entry if isinstance(entry, Mapping) else {}
         parsed = _parsed_from_registry_model(str(slug), model_entry)
@@ -258,7 +259,12 @@ def hbt_parameter_sets_from_model_registry(
                         "candidate_search": dict(selection.metadata),
                     },
                 )
-                out.append(hbt_parameter_set_from_candidate(candidate))
+                spec = hbt_parameter_set_from_candidate(candidate)
+                key = _hbt_parameter_set_key(spec)
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(spec)
     return out
 
 

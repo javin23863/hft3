@@ -63,6 +63,7 @@ from research_pipeline.parameter_search import (
     HBT_PARAMETER_SET_PRE_HBT_STATUS,
     HBT_PARAMETER_SET_SCHEMA_VERSION,
     HBT_PARAMETER_SET_SOURCE,
+    _hbt_parameter_set_key,
     hbt_parameter_sets_from_candidates,
     hbt_parameter_sets_from_model_registry,
 )
@@ -267,16 +268,7 @@ def _dedupe_hbt_parameter_sets(parameter_sets: list[dict[str, Any]]) -> list[dic
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     for spec in parameter_sets:
-        key = json.dumps(
-            {
-                "canonical_model_id": spec["canonical_model_id"],
-                "parameter_family": spec["parameter_family"],
-                "strategy_params": spec["strategy_params"],
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
+        key = _hbt_parameter_set_key(spec)
         if key in seen:
             continue
         seen.add(key)
