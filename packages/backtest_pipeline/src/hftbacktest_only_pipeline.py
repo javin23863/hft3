@@ -1056,7 +1056,7 @@ def _write_recorder_result(path: Path, replay: Mapping[str, Any]) -> Path:
     fills = replay.get("fills") or []
     order_ids = [int(row.get("order_id", 0)) for row in orders if isinstance(row, Mapping)]
     fill_qty = [float(row.get("filled_quantity", 0.0)) for row in fills if isinstance(row, Mapping)]
-    np.savez_compressed(
+    _save_npz_atomic(
         path,
         order_ids=np.array(order_ids, dtype=np.int64),
         fill_quantities=np.array(fill_qty, dtype=np.float64),
