@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <vector>
 
@@ -28,6 +29,9 @@ void FeatureExtractorCpp::reset() {
     near_touch_cancel_ = 0;
     signed_size_sq_ = total_size_sq_ = 0.0;
     curr_trade_count_ = prev_trade_count_ = 0;
+    vwap_sum_px_qty_ = vwap_sum_qty_ = 0.0;
+    session_high_ = 0.0;
+    session_low_ = std::numeric_limits<double>::infinity();
     prev_top10_depth_ = 0.0;
     prev_book_slope_ = 0.0;
     prev_bid1_ = prev_ask1_ = 0;
@@ -163,6 +167,10 @@ void FeatureExtractorCpp::process_event(const MBOEventCpp& event) {
     const double near_ticks = tick_size_ * 3;
 
     if (event.action == 'T') {
+        if (event.size > 0) {
+            vwap_sum_px_qty_ += event.price * static_cast<double>(event.size);
+            vwap_sum_qty_ += static_cast<double>(event.size);
+        }
         const double size_sq = static_cast<double>(event.size) * static_cast<double>(event.size);
         if (event.side == 'A') {
             buy_agg_ += event.size;
@@ -246,8 +254,32 @@ void FeatureExtractorCpp::extract() {
             median = tmp[tmp.size() / 2];
         }
         vec_[16] = median > 1e-9 ? spread / median : 1.0;
-        vec_[40] = (best_bid_ + best_ask_) / 2.0;
-        update_realized_vol(vec_[40]);
+        const double mid = (best_bid_ + best_ask_) / 2.0;
+        vec_[40] = mid;
+        update_realized_vol(mid);
+
+        vec_[static_cast<size_t>(FeatureIndex::SPREAD_STRESS_ELEVATED)] =
+            vec_[static_cast<size_t>(FeatureIndex::SPREAD_STRESS)] > 2.0 ? 1.0 : 0.0;
+        vec_[static_cast<size_t>(FeatureIndex::DISTANCE_TO_VWAP)] =
+            vwap_sum_qty_ > 0.0 ? (mid - (vwap_sum_px_qty_ / vwap_sum_qty_)) / tick_size_ : 0.0;
+        if (session_high_ == 0.0 && std::isinf(session_low_)) {
+            session_high_ = mid;
+            session_low_ = mid;
+            vec_[static_cast<size_t>(FeatureIndex::IS_BREAKING_SESSION_LEVEL)] = 0.0;
+        } else if (mid > session_high_) {
+            session_high_ = mid;
+            vec_[static_cast<size_t>(FeatureIndex::IS_BREAKING_SESSION_LEVEL)] = 1.0;
+        } else if (mid < session_low_) {
+            session_low_ = mid;
+            vec_[static_cast<size_t>(FeatureIndex::IS_BREAKING_SESSION_LEVEL)] = -1.0;
+        } else {
+            vec_[static_cast<size_t>(FeatureIndex::IS_BREAKING_SESSION_LEVEL)] = 0.0;
+        }
+        if (round_number_increment_ > 0.0 && tick_size_ > 0.0) {
+            const double rem = std::fmod(mid, round_number_increment_);
+            vec_[static_cast<size_t>(FeatureIndex::DISTANCE_TO_ROUND_NUMBER)] =
+                std::min(rem, round_number_increment_ - rem) / tick_size_;
+        }
     }
 
     const int bid_depl = std::max(0, prev_bid1_ - b1);

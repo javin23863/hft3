@@ -359,6 +359,41 @@ def test_hypothesis_limit_order_evaluates_canonical_model_signal(
     assert stats["canonical_model_id"] == "SECOND_WAVE_CONTINUATION"
 
 
+def test_signal_below_threshold_fails_closed_without_promotion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz", include_trade_event=True)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "no_signal_order"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={
+            "model_id": "SECOND_WAVE_CONTINUATION",
+            "quantity": 1.0,
+            "max_steps": 3,
+            "signal_threshold": 999.0,
+        },
+        canonical_model_id="SECOND_WAVE_CONTINUATION",
+        legacy_aliases=("HYP_1",),
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "pipeline_blocker"
+    assert "pipeline_blocker:no_hbt_order_submitted" in result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["orders_submitted"] == 0
+    assert replay["no_order_observation"] == "strategy_signal_below_threshold_or_no_directional_order"
+    assert not (out_dir / "recorder_result.npz").exists()
+    assert not (out_dir / "stats_summary.json").exists()
+    assert not (out_dir / "promotion_decision.json").exists()
+
+
 def test_structural_limit_order_evaluates_canonical_payload_signal(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

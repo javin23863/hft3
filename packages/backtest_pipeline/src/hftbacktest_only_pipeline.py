@@ -638,8 +638,9 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     if not submitted:
         if signal_lookup is not None and signal_meta.get("adapter_status") == "available":
             no_order_observation = "strategy_signal_below_threshold_or_no_directional_order"
+            reasons.append("pipeline_blocker:no_hbt_order_submitted")
         else:
-            reasons.append("strategy_submitted_no_orders")
+            reasons.append("pipeline_blocker:no_hbt_order_submitted")
     if submit_ret not in (0, None):
         reasons.append("order_submit_failed")
     # hftbacktest v2 return codes: 0 = success, 3 = WaitCanceled timeout for passive orders.

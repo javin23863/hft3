@@ -67,6 +67,11 @@ private:
     double total_size_sq_{0.0};
     int64_t curr_trade_count_{0};
     int64_t prev_trade_count_{0};
+    double vwap_sum_px_qty_{0.0};
+    double vwap_sum_qty_{0.0};
+    double session_high_{0.0};
+    double session_low_{0.0};
+    double round_number_increment_{10.0};
     double prev_top10_depth_{0.0};
     double prev_book_slope_{0.0};
     int prev_bid1_{0};
