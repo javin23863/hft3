@@ -12,7 +12,7 @@ import concurrent.futures
 import json
 import sys
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterator, Mapping
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages")]
@@ -42,10 +42,8 @@ def run_campaign(
     entry_latency_ns: int = 100_000,
     response_latency_ns: int = 100_000,
 ) -> dict[str, Any]:
-    rows = _load_jsonl(manifest_path)
-    if not rows:
-        raise SystemExit("--campaign-manifest has no rows")
-    campaign_id = str(rows[0].get("campaign_id") or "hbt_campaign")
+    first_row = _first_jsonl_row(manifest_path)
+    campaign_id = str(first_row.get("campaign_id") or "hbt_campaign")
     campaign_root = Path(out_root) / safe_stem(campaign_id)
     campaign_root.mkdir(parents=True, exist_ok=True)
     settings = {
@@ -58,28 +56,44 @@ def run_campaign(
         "response_latency_ns": response_latency_ns,
     }
 
-    tasks = [(row, str(campaign_root), settings) for row in rows]
     worker_count = max(1, int(workers))
-    if worker_count == 1:
-        results = [_run_row_task(task) for task in tasks]
-    else:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as pool:
-            results = list(pool.map(_run_row_task, tasks))
-
     status_counts: dict[str, int] = {}
     blocker_counts: dict[str, int] = {}
-    for result in results:
+    row_count = 0
+
+    def record(result: Mapping[str, Any]) -> None:
         status = str(result.get("status") or "unknown")
         status_counts[status] = status_counts.get(status, 0) + 1
         blocker = str(result.get("blocker_code") or "")
         if blocker:
             blocker_counts[blocker] = blocker_counts.get(blocker, 0) + 1
+
+    if worker_count == 1:
+        for row in _iter_jsonl(manifest_path):
+            row_count += 1
+            record(_run_row_task((row, str(campaign_root), settings)))
+    else:
+        max_in_flight = worker_count * 2
+        with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as pool:
+            pending: set[concurrent.futures.Future[dict[str, Any]]] = set()
+            for row in _iter_jsonl(manifest_path):
+                row_count += 1
+                pending.add(pool.submit(_run_row_task, (row, str(campaign_root), settings)))
+                if len(pending) >= max_in_flight:
+                    done, pending = concurrent.futures.wait(
+                        pending,
+                        return_when=concurrent.futures.FIRST_COMPLETED,
+                    )
+                    for future in done:
+                        record(future.result())
+            for future in concurrent.futures.as_completed(pending):
+                record(future.result())
     summary = {
         "schema_version": SCHEMA_VERSION,
         "campaign_id": campaign_id,
         "campaign_manifest": str(manifest_path),
         "out_root": str(campaign_root),
-        "row_count": len(rows),
+        "row_count": row_count,
         "workers": worker_count,
         "dry_run": dry_run,
         "status_counts": dict(sorted(status_counts.items())),
@@ -296,15 +310,21 @@ def _as_list(value: Any) -> list[Any]:
     return [value]
 
 
-def _load_jsonl(path: Path) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for line in Path(path).read_text(encoding="utf-8").splitlines():
-        if line.strip():
+def _first_jsonl_row(path: Path) -> dict[str, Any]:
+    for row in _iter_jsonl(path):
+        return row
+    raise SystemExit("--campaign-manifest has no rows")
+
+
+def _iter_jsonl(path: Path) -> Iterator[dict[str, Any]]:
+    with Path(path).open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
             payload = json.loads(line)
             if not isinstance(payload, Mapping):
                 raise SystemExit("--campaign-manifest rows must be JSON objects")
-            rows.append(dict(payload))
-    return rows
+            yield dict(payload)
 
 
 def _hash_json(payload: Mapping[str, Any]) -> str:

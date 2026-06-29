@@ -115,7 +115,7 @@ def _campaign_row(tmp_path: Path, *, blocker_code: str = "") -> dict[str, object
     }
 
 
-def test_campaign_runner_processes_every_row_as_hbt_or_blocker(tmp_path: Path) -> None:
+def test_campaign_runner_processes_manifest_without_eager_jsonl_load(tmp_path: Path, monkeypatch) -> None:
     _install_fake_hftbacktest()
     module = _load_runner_module()
     _write_valid_npz(tmp_path / "data.npz")
@@ -126,6 +126,15 @@ def test_campaign_runner_processes_every_row_as_hbt_or_blocker(tmp_path: Path) -
         _campaign_row(tmp_path, blocker_code="pipeline_blocker:missing_uniform_hbt_adapter"),
     ]
     manifest.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    original_read_text = Path.read_text
+
+    def fail_manifest_read_text(path: Path, *args: object, **kwargs: object) -> str:
+        if path == manifest:
+            raise AssertionError("campaign manifest must be streamed, not read eagerly")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fail_manifest_read_text)
 
     summary = module.run_campaign(
         manifest_path=manifest,
@@ -168,7 +177,7 @@ def test_campaign_runner_accepts_parameter_surface_rows(tmp_path: Path) -> None:
         "surface_unit_id": "surface_unit_abc",
         "parameter_family": "grid",
         "parameter_hash": "d" * 64,
-        "strategy_params": {"quantity": 1.0, "max_steps": 1},
+        "strategy_params": {"quantity": 1.0, "max_steps": 1, "holding_period_bars": 7},
         "parameter_proposal_status": "declared_pre_hbt",
         "objective_evaluations": 0,
         "optimizer_claim": False,
@@ -190,7 +199,9 @@ def test_campaign_runner_accepts_parameter_surface_rows(tmp_path: Path) -> None:
     assert payload["surface_unit_id"] == "surface_unit_abc"
     assert payload["parameter_family"] == "grid"
     assert payload["parameter_hash"] == "d" * 64
-    assert payload["strategy_params"] == {"quantity": 1.0, "max_steps": 1}
+    assert payload["strategy_params"] == {"quantity": 1.0, "max_steps": 1, "holding_period_bars": 7}
+    assert payload["strategy_params"]["max_steps"] == 1
+    assert payload["strategy_params"]["holding_period_bars"] == 7
     assert payload["parameter_proposal_status"] == "declared_pre_hbt"
     assert payload["objective_evaluations"] == 0
     assert payload["optimizer_claim"] is False
