@@ -80,8 +80,17 @@ python scripts/build_hftbacktest_only_campaign_manifest.py \
   --campaign-id hbt_full_lake_$(date -u +%Y%m%dT%H%M%SZ) \
   --prepared-root /data/hbt/prepared \
   --out /data/hbt/hbt_full_lake_campaign_manifest.jsonl \
-  --summary-out /data/hbt/hbt_full_lake_campaign_summary.json
+  --summary-out /data/hbt/hbt_full_lake_campaign_summary.json \
+  --checkpoint-out /data/hbt/hbt_full_lake_campaign_checkpoint.json
 ```
+
+The base manifest is the no-cherry-pick campaign universe receipt, not an
+immediate HBT execution queue. Its summary must prove `canonical_model_count`,
+`prepared_unit_count`, `executable_unit_count`, `blocker_unit_count`,
+`expected_base_rows`, `emitted_base_rows`, adapter/authority/applicability
+counts, `manual_filter_used=false`, `vectorbt_dependency=false`,
+`stage_a_dependency=false`, `screening_artifact_dependency=false`, and
+`hbt_jobs_started=0`.
 
 If parameter proposals are declared, expand the campaign surface before the
 full run:
@@ -97,35 +106,57 @@ python scripts/build_hftbacktest_only_campaign_manifest.py \
   --parameter-surface-summary-out /data/hbt/hbt_full_lake_parameter_surface_summary.json
 ```
 
-If no parameter proposals are declared yet, keep the campaign manifest as the
-execution input and record the absence of parameter sets in the run declaration.
-Do not synthesize a search grid inside the runner.
+If `config/hftbacktest/parameter_sets.json` is missing, record
+`pipeline_blocker:parameter_sets_config_missing` in the base manifest summary.
+Do not synthesize a search grid inside the builder or runner.
 
 Parameter proposals with `objective_evaluations=0` are deterministic proposal
 rows only. They are not adaptive optimizer evidence and cannot rank, reject, or
 promote anything before HBT recorder and stats artifacts exist.
 
-## Run The Campaign
+## Deterministic Canary Before Execution
 
-Run the parameter surface when it exists:
+Before broad HBT execution, create the first execution manifest deterministically
+from manifest order. It must use only rows with:
+
+- `admissibility_status=admissible` / data admissible;
+- `adapter_status=available` or `adapter_status=ready`;
+- `blocker_code=""` and non-empty `authority_refs`;
+- base summary `parameter_surface_status=base_only` or
+  `parameter_surface_config_status=parameter_config_present`;
+- no manual model, symbol, or instrument preference.
+
+The canary selector is `first N rows after applying those readiness predicates`,
+never a hand-picked model or symbol.
+
+Build that canary manifest with the same streaming builder:
+
+```bash
+python scripts/build_hftbacktest_only_campaign_manifest.py \
+  --campaign-id hbt_full_lake_$(date -u +%Y%m%dT%H%M%SZ) \
+  --prepared-root /data/hbt/prepared \
+  --out /data/hbt/hbt_full_lake_campaign_manifest.jsonl \
+  --summary-out /data/hbt/hbt_full_lake_campaign_summary.json \
+  --checkpoint-out /data/hbt/hbt_full_lake_campaign_checkpoint.json \
+  --canary-out /data/hbt/hbt_full_lake_canary_manifest.jsonl \
+  --canary-count <N> \
+  --canary-summary-out /data/hbt/hbt_full_lake_canary_summary.json
+```
+
+Then run that canary manifest first:
 
 ```bash
 python scripts/run_hftbacktest_only_campaign.py \
-  --campaign-manifest /data/hbt/hbt_full_lake_parameter_surface.jsonl \
+  --campaign-manifest /data/hbt/hbt_full_lake_canary_manifest.jsonl \
   --out-root /data/hbt/campaign_runs \
   --workers 12 \
   --resume
 ```
 
-If no parameter proposals are declared, run the base campaign manifest:
-
-```bash
-python scripts/run_hftbacktest_only_campaign.py \
-  --campaign-manifest /data/hbt/hbt_full_lake_campaign_manifest.jsonl \
-  --out-root /data/hbt/campaign_runs \
-  --workers 12 \
-  --resume
-```
+Only after the canary receipts pass may the same execution contract be promoted
+to the broader parameter-surface or base-only eligible row set. The full base
+universe still remains a manifest/accounting artifact; blocked rows write
+blocker receipts and are not model failures.
 
 Tune workers from measured Vast throughput and memory pressure. Worker count is
 an HBT runtime decision, not inherited from any historical screening run.
@@ -138,6 +169,8 @@ Copy these back to the workstation:
 /data/hbt/hbt_prepare_summary.json
 /data/hbt/hbt_full_lake_campaign_manifest.jsonl
 /data/hbt/hbt_full_lake_campaign_summary.json
+/data/hbt/hbt_full_lake_campaign_checkpoint.json
+/data/hbt/hbt_full_lake_canary_manifest.jsonl
 /data/hbt/campaign_runs/**/campaign_row_result.json
 /data/hbt/campaign_runs/**/run_manifest.json
 /data/hbt/campaign_runs/**/recorder_result.npz

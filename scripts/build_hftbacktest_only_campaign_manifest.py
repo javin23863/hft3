@@ -13,12 +13,16 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages")]
 
 from backtest_pipeline.src.hftbacktest_only_campaign_manifest import (
+    DEFAULT_CHECKPOINT_EVERY_ROWS,
     DEFAULT_REGISTRY_PATH,
-    build_parameter_surface_rows,
-    build_campaign_manifest_rows,
-    write_parameter_surface_manifest,
-    write_campaign_manifest,
+    iter_parameter_surface_rows,
+    stream_campaign_manifest,
+    stream_first_eligible_canary_manifest,
+    stream_parameter_surface_manifest,
 )
+
+
+DEFAULT_PARAMETER_SETS = REPO / "config" / "hftbacktest" / "parameter_sets.json"
 
 
 def _load_adapter_status(path: Path | None) -> dict[str, str] | None:
@@ -61,6 +65,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--adapter-status-json", type=Path, default=None)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--summary-out", type=Path, default=None)
+    parser.add_argument("--checkpoint-out", type=Path, default=None)
+    parser.add_argument(
+        "--checkpoint-every-rows",
+        type=int,
+        default=DEFAULT_CHECKPOINT_EVERY_ROWS,
+        help="Flush and checkpoint streaming manifest progress every N rows.",
+    )
     parser.add_argument(
         "--parameter-sets-json",
         type=Path,
@@ -69,38 +80,77 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--parameter-surface-out", type=Path, default=None)
     parser.add_argument("--parameter-surface-summary-out", type=Path, default=None)
+    parser.add_argument("--parameter-surface-checkpoint-out", type=Path, default=None)
+    parser.add_argument("--canary-out", type=Path, default=None)
+    parser.add_argument("--canary-count", type=int, default=None)
+    parser.add_argument("--canary-summary-out", type=Path, default=None)
     args = parser.parse_args(argv)
 
     if args.parameter_sets_json is not None and args.parameter_surface_out is None:
         raise SystemExit("--parameter-sets-json requires --parameter-surface-out")
     if args.parameter_surface_out is not None and args.parameter_sets_json is None:
         raise SystemExit("--parameter-surface-out requires --parameter-sets-json")
+    if args.canary_out is not None and args.canary_count is None:
+        raise SystemExit("--canary-out requires --canary-count")
+    if args.canary_count is not None and args.canary_out is None:
+        raise SystemExit("--canary-count requires --canary-out")
 
-    rows = build_campaign_manifest_rows(
+    declared_parameter_sets_path = args.parameter_sets_json or DEFAULT_PARAMETER_SETS
+    if declared_parameter_sets_path.is_file():
+        parameter_surface_config_status = "parameter_config_present"
+    else:
+        parameter_surface_config_status = "pipeline_blocker:parameter_sets_config_missing"
+
+    summary = stream_campaign_manifest(
         campaign_id=args.campaign_id,
         prepared_root=args.prepared_root,
+        out_path=args.out,
         registry_path=args.model_registry,
         adapter_status_by_model=_load_adapter_status(args.adapter_status_json),
-    )
-    summary = write_campaign_manifest(
-        rows,
-        out_path=args.out,
         summary_path=args.summary_out,
+        checkpoint_path=args.checkpoint_out,
+        checkpoint_every_rows=args.checkpoint_every_rows,
+        parameter_surface_status="base_only",
+        parameter_surface_config_status=parameter_surface_config_status,
+        parameter_sets_json=declared_parameter_sets_path,
     )
     output: dict[str, Any] = {"campaign_manifest": summary}
     parameter_sets = _load_parameter_sets(args.parameter_sets_json)
+    canary_source = args.out
+    canary_parameter_surface_status = summary["parameter_surface_status"]
+    canary_parameter_surface_config_status = summary["parameter_surface_config_status"]
     if parameter_sets is not None and args.parameter_surface_out is not None:
-        parameter_surface_rows = build_parameter_surface_rows(
-            campaign_rows=rows,
-            parameter_sets=parameter_sets,
-        )
-        output["parameter_surface"] = write_parameter_surface_manifest(
-            parameter_surface_rows,
+        output["parameter_surface"] = stream_parameter_surface_manifest(
+            iter_parameter_surface_rows(
+                campaign_rows=_iter_jsonl(args.out),
+                parameter_sets=parameter_sets,
+            ),
             out_path=args.parameter_surface_out,
             summary_path=args.parameter_surface_summary_out,
+            checkpoint_path=args.parameter_surface_checkpoint_out,
+            checkpoint_every_rows=args.checkpoint_every_rows,
+        )
+        canary_source = args.parameter_surface_out
+        canary_parameter_surface_config_status = "parameter_config_present"
+    if args.canary_out is not None and args.canary_count is not None:
+        output["canary_manifest"] = stream_first_eligible_canary_manifest(
+            _iter_jsonl(canary_source),
+            out_path=args.canary_out,
+            count=args.canary_count,
+            summary_path=args.canary_summary_out,
+            source_manifest=canary_source,
+            parameter_surface_status=canary_parameter_surface_status,
+            parameter_surface_config_status=canary_parameter_surface_config_status,
         )
     print(json.dumps(output, indent=2, sort_keys=True, default=str))
     return 0
+
+
+def _iter_jsonl(path: Path):
+    with Path(path).open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                yield json.loads(line)
 
 
 if __name__ == "__main__":

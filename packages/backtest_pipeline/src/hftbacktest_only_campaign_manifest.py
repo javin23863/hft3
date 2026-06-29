@@ -10,19 +10,23 @@ import hashlib
 import json
 import os
 import re
+import sqlite3
+import tempfile
 from collections.abc import Iterable as IterableABC
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Iterator, Mapping
 
 import yaml
 
 
 SCHEMA_VERSION = "hft3_hftbacktest_only_campaign_manifest_v1"
 SUMMARY_SCHEMA_VERSION = "hft3_hftbacktest_only_campaign_manifest_summary_v1"
+PRE_EXECUTION_SUMMARY_SCHEMA_VERSION = "hft3_hbt_only_pre_execution_campaign_summary_v1"
 PARAMETER_SURFACE_SCHEMA_VERSION = "hft3_hftbacktest_only_parameter_surface_manifest_v1"
 PARAMETER_SURFACE_SUMMARY_SCHEMA_VERSION = (
     "hft3_hftbacktest_only_parameter_surface_manifest_summary_v1"
 )
+CANARY_SUMMARY_SCHEMA_VERSION = "hft3_hftbacktest_only_canary_manifest_summary_v1"
 PRODUCT_METADATA_POLICY = "explicit_per_symbol_contract_tick_lot_contract_required"
 DEFAULT_REGISTRY_PATH = (
     Path(__file__).resolve().parents[2]
@@ -117,6 +121,8 @@ _FORBIDDEN_PRE_HBT_DECISION_TOKENS = (
     "model_" + "untradable",
     "parameter_" + "rejected",
 )
+DEFAULT_CHECKPOINT_EVERY_ROWS = 100_000
+READY_ADAPTER_STATUSES = ("available", "ready")
 
 
 class HftBacktestOnlyCampaignManifestError(ValueError):
@@ -132,44 +138,84 @@ def build_campaign_manifest_rows(
     authority_refs: Iterable[str] = DEFAULT_AUTHORITY_REFS,
 ) -> list[dict[str, Any]]:
     """Build deterministic rows from canonical models x prepared HBT units."""
-    registry_path = Path(registry_path)
-    registry_hash = _sha256_file(registry_path)
-    models = _load_canonical_models(registry_path)
-    prepared_units = _load_prepared_units(Path(prepared_root))
-    if not models:
-        raise HftBacktestOnlyCampaignManifestError("authority_missing:model_registry_empty")
-    if not prepared_units:
-        raise HftBacktestOnlyCampaignManifestError(
-            f"data_blocker:no_hbt_normalized_units:{prepared_root}"
-        )
-
-    adapter_statuses = (
-        dict(adapter_status_by_model)
-        if adapter_status_by_model is not None
-        else _infer_adapter_statuses(models)
+    inputs = _campaign_manifest_inputs(
+        campaign_id=campaign_id,
+        prepared_root=prepared_root,
+        registry_path=registry_path,
+        adapter_status_by_model=adapter_status_by_model,
+        authority_refs=authority_refs,
     )
-    rows: list[dict[str, Any]] = []
-    for canonical_model_id, entry in models:
-        aliases = _legacy_aliases(entry)
-        for prepared in prepared_units:
-            row = _build_row(
-                campaign_id=campaign_id,
-                canonical_model_id=canonical_model_id,
-                legacy_aliases=aliases,
-                registry_hash=registry_hash,
-                prepared=prepared,
-                adapter_status=_adapter_status(
-                    canonical_model_id,
-                    adapter_statuses,
-                ),
-                authority_refs=tuple(authority_refs),
-            )
-            rows.append(row)
+    rows = list(_iter_campaign_rows_from_inputs(inputs))
     validate_campaign_manifest_rows(
         rows,
-        expected_canonical_model_ids=[slug for slug, _entry in models],
+        expected_canonical_model_ids=inputs["canonical_model_ids"],
     )
     return rows
+
+
+def iter_campaign_manifest_rows(
+    *,
+    campaign_id: str,
+    prepared_root: Path,
+    registry_path: Path = DEFAULT_REGISTRY_PATH,
+    adapter_status_by_model: Mapping[str, str] | None = None,
+    authority_refs: Iterable[str] = DEFAULT_AUTHORITY_REFS,
+) -> Iterator[dict[str, Any]]:
+    """Yield deterministic rows without materializing the campaign universe."""
+    inputs = _campaign_manifest_inputs(
+        campaign_id=campaign_id,
+        prepared_root=prepared_root,
+        registry_path=registry_path,
+        adapter_status_by_model=adapter_status_by_model,
+        authority_refs=authority_refs,
+    )
+    yield from _iter_campaign_rows_from_inputs(inputs)
+
+
+def stream_campaign_manifest(
+    *,
+    campaign_id: str,
+    prepared_root: Path,
+    out_path: Path,
+    registry_path: Path = DEFAULT_REGISTRY_PATH,
+    adapter_status_by_model: Mapping[str, str] | None = None,
+    summary_path: Path | None = None,
+    checkpoint_path: Path | None = None,
+    checkpoint_every_rows: int = DEFAULT_CHECKPOINT_EVERY_ROWS,
+    authority_refs: Iterable[str] = DEFAULT_AUTHORITY_REFS,
+    parameter_surface_status: str = "base_only",
+    parameter_surface_config_status: str = "",
+    parameter_sets_json: Path | None = None,
+) -> dict[str, Any]:
+    """Stream the base campaign manifest to JSONL and write pre-execution proof."""
+    inputs = _campaign_manifest_inputs(
+        campaign_id=campaign_id,
+        prepared_root=prepared_root,
+        registry_path=registry_path,
+        adapter_status_by_model=adapter_status_by_model,
+        authority_refs=authority_refs,
+    )
+    return write_campaign_manifest(
+        _iter_campaign_rows_from_inputs(inputs),
+        out_path=out_path,
+        summary_path=summary_path,
+        expected_canonical_model_ids=inputs["canonical_model_ids"],
+        prepared_unit_count=len(inputs["prepared_units"]),
+        executable_unit_count=_executable_prepared_unit_count(inputs["prepared_units"]),
+        blocker_unit_count=_blocker_prepared_unit_count(inputs["prepared_units"]),
+        model_applicability_counts=_model_applicability_counts(
+            inputs["canonical_model_ids"],
+            inputs["adapter_statuses"],
+        ),
+        instrument_applicability_counts=_instrument_applicability_counts(
+            inputs["prepared_units"],
+        ),
+        checkpoint_path=checkpoint_path,
+        checkpoint_every_rows=checkpoint_every_rows,
+        parameter_surface_status=parameter_surface_status,
+        parameter_surface_config_status=parameter_surface_config_status,
+        parameter_sets_json=parameter_sets_json,
+    )
 
 
 def write_campaign_manifest(
@@ -177,29 +223,156 @@ def write_campaign_manifest(
     *,
     out_path: Path,
     summary_path: Path | None = None,
+    expected_canonical_model_ids: Iterable[str] | None = None,
+    prepared_unit_count: int | None = None,
+    executable_unit_count: int | None = None,
+    blocker_unit_count: int | None = None,
+    model_applicability_counts: Mapping[str, int] | None = None,
+    instrument_applicability_counts: Mapping[str, int] | None = None,
+    checkpoint_path: Path | None = None,
+    checkpoint_every_rows: int = DEFAULT_CHECKPOINT_EVERY_ROWS,
+    parameter_surface_status: str = "base_only",
+    parameter_surface_config_status: str = "",
+    parameter_sets_json: Path | None = None,
 ) -> dict[str, Any]:
-    """Write manifest JSONL plus a compact count summary."""
-    materialized = [dict(row) for row in rows]
-    if not materialized:
-        raise HftBacktestOnlyCampaignManifestError("campaign_manifest_empty")
+    """Write manifest JSONL plus a compact count summary without row materialization."""
+    if checkpoint_every_rows < 0:
+        raise HftBacktestOnlyCampaignManifestError("campaign_manifest_invalid_checkpoint_every")
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint_output = Path(checkpoint_path) if checkpoint_path is not None else None
+    tmp = _path_with_added_suffix(out_path, ".tmp")
+    expected_models = set(expected_canonical_model_ids or [])
+    summary_builder = _CampaignManifestSummaryBuilder(
+        expected_canonical_model_ids=expected_models,
+        prepared_unit_count=prepared_unit_count,
+        executable_unit_count=executable_unit_count,
+        blocker_unit_count=blocker_unit_count,
+        model_applicability_counts=model_applicability_counts,
+        instrument_applicability_counts=instrument_applicability_counts,
+        parameter_surface_status=parameter_surface_status,
+        parameter_surface_config_status=parameter_surface_config_status,
+        parameter_sets_json=parameter_sets_json,
+    )
+    try:
+        with tmp.open("w", encoding="utf-8") as handle:
+            for raw_row in rows:
+                row = dict(raw_row)
+                _validate_required_row_fields(
+                    row,
+                    required_fields=REQUIRED_ROW_FIELDS,
+                    error_prefix="campaign_manifest",
+                )
+                summary_builder.observe(row)
+                handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
+                if (
+                    checkpoint_output is not None
+                    and checkpoint_every_rows
+                    and summary_builder.emitted_base_rows % checkpoint_every_rows == 0
+                ):
+                    handle.flush()
+                    _write_json_atomic(
+                        checkpoint_output,
+                        summary_builder.summary(partial=True),
+                    )
+            if summary_builder.emitted_base_rows == 0:
+                raise HftBacktestOnlyCampaignManifestError("campaign_manifest_empty")
+            handle.flush()
+        summary_builder.validate_complete()
+    except Exception:
+        _cleanup_partial_outputs(tmp, checkpoint_output)
+        raise
+    os.replace(tmp, out_path)
+
+    summary = summary_builder.summary(partial=False)
+    if summary_path is not None:
+        summary_path = Path(summary_path)
+        _write_json_atomic(summary_path, summary)
+    if checkpoint_output is not None:
+        _write_json_atomic(checkpoint_output, summary)
+    return summary
+
+
+def stream_first_eligible_canary_manifest(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    out_path: Path,
+    count: int,
+    summary_path: Path | None = None,
+    source_manifest: Path | str = "",
+    parameter_surface_status: str = "base_only",
+    parameter_surface_config_status: str = "",
+) -> dict[str, Any]:
+    """Write the first N executable rows from manifest order without preference filters."""
+    if count <= 0:
+        raise HftBacktestOnlyCampaignManifestError("canary_manifest_count_must_be_positive")
+    if not _canary_parameter_surface_status_ok(
+        parameter_surface_status=parameter_surface_status,
+        parameter_surface_config_status=parameter_surface_config_status,
+    ):
+        raise HftBacktestOnlyCampaignManifestError(
+            "canary_manifest_parameter_surface_status_not_ready"
+        )
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = _path_with_added_suffix(out_path, ".tmp")
-    with tmp.open("w", encoding="utf-8") as handle:
-        for row in materialized:
-            handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
-    os.replace(tmp, out_path)
-
-    summary = campaign_manifest_summary(materialized)
-    if summary_path is not None:
-        summary_path = Path(summary_path)
-        summary_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_summary = _path_with_added_suffix(summary_path, ".tmp")
-        tmp_summary.write_text(
-            json.dumps(summary, indent=2, sort_keys=True, default=str) + "\n",
-            encoding="utf-8",
+    rows_scanned = 0
+    emitted = 0
+    eligibility_counts: dict[str, int] = {}
+    try:
+        with tmp.open("w", encoding="utf-8") as handle:
+            for raw_row in rows:
+                rows_scanned += 1
+                row = dict(raw_row)
+                _validate_required_row_fields(
+                    row,
+                    required_fields=REQUIRED_ROW_FIELDS,
+                    error_prefix="campaign_manifest",
+                )
+                eligible, reason = _canary_row_eligibility_reason(row)
+                eligibility_counts[reason] = eligibility_counts.get(reason, 0) + 1
+                if not eligible:
+                    continue
+                handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
+                emitted += 1
+                if emitted == count:
+                    break
+            handle.flush()
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    if emitted != count:
+        tmp.unlink(missing_ok=True)
+        raise HftBacktestOnlyCampaignManifestError(
+            f"canary_manifest_insufficient_eligible_rows:requested={count}:emitted={emitted}"
         )
-        os.replace(tmp_summary, summary_path)
+    os.replace(tmp, out_path)
+    summary = {
+        "schema_version": CANARY_SUMMARY_SCHEMA_VERSION,
+        "source_manifest": str(source_manifest),
+        "canary_manifest": str(out_path),
+        "selector": "first_n_manifest_order_after_readiness_predicates",
+        "requested_count": count,
+        "emitted_count": emitted,
+        "source_rows_scanned": rows_scanned,
+        "eligibility_counts": dict(sorted(eligibility_counts.items())),
+        "readiness_predicates": {
+            "data_admissible": "admissibility_status == admissible",
+            "adapter_status": list(READY_ADAPTER_STATUSES),
+            "authority_status": "authority_refs present and blocker_code empty",
+            "parameter_surface_status": "base_only or parameter_config_present",
+        },
+        "manual_filter_used": False,
+        "vectorbt_dependency": False,
+        "stage_a_dependency": False,
+        "screening_artifact_dependency": False,
+        "hbt_jobs_started": 0,
+        "parameter_surface_status": parameter_surface_status,
+        "parameter_surface_config_status": parameter_surface_config_status,
+        "manifest_order": "source_manifest_order",
+    }
+    if summary_path is not None:
+        _write_json_atomic(Path(summary_path), summary)
     return summary
 
 
@@ -210,9 +383,7 @@ def build_parameter_surface_rows(
 ) -> list[dict[str, Any]]:
     """Expand campaign rows by deterministic declared parameter proposals."""
     materialized_campaign_rows = [dict(row) for row in campaign_rows]
-    materialized_parameter_sets = [
-        _normalize_parameter_set(spec) for spec in parameter_sets
-    ]
+    materialized_parameter_sets = _normalize_parameter_sets(parameter_sets)
     if not materialized_campaign_rows:
         raise HftBacktestOnlyCampaignManifestError("campaign_manifest_empty")
     if not materialized_parameter_sets:
@@ -241,6 +412,37 @@ def build_parameter_surface_rows(
     return rows
 
 
+def iter_parameter_surface_rows(
+    *,
+    campaign_rows: Iterable[Mapping[str, Any]],
+    parameter_sets: Iterable[Mapping[str, Any]],
+) -> Iterator[dict[str, Any]]:
+    """Yield parameter-surface rows without materializing the base campaign."""
+    materialized_parameter_sets = _normalize_parameter_sets(parameter_sets)
+    if not materialized_parameter_sets:
+        raise HftBacktestOnlyCampaignManifestError("parameter_surface_empty")
+    saw_campaign_row = False
+    for campaign_row in campaign_rows:
+        saw_campaign_row = True
+        _validate_required_row_fields(
+            campaign_row,
+            required_fields=REQUIRED_ROW_FIELDS,
+            error_prefix="campaign_manifest",
+        )
+        for parameter_set in materialized_parameter_sets:
+            parameter_hash = _parameter_hash(
+                parameter_family=parameter_set["parameter_family"],
+                strategy_params=parameter_set["strategy_params"],
+            )
+            yield _build_parameter_surface_row(
+                campaign_row=campaign_row,
+                parameter_set=parameter_set,
+                parameter_hash=parameter_hash,
+            )
+    if not saw_campaign_row:
+        raise HftBacktestOnlyCampaignManifestError("campaign_manifest_empty")
+
+
 def write_parameter_surface_manifest(
     rows: Iterable[Mapping[str, Any]],
     *,
@@ -248,36 +450,78 @@ def write_parameter_surface_manifest(
     summary_path: Path | None = None,
 ) -> dict[str, Any]:
     """Write parameter-surface JSONL plus a compact summary."""
-    materialized = [dict(row) for row in rows]
-    validate_parameter_surface_rows(materialized)
+    return stream_parameter_surface_manifest(
+        rows,
+        out_path=out_path,
+        summary_path=summary_path,
+    )
+
+
+def stream_parameter_surface_manifest(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    out_path: Path,
+    summary_path: Path | None = None,
+    checkpoint_path: Path | None = None,
+    checkpoint_every_rows: int = DEFAULT_CHECKPOINT_EVERY_ROWS,
+) -> dict[str, Any]:
+    """Stream parameter-surface JSONL without materializing the base campaign."""
+    if checkpoint_every_rows < 0:
+        raise HftBacktestOnlyCampaignManifestError("parameter_surface_invalid_checkpoint_every")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint_output = Path(checkpoint_path) if checkpoint_path is not None else None
     tmp = _path_with_added_suffix(out_path, ".tmp")
-    with tmp.open("w", encoding="utf-8") as handle:
-        for row in materialized:
-            handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
-    os.replace(tmp, out_path)
-
-    summary = parameter_surface_summary(materialized)
+    sqlite_path = _path_with_added_suffix(out_path, ".dedupe.sqlite.tmp")
+    summary: dict[str, Any] | None = None
+    try:
+        with _SqliteUniqueTracker(sqlite_path) as unique_tracker:
+            summary_builder = _ParameterSurfaceSummaryBuilder(unique_tracker=unique_tracker)
+            with tmp.open("w", encoding="utf-8") as handle:
+                for raw_row in rows:
+                    row = dict(raw_row)
+                    _validate_parameter_surface_row(row)
+                    summary_builder.observe(row)
+                    handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
+                    if (
+                        checkpoint_output is not None
+                        and checkpoint_every_rows
+                        and summary_builder.row_count % checkpoint_every_rows == 0
+                    ):
+                        handle.flush()
+                        _write_json_atomic(
+                            checkpoint_output,
+                            summary_builder.summary(partial=True),
+                        )
+                if summary_builder.row_count == 0:
+                    raise HftBacktestOnlyCampaignManifestError("parameter_surface_empty")
+                handle.flush()
+                summary = summary_builder.summary(partial=False)
+        os.replace(tmp, out_path)
+    except Exception:
+        _cleanup_partial_outputs(tmp, checkpoint_output)
+        raise
+    if summary is None:
+        raise HftBacktestOnlyCampaignManifestError("parameter_surface_summary_missing")
     if summary_path is not None:
-        summary_path = Path(summary_path)
-        summary_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_summary = _path_with_added_suffix(summary_path, ".tmp")
-        tmp_summary.write_text(
-            json.dumps(summary, indent=2, sort_keys=True, default=str) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(tmp_summary, summary_path)
+        _write_json_atomic(Path(summary_path), summary)
+    if checkpoint_output is not None:
+        _write_json_atomic(checkpoint_output, summary)
     return summary
 
 
 def campaign_manifest_summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
-    materialized = [dict(row) for row in rows]
+    campaign_id = ""
+    row_count = 0
     by_status: dict[str, int] = {}
     blocker_codes: dict[str, int] = {}
     model_ids: set[str] = set()
     source_npzs: set[str] = set()
-    for row in materialized:
+    for raw_row in rows:
+        row = dict(raw_row)
+        if not campaign_id:
+            campaign_id = str(row.get("campaign_id") or "")
+        row_count += 1
         status = str(row.get("admissibility_status") or "")
         by_status[status] = by_status.get(status, 0) + 1
         blocker_code = str(row.get("blocker_code") or "")
@@ -287,8 +531,8 @@ def campaign_manifest_summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, An
         source_npzs.add(str(row.get("source_npz") or ""))
     return {
         "schema_version": SUMMARY_SCHEMA_VERSION,
-        "campaign_id": materialized[0].get("campaign_id") if materialized else "",
-        "row_count": len(materialized),
+        "campaign_id": campaign_id,
+        "row_count": row_count,
         "canonical_model_count": len(model_ids - {""}),
         "source_npz_count": len(source_npzs - {""}),
         "admissibility_status_counts": dict(sorted(by_status.items())),
@@ -298,45 +542,329 @@ def campaign_manifest_summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, An
 
 
 def parameter_surface_summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
-    materialized = [dict(row) for row in rows]
-    by_status: dict[str, int] = {}
-    blocker_codes: dict[str, int] = {}
-    parameter_families: dict[str, int] = {}
-    objective_evaluations: dict[str, int] = {}
-    model_ids: set[str] = set()
-    source_npzs: set[str] = set()
-    unit_ids: set[str] = set()
-    parameter_hashes: set[str] = set()
-    for row in materialized:
-        status = str(row.get("admissibility_status") or "")
-        by_status[status] = by_status.get(status, 0) + 1
+    builder = _ParameterSurfaceSummaryBuilder()
+    for raw_row in rows:
+        builder.observe(dict(raw_row))
+    summary = builder.summary(partial=False)
+    summary.pop("partial", None)
+    return summary
+
+
+class _CampaignManifestSummaryBuilder:
+    def __init__(
+        self,
+        *,
+        expected_canonical_model_ids: set[str],
+        prepared_unit_count: int | None,
+        executable_unit_count: int | None,
+        blocker_unit_count: int | None,
+        model_applicability_counts: Mapping[str, int] | None,
+        instrument_applicability_counts: Mapping[str, int] | None,
+        parameter_surface_status: str,
+        parameter_surface_config_status: str,
+        parameter_sets_json: Path | None,
+    ) -> None:
+        self.expected_canonical_model_ids = set(expected_canonical_model_ids)
+        self.prepared_unit_count = prepared_unit_count
+        self.executable_unit_count = executable_unit_count
+        self.blocker_unit_count = blocker_unit_count
+        self.model_applicability_counts = dict(model_applicability_counts or {})
+        self.instrument_applicability_counts = dict(instrument_applicability_counts or {})
+        self.parameter_surface_status = parameter_surface_status
+        self.parameter_surface_config_status = parameter_surface_config_status
+        self.parameter_sets_json = str(parameter_sets_json or "")
+        self.campaign_id = ""
+        self.emitted_base_rows = 0
+        self.admissibility_status_counts: dict[str, int] = {}
+        self.blocker_code_counts: dict[str, int] = {}
+        self.adapter_status_counts: dict[str, int] = {}
+        self.authority_missing_counts: dict[str, int] = {}
+        self.model_ids: set[str] = set()
+        self.source_npzs: set[str] = set()
+
+    def observe(self, row: Mapping[str, Any]) -> None:
+        if not self.campaign_id:
+            self.campaign_id = str(row.get("campaign_id") or "")
+        self.emitted_base_rows += 1
+        canonical_model_id = str(row.get("canonical_model_id") or "")
+        if _LEGACY_MODEL_ID_RE.match(canonical_model_id):
+            raise HftBacktestOnlyCampaignManifestError(
+                f"campaign_manifest_legacy_model_id_as_active:{canonical_model_id}"
+            )
+        if canonical_model_id:
+            self.model_ids.add(canonical_model_id)
+        source_npz = str(row.get("source_npz") or "")
+        if source_npz:
+            self.source_npzs.add(source_npz)
+        self._bump(
+            self.admissibility_status_counts,
+            str(row.get("admissibility_status") or ""),
+        )
         blocker_code = str(row.get("blocker_code") or "")
         if blocker_code:
-            blocker_codes[blocker_code] = blocker_codes.get(blocker_code, 0) + 1
-        family = str(row.get("parameter_family") or "")
-        parameter_families[family] = parameter_families.get(family, 0) + 1
-        objective_count = str(row.get("objective_evaluations") or 0)
-        objective_evaluations[objective_count] = (
-            objective_evaluations.get(objective_count, 0) + 1
+            self._bump(self.blocker_code_counts, blocker_code)
+        adapter_status = str(row.get("adapter_status") or "")
+        self._bump(self.adapter_status_counts, adapter_status)
+        if blocker_code.startswith("authority_missing"):
+            self._bump(self.authority_missing_counts, blocker_code)
+
+    def validate_complete(self) -> None:
+        expected = self.expected_canonical_model_ids
+        if not expected:
+            return
+        missing_models = sorted(expected - self.model_ids)
+        if missing_models:
+            joined = ",".join(missing_models)
+            raise HftBacktestOnlyCampaignManifestError(
+                f"campaign_manifest_missing_canonical_model_ids:{joined}"
+            )
+        expected_rows = self._expected_base_rows()
+        if self.emitted_base_rows != expected_rows:
+            raise HftBacktestOnlyCampaignManifestError(
+                "campaign_manifest_row_count_mismatch:"
+                f"expected={expected_rows}:emitted={self.emitted_base_rows}"
+            )
+
+    def summary(self, *, partial: bool) -> dict[str, Any]:
+        canonical_model_count = self._canonical_model_count()
+        prepared_unit_count = self._prepared_unit_count()
+        expected_base_rows = self._expected_base_rows()
+        executable_unit_count = (
+            int(self.executable_unit_count)
+            if self.executable_unit_count is not None
+            else int(self.admissibility_status_counts.get("admissible", 0))
         )
-        model_ids.add(str(row.get("canonical_model_id") or ""))
-        source_npzs.add(str(row.get("source_npz") or ""))
-        unit_ids.add(str(row.get("unit_id") or ""))
-        parameter_hashes.add(str(row.get("parameter_hash") or ""))
-    return {
-        "schema_version": PARAMETER_SURFACE_SUMMARY_SCHEMA_VERSION,
-        "campaign_id": materialized[0].get("campaign_id") if materialized else "",
-        "row_count": len(materialized),
-        "campaign_unit_count": len(unit_ids - {""}),
-        "canonical_model_count": len(model_ids - {""}),
-        "source_npz_count": len(source_npzs - {""}),
-        "parameter_hash_count": len(parameter_hashes - {""}),
-        "parameter_family_counts": dict(sorted(parameter_families.items())),
-        "objective_evaluation_counts": dict(sorted(objective_evaluations.items())),
-        "admissibility_status_counts": dict(sorted(by_status.items())),
-        "blocker_code_counts": dict(sorted(blocker_codes.items())),
-        "manifest_order": "campaign_manifest_order_then_parameter_set_order",
-    }
+        blocker_unit_count = (
+            int(self.blocker_unit_count)
+            if self.blocker_unit_count is not None
+            else max(prepared_unit_count - executable_unit_count, 0)
+        )
+        return {
+            "schema_version": PRE_EXECUTION_SUMMARY_SCHEMA_VERSION,
+            "campaign_id": self.campaign_id,
+            "row_count": self.emitted_base_rows,
+            "canonical_model_count": canonical_model_count,
+            "prepared_unit_count": prepared_unit_count,
+            "source_npz_count": len(self.source_npzs),
+            "executable_unit_count": executable_unit_count,
+            "blocker_unit_count": blocker_unit_count,
+            "expected_base_rows": expected_base_rows,
+            "emitted_base_rows": self.emitted_base_rows,
+            "row_count_matches_expected": self.emitted_base_rows == expected_base_rows,
+            "adapter_status_counts": dict(sorted(self.adapter_status_counts.items())),
+            "authority_missing_counts": dict(sorted(self.authority_missing_counts.items())),
+            "model_applicability_counts": dict(sorted(self.model_applicability_counts.items())),
+            "instrument_applicability_counts": dict(
+                sorted(self.instrument_applicability_counts.items())
+            ),
+            "admissibility_status_counts": dict(
+                sorted(self.admissibility_status_counts.items())
+            ),
+            "blocker_code_counts": dict(sorted(self.blocker_code_counts.items())),
+            "manual_filter_used": False,
+            "vectorbt_dependency": False,
+            "stage_a_dependency": False,
+            "screening_artifact_dependency": False,
+            "hbt_jobs_started": 0,
+            "parameter_surface_status": self.parameter_surface_status,
+            "parameter_surface_config_status": self.parameter_surface_config_status,
+            "parameter_sets_json": self.parameter_sets_json,
+            "manifest_order": "registry_file_order_then_prepared_manifest_path",
+            "partial": partial,
+        }
+
+    @staticmethod
+    def _bump(counts: dict[str, int], key: str) -> None:
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+
+    def _canonical_model_count(self) -> int:
+        return len(self.expected_canonical_model_ids or self.model_ids)
+
+    def _prepared_unit_count(self) -> int:
+        if self.prepared_unit_count is not None:
+            return int(self.prepared_unit_count)
+        return len(self.source_npzs)
+
+    def _expected_base_rows(self) -> int:
+        return self._canonical_model_count() * self._prepared_unit_count()
+
+
+class _ParameterSurfaceSummaryBuilder:
+    def __init__(self, unique_tracker: "_SqliteUniqueTracker | None" = None) -> None:
+        self.unique_tracker = unique_tracker
+        self.campaign_id = ""
+        self.row_count = 0
+        self.admissibility_status_counts: dict[str, int] = {}
+        self.blocker_code_counts: dict[str, int] = {}
+        self.parameter_family_counts: dict[str, int] = {}
+        self.objective_evaluation_counts: dict[str, int] = {}
+        self._unique_sets: dict[str, set[str]] = {}
+
+    def observe(self, row: Mapping[str, Any]) -> None:
+        if not self.campaign_id:
+            self.campaign_id = str(row.get("campaign_id") or "")
+        surface_unit_id = str(row["surface_unit_id"])
+        unit_id = str(row.get("unit_id") or "")
+        parameter_hash = str(row.get("parameter_hash") or "")
+        unit_parameter_pair = f"{unit_id}\x1f{parameter_hash}"
+        self._add_unique(
+            "surface_unit_id",
+            surface_unit_id,
+            duplicate_error="parameter_surface_duplicate_unit_parameter_hash",
+        )
+        self._add_unique(
+            "unit_parameter_pair",
+            unit_parameter_pair,
+            duplicate_error="parameter_surface_duplicate_unit_parameter_hash",
+        )
+        self.row_count += 1
+        self._bump(
+            self.admissibility_status_counts,
+            str(row.get("admissibility_status") or ""),
+        )
+        blocker_code = str(row.get("blocker_code") or "")
+        if blocker_code:
+            self._bump(self.blocker_code_counts, blocker_code)
+        self._bump(self.parameter_family_counts, str(row.get("parameter_family") or ""))
+        self._bump(
+            self.objective_evaluation_counts,
+            str(row.get("objective_evaluations") or 0),
+        )
+        self._add_unique("canonical_model_id", str(row.get("canonical_model_id") or ""))
+        self._add_unique("source_npz", str(row.get("source_npz") or ""))
+        self._add_unique("unit_id", unit_id)
+        self._add_unique("parameter_hash", parameter_hash)
+
+    def summary(self, *, partial: bool) -> dict[str, Any]:
+        return {
+            "schema_version": PARAMETER_SURFACE_SUMMARY_SCHEMA_VERSION,
+            "campaign_id": self.campaign_id,
+            "row_count": self.row_count,
+            "campaign_unit_count": self._unique_count("unit_id"),
+            "canonical_model_count": self._unique_count("canonical_model_id"),
+            "source_npz_count": self._unique_count("source_npz"),
+            "parameter_hash_count": self._unique_count("parameter_hash"),
+            "parameter_family_counts": dict(sorted(self.parameter_family_counts.items())),
+            "objective_evaluation_counts": dict(
+                sorted(self.objective_evaluation_counts.items())
+            ),
+            "admissibility_status_counts": dict(
+                sorted(self.admissibility_status_counts.items())
+            ),
+            "blocker_code_counts": dict(sorted(self.blocker_code_counts.items())),
+            "manifest_order": "campaign_manifest_order_then_parameter_set_order",
+            "partial": partial,
+        }
+
+    @staticmethod
+    def _bump(counts: dict[str, int], key: str) -> None:
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+
+    def _add_unique(
+        self,
+        kind: str,
+        value: str,
+        *,
+        duplicate_error: str | None = None,
+    ) -> None:
+        if self.unique_tracker is not None:
+            self.unique_tracker.add_unique(kind, value, duplicate_error=duplicate_error)
+            return
+        values = self._unique_sets.setdefault(kind, set())
+        if value in values and duplicate_error is not None:
+            raise HftBacktestOnlyCampaignManifestError(duplicate_error)
+        values.add(value)
+
+    def _unique_count(self, kind: str) -> int:
+        if self.unique_tracker is not None:
+            return self.unique_tracker.count(kind, exclude_empty=True)
+        return len(self._unique_sets.get(kind, set()) - {""})
+
+
+class _SqliteUniqueTracker:
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self.conn: sqlite3.Connection | None = None
+
+    def __enter__(self) -> "_SqliteUniqueTracker":
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.path.exists():
+            self.path.unlink()
+        self.conn = sqlite3.connect(str(self.path))
+        self.conn.execute(
+            "create table seen ("
+            "kind text not null, "
+            "value text not null, "
+            "primary key (kind, value)"
+            ") without rowid"
+        )
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        if self.conn is not None:
+            self.conn.close()
+            self.conn = None
+        if self.path.exists():
+            self.path.unlink()
+
+    def add_unique(
+        self,
+        kind: str,
+        value: str,
+        *,
+        duplicate_error: str | None = None,
+    ) -> None:
+        if self.conn is None:
+            raise HftBacktestOnlyCampaignManifestError("unique_tracker_not_open")
+        try:
+            self.conn.execute(
+                "insert into seen(kind, value) values (?, ?)",
+                (kind, value),
+            )
+        except sqlite3.IntegrityError as exc:
+            if duplicate_error is not None:
+                raise HftBacktestOnlyCampaignManifestError(duplicate_error) from exc
+
+    def count(self, kind: str, *, exclude_empty: bool) -> int:
+        if self.conn is None:
+            raise HftBacktestOnlyCampaignManifestError("unique_tracker_not_open")
+        if exclude_empty:
+            cursor = self.conn.execute(
+                "select count(*) from seen where kind = ? and value != ''",
+                (kind,),
+            )
+        else:
+            cursor = self.conn.execute(
+                "select count(*) from seen where kind = ?",
+                (kind,),
+            )
+        return int(cursor.fetchone()[0])
+
+
+def _canary_parameter_surface_status_ok(
+    *,
+    parameter_surface_status: str,
+    parameter_surface_config_status: str,
+) -> bool:
+    return (
+        parameter_surface_status == "base_only"
+        or parameter_surface_config_status == "parameter_config_present"
+    )
+
+
+def _canary_row_eligibility_reason(row: Mapping[str, Any]) -> tuple[bool, str]:
+    if str(row.get("admissibility_status") or "") != "admissible":
+        return False, "data_not_admissible"
+    if str(row.get("blocker_code") or ""):
+        return False, "blocker_present"
+    if str(row.get("adapter_status") or "") not in READY_ADAPTER_STATUSES:
+        return False, "adapter_not_ready"
+    authority_refs = row.get("authority_refs")
+    if not isinstance(authority_refs, list) or not authority_refs:
+        return False, "authority_not_pass"
+    return True, "eligible"
 
 
 def validate_campaign_manifest_rows(
@@ -344,15 +872,19 @@ def validate_campaign_manifest_rows(
     *,
     expected_canonical_model_ids: Iterable[str],
 ) -> None:
-    materialized = [dict(row) for row in rows]
-    if not materialized:
+    actual: set[str] = set()
+    saw_row = False
+    for raw_row in rows:
+        saw_row = True
+        row = dict(raw_row)
+        _validate_required_row_fields(
+            row,
+            required_fields=REQUIRED_ROW_FIELDS,
+            error_prefix="campaign_manifest",
+        )
+        actual.add(str(row["canonical_model_id"]))
+    if not saw_row:
         raise HftBacktestOnlyCampaignManifestError("campaign_manifest_empty")
-    _validate_required_fields(
-        materialized,
-        required_fields=REQUIRED_ROW_FIELDS,
-        error_prefix="campaign_manifest",
-    )
-    actual = {str(row["canonical_model_id"]) for row in materialized}
     expected = set(expected_canonical_model_ids)
     missing_models = sorted(expected - actual)
     if missing_models:
@@ -371,67 +903,180 @@ def validate_campaign_manifest_rows(
 
 
 def validate_parameter_surface_rows(rows: Iterable[Mapping[str, Any]]) -> None:
-    materialized = [dict(row) for row in rows]
-    if not materialized:
+    saw_row = False
+    with tempfile.TemporaryDirectory(prefix="hft3_parameter_surface_validate_") as tmp_dir:
+        sqlite_path = Path(tmp_dir) / "unique.sqlite"
+        with _SqliteUniqueTracker(sqlite_path) as unique_tracker:
+            for raw_row in rows:
+                saw_row = True
+                row = dict(raw_row)
+                _validate_parameter_surface_row(row)
+                unit_parameter_pair = (
+                    f"{row['unit_id']}\x1f{row['parameter_hash']}"
+                )
+                unique_tracker.add_unique(
+                    "surface_unit_id",
+                    str(row["surface_unit_id"]),
+                    duplicate_error="parameter_surface_duplicate_unit_parameter_hash",
+                )
+                unique_tracker.add_unique(
+                    "unit_parameter_pair",
+                    unit_parameter_pair,
+                    duplicate_error="parameter_surface_duplicate_unit_parameter_hash",
+                )
+    if not saw_row:
         raise HftBacktestOnlyCampaignManifestError("parameter_surface_empty")
-    _validate_required_fields(
-        materialized,
+
+
+def _validate_parameter_surface_row(row: Mapping[str, Any]) -> None:
+    _validate_required_row_fields(
+        row,
         required_fields=REQUIRED_PARAMETER_SURFACE_ROW_FIELDS,
         error_prefix="parameter_surface",
     )
-    surface_unit_ids: set[str] = set()
-    unit_parameter_pairs: set[tuple[str, str]] = set()
-    for row in materialized:
-        canonical_model_id = str(row["canonical_model_id"])
-        if _LEGACY_MODEL_ID_RE.match(canonical_model_id):
+    canonical_model_id = str(row["canonical_model_id"])
+    if _LEGACY_MODEL_ID_RE.match(canonical_model_id):
+        raise HftBacktestOnlyCampaignManifestError(
+            f"parameter_surface_legacy_model_id_as_active:{canonical_model_id}"
+        )
+    if str(row["parameter_proposal_status"]) != _PRE_HBT_PROPOSAL_STATUS:
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_invalid_pre_hbt_proposal_status"
+        )
+    if str(row["parameter_family"]) not in _ALLOWED_PARAMETER_FAMILIES:
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_unknown_parameter_family"
+        )
+    objective_evaluations = row["objective_evaluations"]
+    if not isinstance(objective_evaluations, int) or isinstance(
+        objective_evaluations,
+        bool,
+    ):
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_pre_hbt_objective_evaluations_must_be_zero"
+        )
+    if objective_evaluations != 0:
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_pre_hbt_objective_evaluations_must_be_zero"
+        )
+    if bool(row["optimizer_claim"]):
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_optimizer_claim_without_objective_evaluations"
+        )
+    row_text = json.dumps(row, sort_keys=True, default=str)
+    for token in _FORBIDDEN_PRE_HBT_DECISION_TOKENS:
+        if token in row_text:
             raise HftBacktestOnlyCampaignManifestError(
-                f"parameter_surface_legacy_model_id_as_active:{canonical_model_id}"
+                "parameter_surface_pre_hbt_economic_decision"
             )
-        surface_unit_id = str(row["surface_unit_id"])
-        unit_parameter_pair = (str(row["unit_id"]), str(row["parameter_hash"]))
-        if surface_unit_id in surface_unit_ids or unit_parameter_pair in unit_parameter_pairs:
-            raise HftBacktestOnlyCampaignManifestError(
-                "parameter_surface_duplicate_unit_parameter_hash"
+    recorder_path = str(row.get("recorder_result_path") or "")
+    stats_path = str(row.get("stats_summary_path") or "")
+    promotion_path = str(row.get("promotion_decision_path") or "")
+    if promotion_path and (not recorder_path or not stats_path):
+        raise HftBacktestOnlyCampaignManifestError(
+            "parameter_surface_promotion_requires_hbt_artifacts"
+        )
+
+
+def _campaign_manifest_inputs(
+    *,
+    campaign_id: str,
+    prepared_root: Path,
+    registry_path: Path,
+    adapter_status_by_model: Mapping[str, str] | None,
+    authority_refs: Iterable[str],
+) -> dict[str, Any]:
+    registry_path = Path(registry_path)
+    registry_hash = _sha256_file(registry_path)
+    models = _load_canonical_models(registry_path)
+    prepared_units = _load_prepared_units(Path(prepared_root))
+    if not models:
+        raise HftBacktestOnlyCampaignManifestError("authority_missing:model_registry_empty")
+    if not prepared_units:
+        raise HftBacktestOnlyCampaignManifestError(
+            f"data_blocker:no_hbt_normalized_units:{prepared_root}"
+        )
+    adapter_statuses = (
+        dict(adapter_status_by_model)
+        if adapter_status_by_model is not None
+        else _infer_adapter_statuses(models)
+    )
+    canonical_model_ids = [slug for slug, _entry in models]
+    return {
+        "campaign_id": campaign_id,
+        "registry_hash": registry_hash,
+        "models": models,
+        "canonical_model_ids": canonical_model_ids,
+        "prepared_units": prepared_units,
+        "adapter_statuses": adapter_statuses,
+        "authority_refs": tuple(authority_refs),
+    }
+
+
+def _iter_campaign_rows_from_inputs(inputs: Mapping[str, Any]) -> Iterator[dict[str, Any]]:
+    for canonical_model_id, entry in inputs["models"]:
+        aliases = _legacy_aliases(entry)
+        adapter_status = _adapter_status(
+            canonical_model_id,
+            inputs["adapter_statuses"],
+        )
+        for prepared in inputs["prepared_units"]:
+            yield _build_row(
+                campaign_id=str(inputs["campaign_id"]),
+                canonical_model_id=canonical_model_id,
+                legacy_aliases=aliases,
+                registry_hash=str(inputs["registry_hash"]),
+                prepared=prepared,
+                adapter_status=adapter_status,
+                authority_refs=tuple(inputs["authority_refs"]),
             )
-        surface_unit_ids.add(surface_unit_id)
-        unit_parameter_pairs.add(unit_parameter_pair)
-        if str(row["parameter_proposal_status"]) != _PRE_HBT_PROPOSAL_STATUS:
-            raise HftBacktestOnlyCampaignManifestError(
-                "parameter_surface_invalid_pre_hbt_proposal_status"
-            )
-        if str(row["parameter_family"]) not in _ALLOWED_PARAMETER_FAMILIES:
-            raise HftBacktestOnlyCampaignManifestError(
-                "parameter_surface_unknown_parameter_family"
-            )
-        objective_evaluations = row["objective_evaluations"]
-        if not isinstance(objective_evaluations, int) or isinstance(
-            objective_evaluations,
-            bool,
-        ):
-            raise HftBacktestOnlyCampaignManifestError(
-                "parameter_surface_pre_hbt_objective_evaluations_must_be_zero"
-            )
-        if objective_evaluations != 0:
-            raise HftBacktestOnlyCampaignManifestError(
-                "parameter_surface_pre_hbt_objective_evaluations_must_be_zero"
-            )
-        if bool(row["optimizer_claim"]):
-            raise HftBacktestOnlyCampaignManifestError(
-                "parameter_surface_optimizer_claim_without_objective_evaluations"
-            )
-        row_text = json.dumps(row, sort_keys=True, default=str)
-        for token in _FORBIDDEN_PRE_HBT_DECISION_TOKENS:
-            if token in row_text:
-                raise HftBacktestOnlyCampaignManifestError(
-                    "parameter_surface_pre_hbt_economic_decision"
-                )
-        recorder_path = str(row.get("recorder_result_path") or "")
-        stats_path = str(row.get("stats_summary_path") or "")
-        promotion_path = str(row.get("promotion_decision_path") or "")
-        if promotion_path and (not recorder_path or not stats_path):
-            raise HftBacktestOnlyCampaignManifestError(
-                "parameter_surface_promotion_requires_hbt_artifacts"
-            )
+
+
+def _model_applicability_counts(
+    canonical_model_ids: Iterable[str],
+    adapter_statuses: Mapping[str, str],
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for canonical_model_id in canonical_model_ids:
+        status = _adapter_status(canonical_model_id, adapter_statuses)
+        key = f"adapter_status:{status}"
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _instrument_applicability_counts(prepared_units: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    executable = 0
+    for prepared in prepared_units:
+        blocker_code = str(prepared.get("blocker_code") or "")
+        if blocker_code:
+            counts[blocker_code] = counts.get(blocker_code, 0) + 1
+        else:
+            executable += 1
+    counts["hbt_executable_prepared_unit"] = executable
+    return counts
+
+
+def _executable_prepared_unit_count(prepared_units: Iterable[Mapping[str, Any]]) -> int:
+    return sum(1 for prepared in prepared_units if not str(prepared.get("blocker_code") or ""))
+
+
+def _blocker_prepared_unit_count(prepared_units: Iterable[Mapping[str, Any]]) -> int:
+    return sum(1 for prepared in prepared_units if str(prepared.get("blocker_code") or ""))
+
+
+def _validate_required_row_fields(
+    row: Mapping[str, Any],
+    *,
+    required_fields: Iterable[str],
+    error_prefix: str,
+) -> None:
+    missing = [field for field in required_fields if field not in row]
+    if missing:
+        joined = ",".join(missing)
+        raise HftBacktestOnlyCampaignManifestError(
+            f"{error_prefix}_missing_required_fields:{joined}"
+        )
 
 
 def _build_parameter_surface_row(
@@ -547,12 +1192,20 @@ def _build_row(
     if blocker_code:
         admissibility_status = blocker_code.split(":", 1)[0]
 
-    source_hash = (
-        _sha256_file(source_path)
-        if source_exists and source_path
-        else str(prepared.get("source_npz_sha256") or "")
+    source_hash = _prepared_cached_file_hash(
+        prepared,
+        key="source_npz_sha256",
+        verified_key="_source_npz_sha256_verified",
+        path=source_path,
+        path_exists=source_exists,
     )
-    snapshot_hash = _sha256_file(snapshot_path) if snapshot_exists and snapshot_path else ""
+    snapshot_hash = _prepared_cached_file_hash(
+        prepared,
+        key="initial_snapshot_sha256",
+        verified_key="_initial_snapshot_sha256_verified",
+        path=snapshot_path,
+        path_exists=snapshot_exists,
+    )
     unit_id = _unit_id(
         canonical_model_id=canonical_model_id,
         source_npz=source_npz,
@@ -664,6 +1317,12 @@ def _normalize_parameter_set(spec: Mapping[str, Any]) -> dict[str, Any]:
         "objective_evaluations": objective_evaluations,
         "optimizer_claim": optimizer_claim,
     }
+
+
+def _normalize_parameter_sets(
+    parameter_sets: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    return [_normalize_parameter_set(spec) for spec in parameter_sets]
 
 
 def _load_canonical_models(registry_path: Path) -> list[tuple[str, Mapping[str, Any]]]:
@@ -828,8 +1487,45 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _prepared_cached_file_hash(
+    prepared: Mapping[str, Any],
+    *,
+    key: str,
+    verified_key: str,
+    path: Path | None,
+    path_exists: bool,
+) -> str:
+    if isinstance(prepared, dict) and prepared.get(verified_key):
+        return str(prepared.get(key) or "")
+    if path_exists and path is not None:
+        file_hash = _sha256_file(path)
+    else:
+        file_hash = str(prepared.get(key) or "")
+    if isinstance(prepared, dict):
+        prepared[key] = file_hash
+        prepared[verified_key] = True
+    return file_hash
+
+
 def _path_with_added_suffix(path: Path, suffix: str) -> Path:
     return Path(path).with_name(Path(path).name + suffix)
+
+
+def _cleanup_partial_outputs(tmp_path: Path, checkpoint_path: Path | None) -> None:
+    Path(tmp_path).unlink(missing_ok=True)
+    if checkpoint_path is not None:
+        Path(checkpoint_path).unlink(missing_ok=True)
+
+
+def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _path_with_added_suffix(path, ".tmp")
+    tmp.write_text(
+        json.dumps(dict(payload), indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(tmp, path)
 
 
 def _validate_required_fields(
