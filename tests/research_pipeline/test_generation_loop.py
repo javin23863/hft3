@@ -13,6 +13,7 @@ import pytest
 from backtest_pipeline.src.hftbacktest_only_campaign_manifest import (
     normalize_self_learning_parameter_sets_payload,
 )
+from features_engine.src.model_registry import load_model_registry
 from research_pipeline.elite_refinement import propose_next_candidates
 from research_pipeline.generation_loop import AutoresearchConfig, load_autoresearch_config, run_autoresearch_loop
 from research_pipeline.generation_state import load_manifest
@@ -435,6 +436,13 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
         assert {row["source"] for row in payload["parameter_sets"]} == {HBT_PARAMETER_SET_SOURCE}
         assert {row["objective_evaluations"] for row in payload["parameter_sets"]} == {0}
         assert {row["optimizer_claim"] for row in payload["parameter_sets"]} == {False}
+        canonical_ids = [row["canonical_model_id"] for row in normalized]
+        registry_ids = list(load_model_registry()["models"])
+        assert set(registry_ids).issubset(canonical_ids)
+        assert "RL_EXECUTION_POLICY" in canonical_ids
+        assert "BOOK_PRESSURE" in canonical_ids
+        assert "HYP_5" not in canonical_ids
+        assert "PDF_MODEL_1" not in canonical_ids
 
 
 def test_resume_preserves_manifest_hash(tmp_path: Path, monkeypatch) -> None:

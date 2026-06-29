@@ -64,6 +64,7 @@ from research_pipeline.parameter_search import (
     HBT_PARAMETER_SET_SCHEMA_VERSION,
     HBT_PARAMETER_SET_SOURCE,
     hbt_parameter_sets_from_candidates,
+    hbt_parameter_sets_from_model_registry,
 )
 from research_pipeline.review_memory import append_generation_memory
 from research_pipeline.types import CandidateModel, ParsedHypothesis
@@ -235,7 +236,12 @@ def _write_generation_checkpoint(
 
 
 def _write_hbt_parameter_sets(path: Path, candidates: list[CandidateModel]) -> Path:
-    parameter_sets = hbt_parameter_sets_from_candidates(candidates)
+    parameter_sets = _dedupe_hbt_parameter_sets(
+        [
+            *hbt_parameter_sets_from_candidates(candidates),
+            *hbt_parameter_sets_from_model_registry(),
+        ]
+    )
     path.write_text(
         json.dumps(
             {
@@ -255,6 +261,27 @@ def _write_hbt_parameter_sets(path: Path, candidates: list[CandidateModel]) -> P
         encoding="utf-8",
     )
     return path
+
+
+def _dedupe_hbt_parameter_sets(parameter_sets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for spec in parameter_sets:
+        key = json.dumps(
+            {
+                "canonical_model_id": spec["canonical_model_id"],
+                "parameter_family": spec["parameter_family"],
+                "strategy_params": spec["strategy_params"],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(spec)
+    return out
 
 
 def _load_reusable_receipt(path: Path) -> dict[str, Any] | None:
