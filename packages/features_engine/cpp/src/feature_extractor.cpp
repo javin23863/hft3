@@ -318,6 +318,8 @@ void FeatureExtractorCpp::extract() {
     vec_[static_cast<size_t>(FeatureIndex::PROP_REENTRY_SCORE)] =
         std::tanh(trade_rate_accel) * aggressor_imbalance;
 
+    // Defensive: vec_.fill(0.0) already clears these at the top of extract(),
+    // but local defaults document the intended quiet-window values.
     vec_[static_cast<size_t>(FeatureIndex::CUTOFF_PRESSURE_SCORE)] = 0.0;
     vec_[static_cast<size_t>(FeatureIndex::NEWS_RESTRICTION_FLATTEN_SCORE)] = 0.0;
     if (total_agg > 0) {
