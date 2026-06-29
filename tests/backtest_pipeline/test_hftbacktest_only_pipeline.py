@@ -11,7 +11,9 @@ import pytest
 
 from backtest_pipeline.src.hftbacktest_only_pipeline import (
     HftBacktestOnlyPipelineError,
+    HftBacktestOnlyPrepareConfig,
     HftBacktestOnlyRunConfig,
+    prepare_hftbacktest_only_l3_from_lake,
     run_hftbacktest_only,
     validate_hftbacktest_only_input,
     write_promotion_decision,
@@ -324,6 +326,109 @@ def test_validation_accepts_converted_lake_l3_with_trades_and_inferred_ns(
     assert validation["l2_l3_classification"] == "l3_mbo"
     assert "TIMESTAMP_UNITS_UNPROVEN" not in validation["fail_closed_reasons"]
     assert "L2_L3_MISMATCH" not in validation["fail_closed_reasons"]
+
+
+def test_prepare_lake_source_builds_snapshot_and_replay_pair(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    dtype, constants = _event_contract()
+    base_ns = int(datetime(2024, 9, 11, 12, 29, tzinfo=timezone.utc).timestamp() * 1_000_000_000)
+
+    def row(event_type: int, offset_ns: int, order_id: int, price: float, qty: float = 1.0) -> dict[str, object]:
+        ts = base_ns + offset_ns
+        return {
+            "ev": event_type | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+            "exch_ts": ts,
+            "local_ts": ts + 100,
+            "px": price,
+            "qty": qty,
+            "order_id": order_id,
+            "ival": 0,
+            "fval": 0.0,
+        }
+
+    source_rows = [
+        row(constants["ADD_ORDER_EVENT"], 0, 1001, 5000.0),
+        row(constants["MODIFY_ORDER_EVENT"], 100, 1001, 5000.25),
+        row(constants["ADD_ORDER_EVENT"], 200, 1002, 5001.0),
+        row(constants["CANCEL_ORDER_EVENT"], 300, 1002, 5001.0),
+        row(constants["CANCEL_ORDER_EVENT"], 1_000_000_000, 1001, 5000.25),
+        row(constants["ADD_ORDER_EVENT"], 1_000_000_100, 1003, 5000.0),
+        row(constants["MODIFY_ORDER_EVENT"], 1_000_000_200, 1003, 5000.25),
+        row(constants["TRADE_EVENT"], 1_000_000_300, 1003, 5000.25),
+        row(constants["FILL_EVENT"], 1_000_000_400, 1003, 5000.25),
+        row(constants["ADD_ORDER_EVENT"], 1_000_000_500, 1004, 5001.0),
+        row(constants["FILL_EVENT"], 1_000_000_600, 1004, 5001.0),
+        row(constants["CANCEL_ORDER_EVENT"], 1_000_000_700, 1004, 5001.0),
+        row(constants["TRADE_EVENT"], 1_000_000_800, 9999, 5002.0),
+        row(constants["ADD_ORDER_EVENT"], 1_000_000_900, 0, 5002.0),
+        row(constants["ADD_ORDER_EVENT"], 1_000_001_000, 1005, 5003.0),
+        row(constants["ADD_ORDER_EVENT"], 1_000_001_100, 1005, 5003.25),
+    ]
+    source = tmp_path / "lake_source.npz"
+    events = np.zeros(len(source_rows), dtype=dtype)
+    for index, source_row in enumerate(source_rows):
+        for field, value in source_row.items():
+            events[index][field] = value
+    np.savez_compressed(source, data=events)
+
+    prepared = prepare_hftbacktest_only_l3_from_lake(
+        HftBacktestOnlyPrepareConfig(
+            source_npz=source,
+            symbol="MES",
+            contract="MESU4",
+            event_id="CPI_2024_09_11_TIGHT",
+            trade_date="2024-09-11",
+            out_root=tmp_path / "hbt",
+            warmup_seconds=1,
+        )
+    )
+
+    with np.load(prepared["initial_snapshot"], allow_pickle=False) as payload:
+        snapshot = payload["data"]
+    assert len(snapshot) == 1
+    assert int(snapshot[0]["order_id"]) == 1001
+    assert int(snapshot[0]["ev"]) & 0xFF == constants["ADD_ORDER_EVENT"]
+    assert int(snapshot[0]["exch_ts"]) == base_ns + 1_000_000_000 - 1
+    assert float(snapshot[0]["px"]) == 5000.25
+
+    with np.load(prepared["normalized_npz"], allow_pickle=False) as payload:
+        replay = payload["data"]
+        assert str(payload["timestamp_units"]) == "nanoseconds"
+    assert [(int(row["ev"]) & 0xFF, int(row["order_id"])) for row in replay] == [
+        (constants["ADD_ORDER_EVENT"], 1003),
+        (constants["MODIFY_ORDER_EVENT"], 1003),
+        (constants["TRADE_EVENT"], 1003),
+        (constants["ADD_ORDER_EVENT"], 1004),
+        (constants["FILL_EVENT"], 1004),
+        (constants["ADD_ORDER_EVENT"], 1005),
+    ]
+    assert prepared["dropped_rows"] == {
+        "preexisting_or_unknown_lifecycle": 4,
+        "duplicate_add": 1,
+        "zero_order_id": 1,
+    }
+
+    validation = validate_hftbacktest_only_input(
+        _config(tmp_path, Path(prepared["normalized_npz"]), Path(prepared["initial_snapshot"]))
+    )
+    assert validation["data_validation_status"] == "pass"
+    assert validation["l2_l3_classification"] == "l3_mbo"
+
+    reused = prepare_hftbacktest_only_l3_from_lake(
+        HftBacktestOnlyPrepareConfig(
+            source_npz=source,
+            symbol="MES",
+            contract="MESU4",
+            event_id="CPI_2024_09_11_TIGHT",
+            trade_date="2024-09-11",
+            out_root=tmp_path / "hbt",
+            warmup_seconds=1,
+        )
+    )
+    assert reused["reused_existing"] is True
 
 
 def test_validation_allows_current_year_epoch_data_before_validation_clock(

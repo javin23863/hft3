@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,7 +14,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages")]
 
 from backtest_pipeline.src.hftbacktest_only_pipeline import (
+    HftBacktestOnlyPrepareConfig,
     HftBacktestOnlyRunConfig,
+    prepare_hftbacktest_only_l3_from_lake,
     run_hftbacktest_only,
 )
 
@@ -30,14 +33,27 @@ def _load_strategy_params(value: str | None, path: Path | None) -> dict:
     return {}
 
 
+def _trade_date_from_event_id(event_id: str) -> str:
+    match = re.search(r"(20\d{2})_(\d{2})_(\d{2})", event_id)
+    if not match:
+        raise SystemExit("--trade-date is required when --event-id has no YYYY_MM_DD segment")
+    return "-".join(match.groups())
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run HftBacktest-only active pipeline")
-    parser.add_argument("--data-npz", type=Path, required=True)
-    parser.add_argument("--initial-snapshot", type=Path, required=True)
+    parser.add_argument("--data-npz", type=Path, default=None)
+    parser.add_argument("--initial-snapshot", type=Path, default=None)
+    parser.add_argument("--source-npz", type=Path, default=None)
+    parser.add_argument("--trade-date", default=None)
+    parser.add_argument("--warmup-seconds", type=int, default=30)
+    parser.add_argument("--prepare-out-root", type=Path, default=REPO / "data" / "hbt")
+    parser.add_argument("--prepare-only", action="store_true")
+    parser.add_argument("--force-prepare", action="store_true")
     parser.add_argument("--symbol", required=True)
     parser.add_argument("--contract", required=True)
     parser.add_argument("--event-id", required=True)
-    parser.add_argument("--strategy-id", required=True)
+    parser.add_argument("--strategy-id", default=None)
     parser.add_argument("--strategy-params-json", default=None)
     parser.add_argument("--strategy-params-file", type=Path, default=None)
     parser.add_argument("--run-id", default=None)
@@ -54,6 +70,35 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
+    data_npz = args.data_npz
+    initial_snapshot = args.initial_snapshot
+    if args.source_npz is not None:
+        prepared = prepare_hftbacktest_only_l3_from_lake(
+            HftBacktestOnlyPrepareConfig(
+                source_npz=args.source_npz.resolve(),
+                symbol=args.symbol,
+                contract=args.contract,
+                event_id=args.event_id,
+                trade_date=args.trade_date or _trade_date_from_event_id(args.event_id),
+                out_root=args.prepare_out_root.resolve(),
+                warmup_seconds=args.warmup_seconds,
+                tick_size=args.tick_size,
+                lot_size=args.lot_size,
+                contract_size=args.contract_size,
+                force_rebuild=args.force_prepare,
+            )
+        )
+        if args.prepare_only:
+            print(json.dumps(prepared, indent=2, default=str))
+            return 0
+        data_npz = Path(str(prepared["normalized_npz"]))
+        initial_snapshot = Path(str(prepared["initial_snapshot"]))
+
+    if data_npz is None or initial_snapshot is None:
+        parser.error("provide either --source-npz or both --data-npz and --initial-snapshot")
+    if args.strategy_id is None:
+        parser.error("--strategy-id is required unless --prepare-only is used with --source-npz")
+
     run_id = args.run_id or _default_run_id()
     strategy_params = _load_strategy_params(args.strategy_params_json, args.strategy_params_file)
     config = HftBacktestOnlyRunConfig(
@@ -61,8 +106,8 @@ def main(argv: list[str] | None = None) -> int:
         symbol=args.symbol,
         contract=args.contract,
         event_id=args.event_id,
-        normalized_npz=args.data_npz.resolve(),
-        initial_snapshot=args.initial_snapshot.resolve(),
+        normalized_npz=data_npz.resolve(),
+        initial_snapshot=initial_snapshot.resolve(),
         strategy_id=args.strategy_id,
         strategy_params=strategy_params,
         tick_size=args.tick_size,

@@ -27,6 +27,12 @@ UPSTREAM_REPO_URL = "https://github.com/nkaz001/hftbacktest"
 UPSTREAM_DOCS_URL = "https://hftbacktest.readthedocs.io/en/latest/"
 EXPECTED_EVENT_FIELDS = ("ev", "exch_ts", "local_ts", "px", "qty", "order_id", "ival", "fval")
 _FUTURE_DATA_GRACE_NS = 86_400 * 1_000_000_000
+_NS_PER_SECOND = 1_000_000_000
+_TRADE_EVENT = 2
+_ADD_ORDER_EVENT = 10
+_CANCEL_ORDER_EVENT = 11
+_MODIFY_ORDER_EVENT = 12
+_FILL_EVENT = 13
 
 
 class HftBacktestOnlyPipelineError(ValueError):
@@ -91,6 +97,115 @@ class HftBacktestOnlyRunConfig:
             "active_path": "hftbacktest_only",
             "vectorbt_dependency": "forbidden_active_path",
         }
+
+
+@dataclass(frozen=True)
+class HftBacktestOnlyPrepareConfig:
+    source_npz: Path
+    symbol: str
+    contract: str
+    event_id: str
+    trade_date: str
+    out_root: Path
+    warmup_seconds: int = 30
+    output_stem: str | None = None
+    source: str = "databento_cme_mbo"
+    tick_size: float = 0.25
+    lot_size: float = 1.0
+    contract_size: float = 1.0
+    force_rebuild: bool = False
+
+
+def prepare_hftbacktest_only_l3_from_lake(config: HftBacktestOnlyPrepareConfig) -> dict[str, Any]:
+    """Prepare an existing lake L3 NPZ for the active HftBacktest-only runner."""
+    source_npz = Path(config.source_npz)
+    if not source_npz.is_file():
+        raise HftBacktestOnlyPipelineError(f"source_npz_missing:{source_npz}")
+    if config.warmup_seconds <= 0:
+        raise HftBacktestOnlyPipelineError("warmup_seconds_must_be_positive")
+
+    stem = config.output_stem or f"{_safe_stem(config.event_id)}_warmup_{config.warmup_seconds}s_replay_added_orders_only"
+    out_dir = Path(config.out_root) / "prepared" / _safe_stem(config.symbol) / config.trade_date
+    normalized_npz = out_dir / f"{stem}_l3.npz"
+    initial_snapshot = out_dir / f"{stem}_initial_snapshot.npz"
+    manifest_path = out_dir / f"{stem}_manifest.json"
+    source_hash = _sha256_file(source_npz)
+
+    if (
+        not config.force_rebuild
+        and normalized_npz.is_file()
+        and initial_snapshot.is_file()
+        and manifest_path.is_file()
+    ):
+        manifest = _load_json(manifest_path)
+        if (
+            manifest.get("source_npz_sha256") == source_hash
+            and int(manifest.get("warmup_seconds", -1)) == int(config.warmup_seconds)
+            and manifest.get("normalized_npz") == str(normalized_npz)
+            and manifest.get("initial_snapshot") == str(initial_snapshot)
+        ):
+            return {**manifest, "manifest_path": str(manifest_path), "reused_existing": True}
+
+    with np.load(source_npz, allow_pickle=False) as payload:
+        if "data" not in payload.files:
+            raise HftBacktestOnlyPipelineError("source_npz_missing_data_array")
+        events = payload["data"]
+
+    _require_event_fields(events)
+    if len(events) <= 0:
+        raise HftBacktestOnlyPipelineError("source_event_array_empty")
+
+    start_ts_ns = int(events["exch_ts"].min())
+    cutoff_ts_ns = start_ts_ns + int(config.warmup_seconds) * _NS_PER_SECOND
+    end_ts_ns = int(events["exch_ts"].max())
+    warmup = events[events["exch_ts"] < cutoff_ts_ns]
+    replay = events[events["exch_ts"] >= cutoff_ts_ns]
+
+    snapshot = _snapshot_from_warmup(warmup, cutoff_ts_ns)
+    prepared_replay, dropped = _filter_replay_added_orders_only(replay)
+
+    _save_npz_atomic(normalized_npz, data=prepared_replay, timestamp_units="nanoseconds")
+    _save_npz_atomic(initial_snapshot, data=snapshot, timestamp_units="nanoseconds")
+
+    manifest = {
+        "schema_version": "hft3_hbt_only_lake_prepare_v1",
+        "status": "research_smoke_derived_subset",
+        "plan": PLAN_PATH,
+        "source": config.source,
+        "source_npz": str(source_npz),
+        "source_npz_sha256": source_hash,
+        "source_rows": int(len(events)),
+        "warmup_seconds": int(config.warmup_seconds),
+        "start_ts_ns": start_ts_ns,
+        "cutoff_ts_ns": cutoff_ts_ns,
+        "end_ts_ns": end_ts_ns,
+        "warmup_rows": int(len(warmup)),
+        "replay_source_rows": int(len(replay)),
+        "snapshot_rows": int(len(snapshot)),
+        "replay_rows": int(len(prepared_replay)),
+        "dropped_rows": dropped,
+        "symbol": config.symbol,
+        "contract": config.contract,
+        "event_id": config.event_id,
+        "trade_date": config.trade_date,
+        "normalized_npz": str(normalized_npz),
+        "normalized_npz_sha256": _sha256_file(normalized_npz),
+        "initial_snapshot": str(initial_snapshot),
+        "initial_snapshot_sha256": _sha256_file(initial_snapshot),
+        "tick_size": config.tick_size,
+        "lot_size": config.lot_size,
+        "contract_size": config.contract_size,
+        "feed_type": "L3_MBO",
+        "timezone": "UTC",
+        "validation_status": "pending_hftbacktest_only_validation",
+        "timestamp_units": "nanoseconds",
+        "caveat": (
+            "Derived smoke subset: snapshot supplies depth; replay keeps only order IDs "
+            "added after cutoff. Not full-market replay or promotion evidence."
+        ),
+    }
+    _write_json(manifest_path, manifest)
+    return {**manifest, "manifest_path": str(manifest_path), "reused_existing": False}
 
 
 def validate_hftbacktest_only_input(config: HftBacktestOnlyRunConfig) -> dict[str, Any]:
@@ -717,6 +832,92 @@ def _write_audit(out_dir: Path, status: str, reasons: list[str]) -> None:
         "",
     ]
     (Path(out_dir) / "audit.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def _require_event_fields(events: Any) -> None:
+    dtype_fields = list(events.dtype.names or [])
+    missing = [field for field in EXPECTED_EVENT_FIELDS if field not in dtype_fields]
+    if missing:
+        raise HftBacktestOnlyPipelineError(f"source_event_dtype_missing:{','.join(missing)}")
+
+
+def _snapshot_from_warmup(warmup: np.ndarray, cutoff_ts_ns: int) -> np.ndarray:
+    active: dict[int, Any] = {}
+    for row in warmup:
+        event_type = _event_type(row)
+        order_id = int(row["order_id"])
+        if order_id <= 0:
+            continue
+        if event_type == _ADD_ORDER_EVENT:
+            active[order_id] = row.copy()
+        elif event_type == _MODIFY_ORDER_EVENT and order_id in active:
+            active[order_id] = row.copy()
+        elif event_type in {_TRADE_EVENT, _CANCEL_ORDER_EVENT, _FILL_EVENT}:
+            active.pop(order_id, None)
+
+    snapshot = np.zeros(len(active), dtype=warmup.dtype)
+    for index, row in enumerate(active.values()):
+        snapshot[index] = row
+        snapshot[index]["ev"] = _replace_event_type(snapshot[index]["ev"], _ADD_ORDER_EVENT)
+        snapshot[index]["exch_ts"] = cutoff_ts_ns - 1
+        snapshot[index]["local_ts"] = cutoff_ts_ns - 1
+    return snapshot
+
+
+def _filter_replay_added_orders_only(replay: np.ndarray) -> tuple[np.ndarray, dict[str, int]]:
+    active_ids: set[int] = set()
+    keep = np.zeros(len(replay), dtype=bool)
+    dropped = {
+        "preexisting_or_unknown_lifecycle": 0,
+        "duplicate_add": 0,
+        "zero_order_id": 0,
+    }
+    for index, row in enumerate(replay):
+        event_type = _event_type(row)
+        order_id = int(row["order_id"])
+        if event_type == _ADD_ORDER_EVENT:
+            if order_id <= 0:
+                dropped["zero_order_id"] += 1
+            elif order_id in active_ids:
+                dropped["duplicate_add"] += 1
+            else:
+                active_ids.add(order_id)
+                keep[index] = True
+        elif event_type == _MODIFY_ORDER_EVENT:
+            if order_id in active_ids:
+                keep[index] = True
+            else:
+                dropped["preexisting_or_unknown_lifecycle"] += 1
+        elif event_type in {_TRADE_EVENT, _CANCEL_ORDER_EVENT, _FILL_EVENT}:
+            if order_id in active_ids:
+                keep[index] = True
+                active_ids.remove(order_id)
+            else:
+                dropped["preexisting_or_unknown_lifecycle"] += 1
+        else:
+            keep[index] = True
+    return replay[keep], dropped
+
+
+def _event_type(row: Any) -> int:
+    return int(row["ev"]) & 0xFF
+
+
+def _replace_event_type(value: Any, event_type: int) -> int:
+    return (int(value) & ~0xFF) | int(event_type)
+
+
+def _safe_stem(value: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in str(value).strip())
+    return safe.strip("._-") or "hbt"
+
+
+def _save_npz_atomic(path: Path, **payload: Any) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_base = path.with_suffix(path.suffix + ".tmp")
+    np.savez_compressed(tmp_base, **payload)
+    os.replace(tmp_base.with_suffix(tmp_base.suffix + ".npz"), path)
 
 
 def _timestamp_units_value(value: Any) -> str:
