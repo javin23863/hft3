@@ -223,6 +223,51 @@ def hbt_parameter_sets_from_candidates(
     return out
 
 
+def hbt_parameter_sets_from_model_registry(
+    *,
+    search_methods: Sequence[str] = ("grid",),
+    max_candidates_per_method: int = 1,
+    seed: int = 42,
+) -> list[dict[str, Any]]:
+    """Declare pre-HBT self-learning parameter-set specs for every registry slug."""
+    if max_candidates_per_method <= 0:
+        return []
+    methods = _normalise_search_methods(search_methods)
+    models = load_model_registry().get("models", {})
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for slug, entry in models.items():
+        model_entry = entry if isinstance(entry, Mapping) else {}
+        parsed = _parsed_from_registry_model(str(slug), model_entry)
+        grid = _declared_parameter_grid(parsed)
+        for method in methods:
+            selections = select_parameters(
+                grid,
+                max_candidates=max_candidates_per_method,
+                search_method=method,
+                seed=seed,
+            )
+            for selection in selections:
+                candidate = CandidateModel(
+                    candidate_id=_registry_parameter_candidate_id(str(slug), selection),
+                    model_id=str(slug),
+                    strategy_params=dict(selection.params),
+                    thesis=f"Declared pre-HBT self-learning parameter proposal for {slug}",
+                    metadata={
+                        "source_model": str(slug),
+                        "strategy_family": str(slug),
+                        "candidate_search": dict(selection.metadata),
+                    },
+                )
+                spec = hbt_parameter_set_from_candidate(candidate)
+                key = _hbt_parameter_set_key(spec)
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(spec)
+    return out
+
+
 def _normalise_method(search_method: str) -> str:
     method = str(search_method or "grid").strip().lower().replace("-", "_")
     if method not in SUPPORTED_SEARCH_METHODS:
@@ -230,6 +275,63 @@ def _normalise_method(search_method: str) -> str:
             f"unknown search_method {search_method!r}; expected one of {sorted(SUPPORTED_SEARCH_METHODS)}"
         )
     return method
+
+
+def _normalise_search_methods(search_methods: Sequence[str]) -> tuple[str, ...]:
+    raw_methods = (
+        (search_methods,)
+        if isinstance(search_methods, str)
+        else tuple(search_methods)
+    )
+    methods: list[str] = []
+    for raw_method in raw_methods:
+        method = _normalise_method(str(raw_method))
+        if method not in methods:
+            methods.append(method)
+    if not methods:
+        raise ValueError("search_methods must not be empty")
+    return tuple(methods)
+
+
+def _parsed_from_registry_model(slug: str, entry: Mapping[str, Any]) -> ParsedHypothesis:
+    return ParsedHypothesis(
+        thesis=f"Declared pre-HBT self-learning parameter proposal for {slug}",
+        instrument_universe=[
+            str(symbol) for symbol in entry.get("valid_instrument_universe") or []
+        ],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=[],
+        feature_list=[slug],
+        param_ranges=_registry_default_param_ranges(entry),
+        primary_model_id=slug,
+        source="model_registry",
+    )
+
+
+def _registry_default_param_ranges(entry: Mapping[str, Any]) -> dict[str, list[float]]:
+    ranges = entry.get("default_param_ranges")
+    if not isinstance(ranges, Mapping):
+        return {}
+    out: dict[str, list[float]] = {}
+    for key, values in ranges.items():
+        if isinstance(values, (list, tuple)) and values:
+            out[str(key)] = [float(value) for value in values]
+    return out
+
+
+def _declared_parameter_grid(parsed: ParsedHypothesis) -> dict[str, list[Any]]:
+    grid = parameter_grid(parsed)
+    grid["holding_period_bars"] = _holding_points(
+        _param_range(parsed, "holding_period_bars", "holding_bars")
+    )
+    return grid
+
+
+def _registry_parameter_candidate_id(slug: str, selection: SearchSelection) -> str:
+    method = str(selection.metadata.get("selected_method") or "grid")
+    selected_index = int(selection.metadata.get("selected_index") or 0)
+    return f"model_registry:{slug}:{method}:{selected_index}"
 
 
 def _hbt_parameter_family_from_metadata(metadata: Mapping[str, Any]) -> str:
@@ -436,6 +538,7 @@ __all__ = [
     "HBT_PARAMETER_SET_SOURCE",
     "hbt_parameter_set_from_candidate",
     "hbt_parameter_sets_from_candidates",
+    "hbt_parameter_sets_from_model_registry",
     "model_ids_for_search",
     "parameter_grid",
     "search_plan",
