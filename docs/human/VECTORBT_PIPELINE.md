@@ -1,17 +1,25 @@
 # VectorBT-to-HftBacktest Filtering Pipeline
 
+Status: historical / inactive for the active pipeline. The current active path
+is HftBacktest-only per
+[HFTBACKTEST_ONLY_PIPELINE_PLAN.md](../project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md).
+VectorBT artifacts, Stage A survivor files, and `screening_artifact.json`
+remain diagnostic or historical evidence only unless an owner explicitly
+re-enables the legacy path. They are not prerequisites for active HftBacktest
+runs under `artifacts/hbt_runs/<run_id>/`.
+
 ## Overview
 
-Official `polakowo/vectorbt` is the workbench source of truth for first-pass
-vectorized screening. Pin and evaluate `vectorbt==1.0.0`. The target engine for
+Historically, official `polakowo/vectorbt` was the workbench source of truth for
+first-pass vectorized screening. Pin and evaluate `vectorbt==1.0.0`. The target engine for
 broad `screen`/`refine` runs and paid-compute sweeps is `vectorbt[rust]`; the
 non-Rust path is pilot/schema proof only unless the owner explicitly accepts a
 bounded diagnostic after measurement.
 
-VectorBT sits **after** signal/hypothesis generation but **before** expensive
-execution simulation. It cheaply rejects weak parameter combinations at scale.
-Only validated VectorBT screen-passed candidates reach HftBacktest/replay
-realism gates.
+In the historical path, VectorBT sat **after** signal/hypothesis generation but
+**before** expensive execution simulation. In the active HftBacktest-only path,
+VectorBT must not decide what HftBacktest receives; pre-HBT work is limited to
+data preparation and admissibility validation.
 
 Implementation contract: [../project/VECTORBT_SCREENING_ENGINE_SPEC.md](../project/VECTORBT_SCREENING_ENGINE_SPEC.md)
 is the checklist for the first build. The engine of record is deterministic
@@ -30,6 +38,9 @@ execution is prohibited unless the signal timestamp is demonstrably earlier
 than the executable price in the filtration.
 
 ## Pipeline Flow
+
+This section is legacy documentation for the inactive VectorBT handoff path. It
+is not an active HBT-only campaign recipe.
 
 ```
 1. run_pipeline.py --thesis "..." --event-id CPI_2024_09_11_TIGHT --vectorbt
@@ -92,8 +103,9 @@ Hard blockers for replay eligibility:
 
 VectorBT screen-passed candidates are serialized into the terminal handoff
 artifact at `research_cards/pipeline_runs/<run_id>/screening_artifact.json`.
-Only rows inside that screening artifact, with valid robustness evidence, can
-reach HftBacktest/replay realism gates.
+In this historical path only, rows inside that screening artifact, with valid
+robustness evidence, could reach HftBacktest/replay realism gates. Under the
+active HBT-only plan, `screening_artifact.json` is not an eligibility source.
 
 Minimum top-level screening artifact fields are listed below. The authoritative
 full schema, including per-candidate fields and fail-closed robustness semantics,

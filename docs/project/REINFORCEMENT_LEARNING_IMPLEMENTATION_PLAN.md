@@ -5,6 +5,12 @@
 Status: roadmap captured from operator-supplied RL developer instructions.
 Created: 2026-06-25.
 
+Active HBT-only supersession: RL model identity now flows through canonical
+registry slugs and the active HBT-only campaign manifest. VectorBT and legacy
+robustness bridge language in this document is historical/diagnostic unless it
+has been rewritten under
+[HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md](HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md).
+
 Source attachment:
 `C:\Users\MSI\.codex\attachments\bf4417bc-bcad-4fa6-9826-a6caeb2af7c9\pasted-text.txt`
 
@@ -25,15 +31,16 @@ starting the RL research module.
 RL is a first-class research process for intraday trading and execution policy
 learning on limit-order-book microstructure data. It is not a live execution
 path and it is not a promotion shortcut. RL output remains non-promotable until
-the normal hft3 gates pass: point-in-time data proof, VectorBT screening,
-robustness evidence, and HftBacktest execution-realism validation.
+the normal hft3 gates pass: point-in-time data proof, HftBacktest artifacts,
+post-HBT robustness/evidence review, and execution-realism validation. Legacy
+VectorBT/bridge receipts may be diagnostic only for the active HBT-only plan.
 
 ## Authority Receipts
 
 | Area | Receipt | Binding consequence |
 |---|---|---|
 | Operator roadmap | Attachment above | Defines the desired RL data, state, action, reward, training, caching, and monitoring roadmap. |
-| Current pipeline order | `docs/research/AUTORESEARCH_PIPELINE.md`, `docs/project/VECTORBT_SCREENING_ENGINE_SPEC.md`, `docs/project/AUTORESEARCH_PIPELINE_UPGRADE_PLAN.md` | Do not recreate the pipeline; RL plugs into the existing research pipeline and cannot bypass VectorBT/HftBacktest. |
+| Current pipeline order | `docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md`, `docs/project/HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md`, `docs/project/AUTORESEARCH_PIPELINE_UPGRADE_PLAN.md` | Do not recreate the pipeline; RL plugs into the canonical HBT-only campaign identity and cannot bypass HftBacktest or post-HBT gates. |
 | Planning standard | `docs/project/PROJECT_PLANNING_STANDARD.md` | Every RL feature needs thesis, data requirement, PIT rule, tests, acceptance gate, and rejection rule. |
 | Feature matrix | `docs/project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md` F001, F004, F006, F010 | RL is advanced research infrastructure; it stays gated by robustness and ontology control. |
 | Vault operating state | Vault `wiki/hot.md`, `Home.md`, `Memory Stack.md` | Graph gates are `waived-by-owner-2026-06-16`; use VaultGate plus targeted source reads. |
@@ -110,8 +117,9 @@ Required system behavior:
 - Train or block with an explicit artifact for every in-scope hypothesis/event.
 - Cache exact-input policy artifacts.
 - Produce candidate policy references only after artifact validation.
-- Keep RL candidates subject to the same VectorBT, robustness, and HftBacktest
-  gates as all other candidates.
+- Keep RL candidates subject to the same canonical HBT-only campaign manifest,
+  HftBacktest artifact, post-HBT robustness/evidence, and promotion gates as all
+  other candidates.
 
 Inputs:
 
@@ -127,7 +135,8 @@ Outputs:
 - `rl_policy_artifact.json`.
 - `rl_training.log`.
 - Optional checkpoints for resumable GPU training.
-- Optional RL candidate reference with `model_id=RL_EXECUTION`.
+- Optional RL candidate reference with canonical
+  `model_id=RL_EXECUTION_POLICY` (`RL_EXECUTION` is legacy/provenance only).
 
 Point-in-time / leakage requirements:
 
@@ -444,16 +453,22 @@ Goal:
 
 Deliverables:
 
-- Candidate metadata for `model_id=RL_EXECUTION`.
+- Candidate metadata for canonical `model_id=RL_EXECUTION_POLICY`
+  (`RL_EXECUTION` is legacy/provenance only).
 - Policy artifact hash and path in candidate metadata.
 - Explicit transaction-cost and execution assumptions.
 
 Gate:
 
-- RL candidate cannot be screen-passed unless VectorBT evaluates it under the
-  declared assumptions.
-- RL candidate cannot be replay-eligible without robustness evidence.
-- RL candidate cannot claim execution realism without HftBacktest pass.
+- RL rows enter the active campaign only by canonical registry slug through the
+  HBT-only campaign manifest.
+- Missing RL order adapters, missing data, simulator gaps, or feature-shape
+  mismatches are `pipeline_blocker`, `data_blocker`, or `authority_missing`
+  states, not model rejection.
+- RL candidate economics cannot be rejected, ranked, or promoted until
+  HftBacktest artifacts exist and the post-HBT evidence review runs.
+- RL candidate cannot claim execution realism without HftBacktest pass and
+  post-HBT promotion gates.
 
 ### Phase RL-7 - Validation, Ablations, And Monitoring
 

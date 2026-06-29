@@ -1,5 +1,5 @@
-# Unified model registry: 50 HYP + 11 PDF structural models.
-# Canonical id = slug; legacy_id (HYP_N / PDF_MODEL_N) deprecated.
+# Unified model registry.
+# Canonical id = descriptive slug; legacy_id is provenance-only metadata.
 
 models:
   SECOND_WAVE_CONTINUATION:
@@ -570,3 +570,85 @@ models:
     display_name: Hawkes Toxic Flow Detection
     class: HawkesToxicFlowModel
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+
+  RL_EXECUTION_POLICY:
+    kind: reinforcement_learning
+    legacy_id: RL_EXECUTION
+    display_name: Reinforcement Learning Execution Policy
+    class: RLExecutionPolicyArtifact
+    aliases: ["reinforcement learning execution", "rl execution", "rl policy", "tabular q learning execution"]
+    rl_status: offline_rl_research_only
+    algorithm_class: offline_rl_proxy
+    algorithm: tabular_q_learning_research_cpu_smoke
+    artifact_schema_version: hft3_rl_policy_artifact_v1
+    source_family: microstructure_policy_rows
+    action_space: ["hold", "enter_long", "enter_short"]
+    promotion_status: blocked_downstream_validation_required
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    authority_refs:
+      - "docs/project/REINFORCEMENT_LEARNING_IMPLEMENTATION_PLAN.md"
+      - "packages/research_pipeline/rl_agents.py"
+      - "vault:library/papers/rl-training-source-map-2026-06-25.md"
+      - "vault:decisions/2026-06-25 RL GPU training literature and budget execution rule.md"
+
+  RL_DEEP_Q_EXECUTION_PROXY:
+    kind: reinforcement_learning
+    legacy_id: RL_DEEP_Q_PROXY
+    display_name: Deep-Q Execution Proxy
+    class: DeepQExecutionProxyArtifact
+    aliases: ["deep q execution proxy", "deep rl policy", "pre ppo deep q proxy", "offline deep q proxy"]
+    rl_status: offline_rl_research_only
+    algorithm_class: offline_rl_proxy
+    algorithm: offline_deep_q_proxy_mse_vectorized
+    artifact_schema_version: hft3_rl_gpu_vectorized_campaign_v1
+    source_family: fs_v1_target
+    action_space: ["hold", "enter_long", "enter_short"]
+    supported_features: ["order_book_imbalance", "queue_imbalance", "order_flow_imbalance", "micro_price", "spread"]
+    promotion_status: blocked_downstream_validation_required
+    algorithm_status: pre_ppo_deep_q_proxy_not_rl5_completion
+    valid_instrument_universe: ["ES.v.0", "MES.v.0", "MNQ.v.0", "NQ.v.0", "RTY.v.0", "ZB.v.0", "ZN.v.0"]
+    authority_refs:
+      - "docs/project/REINFORCEMENT_LEARNING_IMPLEMENTATION_PLAN.md"
+      - "scripts/run_rl_gpu_campaign_npz_fast.py"
+      - "vault:library/papers/rl-training-source-map-2026-06-25.md"
+      - "vault:decisions/2026-06-26 RL GPU H200 manifest-backed campaign receipt.md"
+
+  RL_VIX_OPTIONS_CLUE_PROXY:
+    kind: reinforcement_learning
+    legacy_id: RL_VIX_OPTIONS_CLUE
+    display_name: VIX Options Clue RL Proxy
+    class: VixOptionsClueRLProxyArtifact
+    aliases: ["VIX.OPT RL clue", "vix options clue rl", "vix clue proxy"]
+    rl_status: offline_rl_research_only
+    algorithm_class: offline_rl_proxy
+    algorithm: offline_deep_q_proxy_mse_vectorized
+    artifact_schema_version: hft3_rl_gpu_vectorized_campaign_v1
+    source_family: vix_options_clue
+    action_space: ["hold", "clue_up", "clue_down"]
+    promotion_status: blocked_downstream_validation_required
+    algorithm_status: pre_ppo_deep_q_proxy_not_rl5_completion
+    valid_instrument_universe: ["VIX.OPT"]
+    authority_refs:
+      - "docs/project/REINFORCEMENT_LEARNING_IMPLEMENTATION_PLAN.md"
+      - "scripts/build_vix_options_rl_manifest.py"
+      - "scripts/run_rl_gpu_campaign_npz_fast.py"
+      - "vault:decisions/2026-06-26 VIX options RL clue schema path.md"
+      - "vault:decisions/2026-06-26 VIX options RL H200 campaign receipt.md"
+
+  RL_PPO_SIM_POLICY:
+    kind: reinforcement_learning
+    legacy_id: RL_PPO_SIM
+    display_name: PPO Simulation Policy
+    class: PPOSimPolicyArtifact
+    aliases: ["ppo simulation policy", "ppo sim policy", "rl5 ppo"]
+    rl_status: blocked_sim_env_required
+    algorithm_class: policy_gradient_online
+    algorithm: ppo
+    source_family: interactive_replay_simulation
+    action_space: ["hold", "enter_long", "enter_short"]
+    promotion_status: blocked_downstream_validation_required
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    authority_refs:
+      - "docs/project/REINFORCEMENT_LEARNING_IMPLEMENTATION_PLAN.md"
+      - "vault:library/papers/rl-training-source-map-2026-06-25.md"
+      - "vault:decisions/2026-06-25 RL GPU training literature and budget execution rule.md"

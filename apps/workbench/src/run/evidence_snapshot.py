@@ -87,7 +87,7 @@ def _source_lane(source: str) -> str:
 
 
 def workbench_run_sources() -> list[str]:
-    return ["all_lanes", "cme_rithmic", "equities", "options", "workbench_campaign", "autonomous"]
+    return ["hbt_runs", "all_lanes", "cme_rithmic", "equities", "options", "workbench_campaign", "autonomous"]
 
 
 def _active_run_path(repo: Path) -> Path:
@@ -1044,6 +1044,40 @@ def _latest_dir_with(path: Path, filename: str) -> Path | None:
         return None
     candidates = [p for p in path.iterdir() if p.is_dir() and (p / filename).is_file()]
     return max(candidates, key=_mtime) if candidates else None
+
+
+_HBT_RUN_ARTIFACTS = (
+    "run_manifest.json",
+    "data_manifest.json",
+    "hbt_config.json",
+    "strategy_config.json",
+    "normalized_input_manifest.json",
+    "data_validation.json",
+    "recorder_result.npz",
+    "stats_summary.json",
+    "latency_report.json",
+    "fill_quality_report.json",
+    "queue_diagnostics.json",
+    "robustness_report.json",
+    "promotion_decision.json",
+    "audit.md",
+)
+
+
+def _hbt_runs_root(repo: Path) -> Path:
+    return repo / "artifacts" / "hbt_runs"
+
+
+def _latest_hbt_run_dir(repo: Path) -> Path | None:
+    return _latest_dir_with(_hbt_runs_root(repo), "run_manifest.json")
+
+
+def _hbt_artifact_paths(run_dir: Path) -> dict[str, str]:
+    return {
+        name.rsplit(".", 1)[0]: str(run_dir / name)
+        for name in _HBT_RUN_ARTIFACTS
+        if (run_dir / name).is_file()
+    }
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -2282,6 +2316,294 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
     )
 
 
+def _hbt_runs_snapshot(repo: Path) -> RunEvidenceSnapshot:
+    root = _hbt_runs_root(repo)
+    run_dir = _latest_hbt_run_dir(repo)
+    feature_fabric = {
+        "status": "not_applicable",
+        "gate_status": "PASS",
+        "evidence_gate_passed": True,
+        "consumer_lane": "hbt_runs",
+        "blocking_gates": [],
+        "rows": [],
+        "reason": "HBT run artifacts are direct active backtest evidence, not cross-lane feature-fabric evidence.",
+    }
+    if run_dir is None:
+        return RunEvidenceSnapshot(
+            source="hbt_runs",
+            state="idle",
+            current_stage="hbt_run_required",
+            root=str(root),
+            stages=[
+                {"name": "hbt_run_manifest", "status": "missing"},
+                {"name": "hbt_strategy_results", "status": "blocked"},
+                {"name": "hbt_promotion_decision", "status": "blocked"},
+            ],
+            diagnostics={"feature_fabric": feature_fabric},
+            decision={
+                "action": "BLOCKED",
+                "reason": "No artifacts/hbt_runs/<run_id>/run_manifest.json was found.",
+                "live_registry_ready": False,
+                "blocking_gates": [
+                    {
+                        "gate": "hbt_run_manifest",
+                        "status": "MISSING",
+                        "reason": "Run scripts/run_hftbacktest_only.py to emit an active HftBacktest run artifact folder.",
+                    }
+                ],
+            },
+            system={
+                "pipeline_coverage": [
+                    _coverage_row(
+                        "hbt_run_manifest",
+                        "MISSING",
+                        "artifacts/hbt_runs/<run_id>/run_manifest.json",
+                        "No active HftBacktest run artifact is available.",
+                        authority="HftBacktest-only pipeline",
+                        role="active_run_identity",
+                        artifact_contract="artifacts/hbt_runs/<run_id>/run_manifest.json",
+                    )
+                ],
+                "feature_fabric": feature_fabric,
+            },
+        )
+
+    manifest = read_json(run_dir / "run_manifest.json")
+    data_manifest = read_json(run_dir / "data_manifest.json")
+    hbt_config = read_json(run_dir / "hbt_config.json")
+    strategy_config = read_json(run_dir / "strategy_config.json")
+    normalized_input = read_json(run_dir / "normalized_input_manifest.json")
+    data_validation = read_json(run_dir / "data_validation.json")
+    stats = read_json(run_dir / "stats_summary.json")
+    latency_report = read_json(run_dir / "latency_report.json")
+    fill_quality = read_json(run_dir / "fill_quality_report.json")
+    queue_diagnostics = read_json(run_dir / "queue_diagnostics.json")
+    robustness_report = read_json(run_dir / "robustness_report.json")
+    promotion = read_json(run_dir / "promotion_decision.json")
+    artifact_paths = _hbt_artifact_paths(run_dir)
+    run_id = str(manifest.get("run_id") or stats.get("run_id") or promotion.get("run_id") or run_dir.name)
+    recorder_exists = (run_dir / "recorder_result.npz").is_file()
+    stats_exists = bool(stats)
+    promotion_exists = bool(promotion)
+    data_validation_status = str(
+        data_validation.get("data_validation_status")
+        or data_manifest.get("validation_status")
+        or normalized_input.get("validation_status")
+        or "missing"
+    ).lower()
+    data_passed = data_validation_status == "pass"
+    results_observed = recorder_exists and stats_exists
+    missing_artifacts = [
+        name
+        for name in ("run_manifest.json", "recorder_result.npz", "stats_summary.json", "promotion_decision.json")
+        if not (run_dir / name).is_file()
+    ]
+    blocking_gates: list[dict[str, Any]] = []
+    if str(manifest.get("active_path") or "") != "hftbacktest_only":
+        blocking_gates.append(
+            {
+                "gate": "hbt_active_path",
+                "status": "BLOCKING",
+                "reason": "run_manifest.json does not declare active_path=hftbacktest_only.",
+                "artifact": str(run_dir / "run_manifest.json"),
+            }
+        )
+    if data_validation and not data_passed:
+        blocking_gates.append(
+            {
+                "gate": "hbt_data_validation",
+                "status": "BLOCKING",
+                "reason": "HftBacktest data validation did not pass.",
+                "fail_closed_reasons": data_validation.get("fail_closed_reasons", []),
+                "artifact": str(run_dir / "data_validation.json"),
+            }
+        )
+    if missing_artifacts:
+        blocking_gates.append(
+            {
+                "gate": "hbt_required_artifacts",
+                "status": "MISSING",
+                "reason": "Required HftBacktest-only output artifacts are missing.",
+                "missing_artifacts": missing_artifacts,
+                "artifact_dir": str(run_dir),
+            }
+        )
+
+    decision_text = str(promotion.get("decision") or ("observe" if results_observed else "blocked")).upper()
+    state = "observed" if results_observed and not blocking_gates else "blocked"
+    current_stage = "hbt_promotion_decision_observed" if promotion_exists else "hbt_outputs_missing"
+    hbt_row = {
+        "run_id": run_id,
+        "artifact_dir": str(run_dir),
+        "symbol": manifest.get("symbol"),
+        "contract": manifest.get("contract"),
+        "event_id": manifest.get("event_id"),
+        "strategy_id": manifest.get("strategy_id") or strategy_config.get("strategy_id"),
+        "mechanical_validity_status": stats.get("mechanical_validity_status"),
+        "economic_result_status": stats.get("economic_result_status"),
+        "orders_submitted": stats.get("orders_submitted"),
+        "fills_count": stats.get("fills_count"),
+        "fill_rate": stats.get("fill_rate"),
+        "net_pnl": stats.get("net_pnl"),
+        "decision": promotion.get("decision", ""),
+        "promotion_allowed": promotion.get("promotion_allowed", False),
+    }
+    hbt_diagnostics_observed = (
+        bool(latency_report)
+        and bool(fill_quality)
+        and fill_quality.get("status") != "not_run"
+        and bool(queue_diagnostics)
+        and queue_diagnostics.get("status") != "not_run"
+    )
+    coverage = [
+        _coverage_row(
+            "hbt_run_manifest",
+            "OBSERVED",
+            str(run_dir / "run_manifest.json"),
+            "The selected active result is bound to a concrete HftBacktest run_id and artifact folder.",
+            authority="HftBacktest-only pipeline",
+            role="active_run_identity",
+            artifact_contract="artifacts/hbt_runs/<run_id>/run_manifest.json",
+        ),
+        _coverage_row(
+            "hbt_data_validation",
+            "OBSERVED" if data_passed else "BLOCKING",
+            str(run_dir / "data_validation.json"),
+            "HftBacktest-compatible event data validation passed."
+            if data_passed
+            else "HftBacktest-compatible event data validation is missing or failed.",
+            authority="HftBacktest validation",
+            role="admissibility_gate",
+            artifact_contract="data_validation.json with data_validation_status=pass",
+        ),
+        _coverage_row(
+            "hbt_strategy_results",
+            "OBSERVED" if results_observed else "BLOCKING",
+            str(run_dir),
+            "recorder_result.npz and stats_summary.json exist for this HftBacktest run."
+            if results_observed
+            else "recorder_result.npz and stats_summary.json must exist before active results are displayed as complete.",
+            authority="HftBacktest runner",
+            role="required_execution_replay",
+            artifact_contract="recorder_result.npz plus stats_summary.json",
+        ),
+        _coverage_row(
+            "hbt_latency_fill_queue",
+            "OBSERVED" if hbt_diagnostics_observed else "BLOCKING",
+            str(run_dir),
+            "Latency, fill-quality, and queue diagnostics are attached to this HftBacktest run."
+            if hbt_diagnostics_observed
+            else "Latency, fill-quality, and queue diagnostics are incomplete.",
+            authority="HftBacktest-only pipeline",
+            role="microstructure_diagnostics",
+            artifact_contract="latency_report.json, fill_quality_report.json, queue_diagnostics.json",
+        ),
+        _coverage_row(
+            "hbt_promotion_decision",
+            "OBSERVED" if promotion_exists else "BLOCKING",
+            str(run_dir / "promotion_decision.json"),
+            "Promotion decision was generated after HftBacktest outputs existed."
+            if promotion_exists
+            else "promotion_decision.json is not available yet.",
+            authority="post-HftBacktest evaluator",
+            role="post_hbt_decision_gate",
+            artifact_contract="promotion_decision.json written only after recorder_result.npz and stats_summary.json",
+        ),
+    ]
+    return RunEvidenceSnapshot(
+        source="hbt_runs",
+        run_id=run_id,
+        state=state,
+        current_stage=current_stage,
+        started_at=str(manifest.get("created_at_utc") or ""),
+        root=str(run_dir),
+        stages=[
+            {"name": "hbt_run_manifest", "status": "observed"},
+            {"name": "hbt_data_validation", "status": "pass" if data_passed else data_validation_status},
+            {"name": "hbt_strategy_results", "status": "observed" if results_observed else "missing"},
+            {"name": "hbt_latency_fill_queue", "status": "observed" if hbt_diagnostics_observed else "missing"},
+            {"name": "hbt_promotion_decision", "status": "observed" if promotion_exists else "missing"},
+        ],
+        artifacts=artifact_paths,
+        registry={
+            "selected_run_id": run_id,
+            "artifact_dir": str(run_dir),
+            "active_pipeline": "hftbacktest_only",
+        },
+        data={
+            "symbol": manifest.get("symbol"),
+            "contract": manifest.get("contract"),
+            "event_id": manifest.get("event_id"),
+            "normalized_npz": manifest.get("normalized_npz") or data_manifest.get("normalized_npz"),
+            "initial_snapshot": manifest.get("initial_snapshot") or data_manifest.get("initial_snapshot"),
+            "data_validation": data_validation,
+            "data_manifest": data_manifest,
+            "normalized_input_manifest": normalized_input,
+            "data_files": [
+                {
+                    "artifact": "normalized_npz",
+                    "status": "observed" if manifest.get("normalized_npz") else "missing",
+                    "path": manifest.get("normalized_npz") or data_manifest.get("normalized_npz", ""),
+                },
+                {
+                    "artifact": "initial_snapshot",
+                    "status": "observed" if manifest.get("initial_snapshot") else "missing",
+                    "path": manifest.get("initial_snapshot") or data_manifest.get("initial_snapshot", ""),
+                },
+            ],
+        },
+        backtest={
+            "rows": [hbt_row],
+            "hbt_run": hbt_row,
+            "summary": stats,
+            "hbt_config": hbt_config,
+            "strategy_config": strategy_config,
+            "promotion_decision": promotion,
+        },
+        latency={
+            "hbt_latency_report": latency_report,
+            "latency_model": latency_report.get("latency_model") or manifest.get("latency_model"),
+            "entry_latency_ns": latency_report.get("order_entry_latency_ns") or manifest.get("entry_latency_ns"),
+            "response_latency_ns": latency_report.get("order_response_latency_ns") or manifest.get("response_latency_ns"),
+        },
+        diagnostics={
+            "feature_fabric": feature_fabric,
+            "fill_quality": fill_quality,
+            "queue_diagnostics": queue_diagnostics,
+        },
+        robustness={
+            "status": robustness_report.get("status", "not_evaluated_minimal_slice"),
+            "robustness_report": robustness_report,
+            "pending": ["latency_sensitivity", "fill_model_sensitivity", "symbol_event_stability"]
+            if not robustness_report or robustness_report.get("status") == "not_run"
+            else [],
+            "failed": [],
+        },
+        decision={
+            "action": decision_text,
+            "reason": "Active HftBacktest-only run artifacts are observed."
+            if results_observed and not blocking_gates
+            else "Active HftBacktest-only run is blocked until required artifacts and validation pass.",
+            "live_registry_ready": False,
+            "evidence_candidate_id": run_id,
+            "blocking_gates": blocking_gates,
+            "promotion_decision": promotion,
+        },
+        reports={
+            "audit": str(run_dir / "audit.md") if (run_dir / "audit.md").is_file() else "",
+            "stats_summary": str(run_dir / "stats_summary.json") if stats_exists else "",
+            "promotion_decision": str(run_dir / "promotion_decision.json") if promotion_exists else "",
+        },
+        system={
+            "active_pipeline": "hftbacktest_only",
+            "pipeline_coverage": coverage,
+            "feature_fabric": feature_fabric,
+            "hbt_run_manifest": manifest,
+            "hbt_artifact_dir": str(run_dir),
+        },
+    )
+
+
 def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     lane = _source_lane(source)
     lane_registry = _lane_registry_snapshot(repo)
@@ -2966,7 +3288,9 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
     active = _active_run_manifest(repo)
     if active and source in STALE_WHEN_ACTIVE_SOURCES:
         return _stale_source_blocked_snapshot(repo, source, active)
-    if source == "all_lanes":
+    if source == "hbt_runs":
+        snapshot = _hbt_runs_snapshot(repo)
+    elif source == "all_lanes":
         snapshot = _all_lanes_snapshot(repo)
     elif source == "workbench_campaign":
         snapshot = _workbench_snapshot(repo, campaign_id)
@@ -3054,6 +3378,6 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
 
 
 def default_source(repo: Path) -> str:
-    if _active_run_path(repo).is_file():
-        return "all_lanes"
+    if _latest_hbt_run_dir(repo) is not None:
+        return "hbt_runs"
     return "all_lanes"

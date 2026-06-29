@@ -1,4 +1,4 @@
-"""Unified model slug registry - 50 HYP + 11 PDF = 61 total."""
+"""Unified canonical model slug registry; legacy IDs are provenance aliases."""
 
 from __future__ import annotations
 
@@ -24,12 +24,20 @@ def _models() -> dict:
 
 @lru_cache(maxsize=1)
 def slug_to_legacy() -> Dict[str, str]:
-    return {slug: entry["legacy_id"] for slug, entry in _models().items()}
+    return {
+        slug: str(entry["legacy_id"])
+        for slug, entry in _models().items()
+        if entry.get("legacy_id")
+    }
 
 
 @lru_cache(maxsize=1)
 def legacy_to_slug() -> Dict[str, str]:
-    return {entry["legacy_id"]: slug for slug, entry in _models().items()}
+    return {
+        str(entry["legacy_id"]): slug
+        for slug, entry in _models().items()
+        if entry.get("legacy_id")
+    }
 
 
 def all_slugs() -> List[str]:

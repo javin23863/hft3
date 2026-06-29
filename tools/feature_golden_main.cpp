@@ -30,7 +30,7 @@ int main() {
     }
 
     const auto& vec = extractor.features();
-    constexpr size_t kSlots[] = {26, 41, 42, 43, 44, 45, 46, 47, 48, 49};
+    constexpr size_t kSlots[] = {26, 27, 28, 29, 30, 31, 32, 33, 34, 41, 42, 43, 44, 45, 46, 47, 48, 49};
 
     std::cout << std::setprecision(17);
     std::cout << "{";

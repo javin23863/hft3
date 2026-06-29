@@ -7,7 +7,7 @@ from typing import Dict, List
 
 import yaml
 
-from features_engine.src.model_registry import legacy_to_slug, load_model_registry, resolve_model_id
+from features_engine.src.model_registry import legacy_to_slug, resolve_model_id
 
 from .model_01_book_pressure import BookPressureModel
 from .model_02_cross_asset_lead_lag import CrossAssetLeadLagModel
@@ -48,10 +48,18 @@ def _slug_deps(legacy_map: Dict[str, List[str]]) -> Dict[str, List[str]]:
 
 MODEL_DEPENDENCY_MAP: Dict[str, List[str]] = _slug_deps(_LEGACY_PDF_DEPS)
 
-PDF_MODEL_IDS = tuple(
-    slug
-    for slug, entry in load_model_registry().get("models", {}).items()
-    if entry.get("kind") == "pdf_structural"
+PDF_MODEL_IDS = (
+    "BOOK_PRESSURE",
+    "CROSS_ASSET_LEAD_LAG",
+    "VPIN_TOXICITY",
+    "HYBRID_EXECUTION",
+    "DEALER_HEDGING",
+    "DOW_YM_INDEX",
+    "TREASURY_CTD",
+    "TRANSFER_ENTROPY",
+    "QUANTUM_SPREAD_DEFENSE",
+    "STOCHASTIC_THERMO",
+    "HAWKES_TOXIC_FLOW",
 )
 
 _CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"

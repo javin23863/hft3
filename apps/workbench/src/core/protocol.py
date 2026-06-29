@@ -16,7 +16,7 @@ __all__ = [
 @dataclass(frozen=True)
 class ModelConfig:
     model_id: str
-    kind: str  # hypothesis | pdf
+    kind: str  # hypothesis | pdf | reinforcement_learning
     name: str = ""
     required_datasets: List[str] = field(default_factory=lambda: ["mbo_npz"])
     min_history_years: int = 10

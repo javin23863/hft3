@@ -1,4 +1,4 @@
-"""C++ golden parity for REALIZED_VOL (26) and regime slots (41-49)."""
+"""C++ golden parity for changed feature, session-derived, and regime slots."""
 import json
 import subprocess
 import sys
@@ -18,7 +18,7 @@ from features_engine.src.features.feature_index import (
 from features_engine.src.features.mbo_features import MBOEvent, MBOFeatureExtractor
 from features_engine.src.regime.regime_filter import RegimeFilter
 
-_PARITY_SLOTS = [FeatureIndex.REALIZED_VOL_STATE, *range(41, 50)]
+_PARITY_SLOTS = [FeatureIndex.REALIZED_VOL_STATE, *range(27, 35), *range(41, 50)]
 
 
 def _golden_exe() -> Path | None:
@@ -30,6 +30,10 @@ def _golden_exe() -> Path | None:
 def _run_sequence_python() -> np.ndarray:
     ex = MBOFeatureExtractor(tick_size=0.25)
     rf = RegimeFilter()
+    vwap_sum_px_qty = 0.0
+    vwap_sum_qty = 0.0
+    session_high = 0.0
+    session_low = float("inf")
     events = [
         MBOEvent(1_000, 1, "ADD", "B", 5500.0, 10),
         MBOEvent(1_001, 2, "ADD", "A", 5501.0, 8),
@@ -39,12 +43,37 @@ def _run_sequence_python() -> np.ndarray:
     ]
     vec = None
     for ev in events:
+        if ev.action == "TRADE" and ev.size > 0:
+            vwap_sum_px_qty += ev.price * ev.size
+            vwap_sum_qty += ev.size
         vec = ex.process_event(ev)
         posterior = rf.update(vector_to_feature_dict(vec), "NORMAL")
         for regime, prob in posterior.items():
             idx = REGIME_INDEX_MAP.get(regime)
             if idx is not None:
                 vec[idx] = prob
+        mid = float(vec[FeatureIndex.MID_PRICE])
+        if mid > 0:
+            vec[FeatureIndex.DISTANCE_TO_VWAP] = (
+                (mid - (vwap_sum_px_qty / vwap_sum_qty)) / 0.25 if vwap_sum_qty > 0 else 0.0
+            )
+            vec[FeatureIndex.SPREAD_STRESS_ELEVATED] = (
+                1.0 if float(vec[FeatureIndex.SPREAD_STRESS]) > 2.0 else 0.0
+            )
+            if session_high == 0.0 and session_low == float("inf"):
+                session_high = mid
+                session_low = mid
+                vec[FeatureIndex.IS_BREAKING_SESSION_LEVEL] = 0.0
+            elif mid > session_high:
+                session_high = mid
+                vec[FeatureIndex.IS_BREAKING_SESSION_LEVEL] = 1.0
+            elif mid < session_low:
+                session_low = mid
+                vec[FeatureIndex.IS_BREAKING_SESSION_LEVEL] = -1.0
+            else:
+                vec[FeatureIndex.IS_BREAKING_SESSION_LEVEL] = 0.0
+            remainder = mid % 10.0
+            vec[FeatureIndex.DISTANCE_TO_ROUND_NUMBER] = min(remainder, 10.0 - remainder) / 0.25
     assert vec is not None
     return np.array([vec[i] for i in _PARITY_SLOTS], dtype=np.float64)
 

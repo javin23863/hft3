@@ -47,6 +47,7 @@ def test_crypto_lane_source_is_stale_inside_active_all_lane_boundary(tmp_path: P
 def test_workbench_run_sources_cover_registered_model_lanes() -> None:
     sources = workbench_run_sources()
 
+    assert "hbt_runs" in sources
     assert "all_lanes" in sources
     assert "crypto_lane" not in sources
     assert "cme_rithmic" in sources
@@ -64,6 +65,136 @@ def test_active_run_manifest_makes_all_lanes_default(tmp_path: Path) -> None:
     old_smoke.write_text('{"run_id":"old_smoke","state":"completed"}', encoding="utf-8")
 
     assert default_source(tmp_path) == "all_lanes"
+
+
+def test_default_source_prefers_hbt_runs_when_present(tmp_path: Path) -> None:
+    run_dir = tmp_path / "artifacts" / "hbt_runs" / "hbt_only_test"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_manifest.json").write_text(
+        '{"run_id":"hbt_only_test","active_path":"hftbacktest_only"}',
+        encoding="utf-8",
+    )
+
+    assert default_source(tmp_path) == "hbt_runs"
+
+
+def test_hbt_runs_snapshot_surfaces_real_artifacts_without_vectorbt_active_truth(tmp_path: Path) -> None:
+    run_dir = tmp_path / "artifacts" / "hbt_runs" / "hbt_only_test"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_manifest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "hbt_only_test",
+                "active_path": "hftbacktest_only",
+                "symbol": "MES",
+                "contract": "MESH6",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "strategy_id": "smoke_limit_order",
+                "normalized_npz": str(tmp_path / "event_l3.npz"),
+                "initial_snapshot": str(tmp_path / "snapshot.npz"),
+                "latency_model": "constant_order_latency",
+                "entry_latency_ns": 100_000,
+                "response_latency_ns": 100_000,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "data_manifest.json").write_text(
+        '{"validation_status":"pass","normalized_npz":"event_l3.npz","initial_snapshot":"snapshot.npz"}',
+        encoding="utf-8",
+    )
+    (run_dir / "hbt_config.json").write_text('{"queue_model":"L3FIFOQueueModel"}', encoding="utf-8")
+    (run_dir / "strategy_config.json").write_text('{"strategy_id":"smoke_limit_order"}', encoding="utf-8")
+    (run_dir / "normalized_input_manifest.json").write_text('{"validation_status":"pass"}', encoding="utf-8")
+    (run_dir / "data_validation.json").write_text('{"data_validation_status":"pass"}', encoding="utf-8")
+    (run_dir / "recorder_result.npz").write_bytes(b"npz")
+    (run_dir / "stats_summary.json").write_text(
+        json.dumps(
+            {
+                "run_id": "hbt_only_test",
+                "mechanical_validity_status": "pass",
+                "economic_result_status": "observe",
+                "orders_submitted": 1,
+                "fills_count": 0,
+                "fill_rate": 0.0,
+                "net_pnl": 0.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "latency_report.json").write_text('{"latency_model":"constant_order_latency"}', encoding="utf-8")
+    (run_dir / "fill_quality_report.json").write_text('{"fill_rate":0.0}', encoding="utf-8")
+    (run_dir / "queue_diagnostics.json").write_text('{"queue_model":"L3FIFOQueueModel"}', encoding="utf-8")
+    (run_dir / "robustness_report.json").write_text('{"status":"not_run"}', encoding="utf-8")
+    (run_dir / "promotion_decision.json").write_text(
+        '{"run_id":"hbt_only_test","decision":"observe","promotion_allowed":false}',
+        encoding="utf-8",
+    )
+    (run_dir / "audit.md").write_text("# HftBacktest-Only Run Audit\n", encoding="utf-8")
+
+    snapshot = load_run_evidence(tmp_path, "hbt_runs")
+
+    assert snapshot.source == "hbt_runs"
+    assert snapshot.run_id == "hbt_only_test"
+    assert snapshot.root == str(run_dir)
+    assert snapshot.backtest["hbt_run"]["artifact_dir"] == str(run_dir)
+    assert snapshot.artifacts["run_manifest"] == str(run_dir / "run_manifest.json")
+    assert snapshot.system["active_pipeline"] == "hftbacktest_only"
+    assert {row["stage"] for row in snapshot.system["pipeline_coverage"]} == {
+        "hbt_run_manifest",
+        "hbt_data_validation",
+        "hbt_strategy_results",
+        "hbt_latency_fill_queue",
+        "hbt_promotion_decision",
+    }
+    assert "vectorbt_summary" not in snapshot.backtest
+    assert all(row["stage"] != "vectorbt_filter" for row in snapshot.system["pipeline_coverage"])
+
+
+def test_hbt_runs_snapshot_blocks_placeholder_fill_queue_reports(tmp_path: Path) -> None:
+    run_dir = tmp_path / "artifacts" / "hbt_runs" / "hbt_placeholder"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_manifest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "hbt_placeholder",
+                "active_path": "hftbacktest_only",
+                "symbol": "MES",
+                "contract": "MESU4",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "strategy_id": "smoke_limit_order",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "data_manifest.json").write_text('{"validation_status":"pass"}', encoding="utf-8")
+    (run_dir / "hbt_config.json").write_text('{"queue_model":"L3FIFOQueueModel"}', encoding="utf-8")
+    (run_dir / "strategy_config.json").write_text('{"strategy_id":"smoke_limit_order"}', encoding="utf-8")
+    (run_dir / "normalized_input_manifest.json").write_text('{"validation_status":"pass"}', encoding="utf-8")
+    (run_dir / "data_validation.json").write_text('{"data_validation_status":"pass"}', encoding="utf-8")
+    (run_dir / "recorder_result.npz").write_bytes(b"npz")
+    (run_dir / "stats_summary.json").write_text(
+        '{"run_id":"hbt_placeholder","mechanical_validity_status":"pass"}',
+        encoding="utf-8",
+    )
+    (run_dir / "latency_report.json").write_text('{"latency_model":"constant_order_latency"}', encoding="utf-8")
+    (run_dir / "fill_quality_report.json").write_text('{"status":"not_run"}', encoding="utf-8")
+    (run_dir / "queue_diagnostics.json").write_text('{"status":"not_run"}', encoding="utf-8")
+    (run_dir / "robustness_report.json").write_text('{"status":"not_run"}', encoding="utf-8")
+    (run_dir / "promotion_decision.json").write_text(
+        '{"run_id":"hbt_placeholder","decision":"observe","promotion_allowed":false}',
+        encoding="utf-8",
+    )
+
+    snapshot = load_run_evidence(tmp_path, "hbt_runs")
+
+    coverage = {row["stage"]: row for row in snapshot.system["pipeline_coverage"]}
+    assert coverage["hbt_latency_fill_queue"]["status"] == "BLOCKING"
+    assert coverage["hbt_latency_fill_queue"]["reason"] == (
+        "Latency, fill-quality, and queue diagnostics are incomplete."
+    )
+    stages = {row["name"]: row["status"] for row in snapshot.stages}
+    assert stages["hbt_latency_fill_queue"] == "missing"
 
 
 def test_all_lanes_snapshot_requires_active_run_and_terminal_states(tmp_path: Path) -> None:

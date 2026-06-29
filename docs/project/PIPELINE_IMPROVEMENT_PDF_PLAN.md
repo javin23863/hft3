@@ -2,6 +2,11 @@
 
 Status: execution plan from operator-supplied PDF, created 2026-06-25.
 
+Active HBT-only supersession: this PDF-derived plan is historical for active
+HftBacktest routing. Do not port its VectorBT -> robustness -> HftBacktest
+ordering rule into the HBT-only campaign; port only source/citation or evidence
+ideas after rewriting them to the HBT-only identity fields.
+
 Source PDF: `C:\Users\MSI\Downloads\Pipeline improvement suggestions.pdf`
 
 Extraction receipt: 6 pages, extracted with bundled `pypdf` from the Codex primary runtime.
@@ -24,7 +29,9 @@ This plan therefore has two jobs:
 
 - Do not write to or reset `C:\Users\MSI\repos\hft3-advanced-models`.
 - Do not launch GPU training from the MSI workstation.
-- Do not bypass VectorBT -> robustness evidence -> HftBacktest ordering.
+- For this legacy PDF-derived path, do not bypass VectorBT -> robustness
+  evidence -> HftBacktest ordering. For the active HBT-only path, do not reuse
+  this ordering as an eligibility rule.
 - Do not treat RL output as a promotion receipt unless normal replay, robustness, and HftBacktest gates also pass.
 - Do not introduce lookahead: all microstructure features must be computed from point-in-time snapshots or trailing windows only.
 - Do not weaken the native C++ hot-path evidence gate added in PR #14.

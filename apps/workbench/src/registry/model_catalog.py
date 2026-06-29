@@ -84,6 +84,12 @@ def load_catalog(repo_root: Optional[Path] = None) -> Dict[str, CatalogEntry]:
             hyp_id = cfg.hyp_id
             display = ov.get("display_name") or cfg.name or hyp_reg.get_hypothesis_name(hyp_id)
             desc = ov.get("description") or _hyp_description(hyp_id, display)
+        elif cfg.kind == "reinforcement_learning":
+            display = ov.get("display_name") or cfg.name or slug
+            desc = ov.get("description") or (
+                f"{display}. Reinforcement-learning research artifact; "
+                "blocked until uniform HBT order adapter and post-HBT gates exist."
+            )
         else:
             display = ov.get("display_name") or cfg.name or slug
             desc = ov.get("description") or f"{display}. PDF structural model from registry."

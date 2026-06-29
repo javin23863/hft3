@@ -1,20 +1,31 @@
 # Research entrypoints (canonical order)
 
-Use this order. Do **not** skip to legacy paths below.
+Use the active HBT-only order for current HftBacktest-only backtesting work. Do
+**not** skip to legacy paths below.
 
-**Unified chronological pipeline:** [UNIFIED_RESEARCH_PIPELINE.md](UNIFIED_RESEARCH_PIPELINE.md) — stages 0–7 (ontology → VBT → promote → HBT → workbench robustness → lifecycle/trade manager → certify → CHI404). Code registry: `packages/backtest_pipeline/src/research_pipeline_stages.py`.
+**Active HBT-only supersession (2026-06-29):** for current HftBacktest-only
+backtesting work, use
+[HFTBACKTEST_ONLY_PIPELINE_PLAN.md](../project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md)
+and
+[HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md](../project/HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md).
+VectorBT, Stage A, screening artifacts, and robustness bridges are historical or
+diagnostic inputs only; they do not decide what active HBT receives.
+
+**Legacy chronological pipeline:** [UNIFIED_RESEARCH_PIPELINE.md](UNIFIED_RESEARCH_PIPELINE.md) — stages 0–7 (ontology → VBT → promote → HBT → workbench robustness → lifecycle/trade manager → certify → CHI404). This is not the active HBT-only order unless an owner explicitly re-enables that route. Code registry: `packages/backtest_pipeline/src/research_pipeline_stages.py`.
 
 **Verification honesty:** Every agent handoff must use the status block in [VALIDATION_HONESTY.md](../VALIDATION_HONESTY.md). Scope-green commands for each lane are in that doc; smoke-only targeted pytest never substitutes.
 
 Baseline metrics: [CPI_2024_09_11_TIGHT_BASELINE.md](CPI_2024_09_11_TIGHT_BASELINE.md)
 
-## 1. VectorBT screen -> HftBacktest realism (primary research)
+## 1. VectorBT screen -> HftBacktest realism (historical prior path)
 
-Broad screening, refine, all-model, and paid-compute research now starts with
-the VectorBT handoff artifact. Broad scopes require the Rust VectorBT engine and
-fail closed without it. Execution-realism evidence then moves through the
-official HftBacktest source-lock/data/latency/fill gates in
-[HFTBACKTEST_REALISM_ENGINE_SPEC.md](../project/HFTBACKTEST_REALISM_ENGINE_SPEC.md).
+In the historical path, broad screening, refine, all-model, and paid-compute
+research started with the VectorBT handoff artifact. Broad scopes required the
+Rust VectorBT engine and failed closed without it. Execution-realism evidence
+then moved through the official HftBacktest source-lock/data/latency/fill gates
+in [HFTBACKTEST_REALISM_ENGINE_SPEC.md](../project/HFTBACKTEST_REALISM_ENGINE_SPEC.md).
+This section is inactive for the active HBT-only plan unless an owner explicitly
+re-enables the legacy route.
 
 Retired hft3 replay entrypoints such as `scripts/run_event_replay.py`,
 `scripts/run_event_universe.py`, `replay_matrix.py`, and `ReplaySession` are

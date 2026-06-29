@@ -85,7 +85,11 @@ def pca_first_component(history: List[List[float]]) -> Tuple[float, np.ndarray]:
     if len(history) < 2:
         vec = np.array(history[-1] if history else [0.0], dtype=float)
         return 0.0, vec
-    mat = np.array(history, dtype=float)
+    width = max((len(row) for row in history), default=1)
+    mat = np.zeros((len(history), max(width, 1)), dtype=float)
+    for index, row in enumerate(history):
+        values = np.array(row, dtype=float)
+        mat[index, : len(values)] = values
     mat = mat - mat.mean(axis=0, keepdims=True)
     if mat.shape[0] < 2:
         return 0.0, mat.flatten()

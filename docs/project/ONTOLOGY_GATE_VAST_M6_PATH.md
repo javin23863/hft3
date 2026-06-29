@@ -1,6 +1,8 @@
 # Ontology Gate — Vast M6 pipeline path
 
-Status: enforcement reference for `scripts/validate_vast_m6_ontology_gate.py`.
+Status: historical / inactive for active HftBacktest-only routing. Enforcement
+reference for the legacy Vast M6 path and
+`scripts/validate_vast_m6_ontology_gate.py`.
 
 ## Current posture (REJECT until fixed)
 

@@ -1,11 +1,9 @@
 # VectorBT paid screen model ontology
 
-Status: binding only for model identity and paid-screen interpretation. It is
-not the full research-product authority. The canonical product authority is
-[OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md),
-[VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md),
-[MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md](../cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md),
-and [FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](FEATURE_LITERATURE_TRACEABILITY_MATRIX.md).
+Status: historical / inactive for active HftBacktest-only pipeline routing.
+Binding only for model identity and legacy paid-screen interpretation. Active
+HBT runs follow [HFTBACKTEST_ONLY_PIPELINE_PLAN.md](HFTBACKTEST_ONLY_PIPELINE_PLAN.md)
+and do not require Stage A survivor cells or VectorBT screening artifacts.
 
 Authority chain (do not invent parallel processes):
 
@@ -14,7 +12,7 @@ Authority chain (do not invent parallel processes):
 | Research clocks & unit types | [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md) |
 | Discovery entry order | [RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md) §1 |
 | 64-slot feature set | [specs/FEATURES.md](../../specs/FEATURES.md), `feature_index.py` |
-| Model identity (50 HYP + 11 PDF) | `packages/features_engine/config/model_registry.yaml` |
+| Model identity (canonical registry slugs, including HYP/PDF/RL entries) | `packages/features_engine/config/model_registry.yaml` |
 | Hypothesis signal logic | `packages/features_engine/src/hypotheses/modules.py`, `vix_modules.py` |
 | VectorBT screen engine | [VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md), `vectorbt_adapter.py` |
 | Paid rent phases | [VBT_PAID_SCREEN_RUNBOOK.md](VBT_PAID_SCREEN_RUNBOOK.md), [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md) |
@@ -38,7 +36,7 @@ They do **not** yet implement:
 
 Do not describe Phase D Vast rent as “full backtest” or “all features” until the manifest declares research clocks and the data plane matches Stage A / replay injection paths.
 
-## What we are doing today (Phase D — partial)
+## Historical Phase D Path (inactive)
 
 ```text
 stage_a_survivors.json × events.csv TIGHT × CME M6 symbols
@@ -49,7 +47,12 @@ stage_a_survivors.json × events.csv TIGHT × CME M6 symbols
   → HftBacktest realism on promoted_ids only (not discovery)
 ```
 
-Unit generation runs on the Vast host. Current Vast full default is `run_vbt_paid_screen_vast_full.sh`, which consumes `research_cards/stage_a_full/stage_a_survivors.json` and applies the runnable-NPZ filter before workers start. `--all-active-models` / `VBT_UNIT_SOURCE=all_active` is an explicit exploratory override, not the default full-rent path.
+In the historical VectorBT paid-screen lane, unit generation ran on the Vast
+host. The former full default was `run_vbt_paid_screen_vast_full.sh`, which
+consumed `research_cards/stage_a_full/stage_a_survivors.json` and applied the
+runnable-NPZ filter before workers started. This is not active HBT-only routing.
+`--all-active-models` / `VBT_UNIT_SOURCE=all_active` was an exploratory override
+inside that inactive lane.
 
 ## What we are not doing
 
@@ -94,10 +97,15 @@ A tradable **hypothesis model** in this stack is not a single feature. It is the
 | Canonical `model_id` | Slug, e.g. `SPREAD_BLOWOUT_RECOMPRESSION` |
 | `legacy_id` | Deprecated `HYP_5` — resolve via `resolve_model_id()` |
 | `hyp_id` | Integer 1–50 for hypotheses |
-| `kind` | `hypothesis` or `pdf_structural` |
-| `class` | Python class name in `hypotheses/` or `structural_models/` |
+| `kind` | `hypothesis`, `pdf_structural`, or `reinforcement_learning` |
+| `class` | Python class/artifact adapter name for the model family |
 
-Inventory: **50 registered hypotheses** (`hyp_id` 1–50 in `model_registry.yaml`) + **11 PDF structural models**. `get_active_hypotheses()` returns the production list (cross-asset/VIX subsets may be ablated via `HFT3_CROSS_ASSET`). Current Vast VectorBT full expands Stage-A survivor cells into canonical model slugs × CME M6 TIGHT event-symbol rows; active-registry expansion is an explicit override only.
+Inventory: the active identity source is every canonical descriptive slug in
+`model_registry.yaml`, not the legacy `50 HYP + 11 PDF` phrase. That legacy
+phrase records the hypothesis/PDF provenance subset and omits reinforcement
+learning policy/proxy entries. `hyp_id` applies only to `kind: hypothesis`, while
+RL entries carry explicit research-only or simulator-blocked status until their
+own downstream validation and HBT order-adapter path exists.
 
 ### 2. Feature set (`feature_set_id = fs_v1`)
 
@@ -182,7 +190,10 @@ Stage A **423** = survivor **cells**, not paid work-unit count. Work units = `wc
 
 `thesis` must resolve to the same slug via `hypothesis_parser` (`--no-llm` heuristic or legacy `HYP_N` resolution). **Do not** use bare `HYP_{n}` in thesis without slug/display keywords — heuristic parse would mis-assign models.
 
-## Checklist before Vast rent
+## Historical Checklist Before VectorBT Vast Rent (inactive)
+
+The checklist below is retained only for interpreting old VectorBT receipts. It
+does not authorize current HBT-only Vast execution or eligibility routing.
 
 1. Units generated on Vast with `--from-stage-a-survivors research_cards/stage_a_full/stage_a_survivors.json` + full M6 symbol list + `events.csv` + runnable-NPZ filtering (or `run_vbt_paid_screen_vast_full.sh` default).
 2. Every `model_id` is a registry **slug**; `hyp_id` matches `get_hyp_id_for_slug(model_id)`.
@@ -191,7 +202,8 @@ Stage A **423** = survivor **cells**, not paid work-unit count. Work units = `wc
 5. Workers ≥ 230 on 256 vCPU host.
 6. Post-run: manifest terminal, `validate_screening_artifact` sample, `aggregate_vbt_promoted_ids.py` — no cockpit GREEN from partial JSONL.
 
-Explicit override only: `--all-active-models` + M6 symbol list (active-registry expansion; not the current Vast full default).
+Historical override only: `--all-active-models` + M6 symbol list
+(active-registry expansion inside the inactive VectorBT lane).
 
 ## Related specs (downstream — not part of Vast VectorBT rent)
 

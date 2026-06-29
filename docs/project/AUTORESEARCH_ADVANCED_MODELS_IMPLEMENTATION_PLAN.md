@@ -2,7 +2,7 @@
 
 # Autoresearch Advanced Models Implementation Plan
 
-Status: active implementation plan
+Status: historical / superseded for active HftBacktest-only routing
 Date: 2026-06-24
 Branch: `codex/advanced-models-autoresearch`
 Worktree: `C:\Users\MSI\repos\hft3-advanced-models`

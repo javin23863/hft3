@@ -2,7 +2,15 @@
 
 # Robustness Pipeline Source Of Truth
 
-Status: implementation/data-contract source of truth for the VectorBT to HftBacktest robustness handoff. This document explains what each robustness section is constructed from, how the data is used, and which receipts justify the method. It does not claim that every producer is already wired end to end.
+Status: historical / inactive for active HftBacktest-only routing.
+Implementation/data-contract source of truth for the legacy VectorBT to
+HftBacktest robustness handoff. Active HBT runs follow
+[HFTBACKTEST_ONLY_PIPELINE_PLAN.md](HFTBACKTEST_ONLY_PIPELINE_PLAN.md) and do not
+require this handoff before replay.
+For active HBT-only work, port only evidence-shape concepts such as raw
+diagnostics, reason codes, readiness ledgers, and data-vs-pipeline audit after
+rewriting them to
+[HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md](HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md).
 
 Last checked: 2026-06-24.
 
@@ -22,6 +30,9 @@ Last checked: 2026-06-24.
 | Producer library | `packages/research_pipeline/src/robustness_producers.py` | Supplies DSR, PBO/CSCV, bootstrap, Holm/BH, null, planted-alpha, adversarial, parameter-perturbation, and cost/latency stress calculations. |
 
 ## Pipeline Position
+
+This pipeline position is legacy documentation. It is not active HBT-only
+eligibility.
 
 ```text
 Stage A survivors
