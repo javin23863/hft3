@@ -144,6 +144,7 @@ def test_campaign_runner_processes_manifest_without_eager_jsonl_load(tmp_path: P
     )
 
     assert summary["row_count"] == 2
+    assert summary["max_tasks_per_child"] == 0
     assert summary["status_counts"] == {"blocked_before_hbt": 1, "dry_run": 1}
     assert summary["blocker_counts"] == {"pipeline_blocker:missing_uniform_hbt_adapter": 1}
     run_root = Path(summary["out_root"])
@@ -208,6 +209,134 @@ def test_campaign_runner_accepts_parameter_surface_rows(tmp_path: Path) -> None:
     assert payload["tick_size"] == 0.25
     assert payload["lot_size"] == 1.0
     assert payload["contract_size"] == 50.0
+
+
+def test_campaign_runner_pool_kwargs_enable_worker_recycling() -> None:
+    module = _load_runner_module()
+
+    kwargs = module._process_pool_kwargs(217, 256)
+
+    assert kwargs["max_workers"] == 217
+    assert kwargs["max_tasks_per_child"] == 256
+    assert kwargs["mp_context"].get_start_method() == "spawn"
+    assert module._process_pool_kwargs(217, 0) == {"max_workers": 217}
+    with np.testing.assert_raises_regex(ValueError, "max_tasks_per_child must be >= 0"):
+        module._process_pool_kwargs(217, -1)
+    with np.testing.assert_raises(ValueError):
+        module._nonnegative_int("", "max_tasks_per_child")
+
+
+def test_campaign_runner_cli_passes_worker_recycling_limit(tmp_path: Path, monkeypatch) -> None:
+    module = _load_runner_module()
+    captured: dict[str, object] = {}
+
+    def fake_run_campaign(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"failed_count": 0}
+
+    monkeypatch.setattr(module, "run_campaign", fake_run_campaign)
+
+    exit_code = module.main(
+        [
+            "--campaign-manifest",
+            str(tmp_path / "campaign.jsonl"),
+            "--out-root",
+            str(tmp_path / "runs"),
+            "--workers",
+            "217",
+            "--max-tasks-per-child",
+            "256",
+            "--resume",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["workers"] == 217
+    assert captured["max_tasks_per_child"] == 256
+    assert captured["resume"] is True
+
+
+def test_campaign_runner_cli_rejects_negative_worker_recycling_limit(tmp_path: Path) -> None:
+    module = _load_runner_module()
+
+    try:
+        module.main(
+            [
+                "--campaign-manifest",
+                str(tmp_path / "campaign.jsonl"),
+                "--max-tasks-per-child",
+                "-1",
+            ]
+        )
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("negative worker recycling limit must fail closed")
+
+
+def test_campaign_runner_multiworker_recycles_and_resumes_existing_receipts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_runner_module()
+    rows = [
+        _campaign_row(tmp_path),
+        _campaign_row(tmp_path, blocker_code="pipeline_blocker:missing_uniform_hbt_adapter"),
+    ]
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    out_root = tmp_path / "runs"
+    existing_receipt = {
+        "status": "dry_run",
+        "blocker_code": "",
+        "canonical_model_id": rows[0]["canonical_model_id"],
+    }
+    existing_dir = out_root / "hbt_campaign_test" / "unit_admissible"
+    existing_dir.mkdir(parents=True)
+    (existing_dir / "campaign_row_result.json").write_text(
+        json.dumps(existing_receipt),
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    class FakeProcessPoolExecutor:
+        def __init__(self, **kwargs: object) -> None:
+            captured["executor_kwargs"] = kwargs
+
+        def __enter__(self) -> "FakeProcessPoolExecutor":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def submit(self, fn: object, task: object) -> object:
+            future = module.concurrent.futures.Future()
+            future.set_result(fn(task))
+            return future
+
+    def fail_if_called(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise AssertionError("resume must not rerun existing row receipts")
+
+    monkeypatch.setattr(module.concurrent.futures, "ProcessPoolExecutor", FakeProcessPoolExecutor)
+    monkeypatch.setattr(module, "run_hftbacktest_only", fail_if_called)
+
+    summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=out_root,
+        dry_run=True,
+        workers=217,
+        max_tasks_per_child=256,
+        resume=True,
+    )
+
+    executor_kwargs = captured["executor_kwargs"]
+    assert executor_kwargs["max_workers"] == 217
+    assert executor_kwargs["max_tasks_per_child"] == 256
+    assert executor_kwargs["mp_context"].get_start_method() == "spawn"
+    assert summary["row_count"] == 2
+    assert summary["workers"] == 217
+    assert summary["max_tasks_per_child"] == 256
+    assert summary["status_counts"] == {"blocked_before_hbt": 1, "dry_run": 1}
 
 
 def test_campaign_runner_blocks_missing_product_metadata_authority(tmp_path: Path) -> None:
