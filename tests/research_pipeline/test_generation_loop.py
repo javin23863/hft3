@@ -413,6 +413,19 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
     assert report["generations_run"] == 2
     manifest = load_manifest(tmp_path, report["campaign_id"])
     assert manifest["tested_parameter_hashes"]
+    hbt_parameter_paths = [Path(path) for path in manifest["hbt_parameter_set_paths"]]
+    assert hbt_parameter_paths
+    for path in hbt_parameter_paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        assert payload["schema_version"] == "hft3_hbt_parameter_sets_from_self_learning_v1"
+        assert payload["source"] == "autoresearch_self_learning_loop"
+        assert "packages/research_pipeline/generation_loop.py" in payload["authority_refs"]
+        assert payload["parameter_set_count"] == len(payload["parameter_sets"])
+        assert {row["source"] for row in payload["parameter_sets"]} == {
+            "autoresearch_self_learning_loop"
+        }
+        assert {row["objective_evaluations"] for row in payload["parameter_sets"]} == {0}
+        assert {row["optimizer_claim"] for row in payload["parameter_sets"]} == {False}
 
 
 def test_resume_preserves_manifest_hash(tmp_path: Path, monkeypatch) -> None:

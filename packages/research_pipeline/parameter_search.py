@@ -8,22 +8,40 @@ Advanced methods use stdlib optimizers and record that backend explicitly.
 from __future__ import annotations
 
 import itertools
+import json
 import math
 import random
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
-from features_engine.src.model_registry import load_model_registry
+from features_engine.src.model_registry import load_model_registry, resolve_model_id
 
-from research_pipeline.types import ParsedHypothesis
+from research_pipeline.types import CandidateModel, ParsedHypothesis
 
 DEFAULT_HOLDING_PERIODS_BARS = [15, 30, 60]
 DEFAULT_THRESHOLDS = [0.10, 0.15, 0.20, 0.25]
 SUPPORTED_SEARCH_METHODS = {"grid", "bayesian", "evolutionary"}
+HBT_PARAMETER_SET_SCHEMA_VERSION = "hft3_hbt_parameter_sets_from_self_learning_v1"
+HBT_PARAMETER_SET_SOURCE = "autoresearch_self_learning_loop"
+HBT_PARAMETER_SET_AUTHORITY_REFS = (
+    "packages/research_pipeline/parameter_search.py",
+    "packages/research_pipeline/model_generation.py",
+    "packages/research_pipeline/elite_refinement.py",
+    "packages/research_pipeline/generation_loop.py",
+    "docs/project/HFTBACKTEST_ONLY_EVIDENCE_PARAMETER_SURFACE_PLAN.md",
+    "vault:decisions/2026-06-29 HBT-only all-model uniform-flow rule.md",
+    "docs/human/RESEARCH_SYSTEM_EXECUTION_ORDER.md",
+    "tests/test_workbench/test_self_learning_loop_contract.py",
+)
 RANGE_ALIASES = {
     "holding_bars": "holding_period_bars",
     "stop_loss": "stop_loss_pct",
     "take_profit": "take_profit_pct",
+}
+_HBT_PARAMETER_FAMILY_BY_METHOD = {
+    "grid": "grid",
+    "bayesian": "bayesian-prior",
+    "evolutionary": "evolutionary-prior",
 }
 
 
@@ -167,6 +185,41 @@ def search_plan(
         count += 1
 
 
+def hbt_parameter_set_from_candidate(candidate: CandidateModel) -> dict[str, Any]:
+    """Convert an existing self-learning proposal into an HBT parameter-set spec."""
+    canonical_model_id = resolve_model_id(candidate.model_id)
+    metadata = dict(candidate.metadata or {})
+    family = _hbt_parameter_family_from_metadata(metadata)
+    return {
+        "schema_version": HBT_PARAMETER_SET_SCHEMA_VERSION,
+        "source": HBT_PARAMETER_SET_SOURCE,
+        "canonical_model_id": canonical_model_id,
+        "parameter_family": family,
+        "strategy_params": dict(candidate.strategy_params or {}),
+        "parameter_proposal_status": "declared_pre_hbt",
+        "objective_evaluations": 0,
+        "optimizer_claim": False,
+        "source_candidate_id": candidate.candidate_id,
+        "authority_refs": list(HBT_PARAMETER_SET_AUTHORITY_REFS),
+    }
+
+
+def hbt_parameter_sets_from_candidates(
+    candidates: Iterable[CandidateModel],
+) -> list[dict[str, Any]]:
+    """Return deduped HBT parameter-set specs from self-learning candidates."""
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        spec = hbt_parameter_set_from_candidate(candidate)
+        key = _hbt_parameter_set_key(spec)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(spec)
+    return out
+
+
 def _normalise_method(search_method: str) -> str:
     method = str(search_method or "grid").strip().lower().replace("-", "_")
     if method not in SUPPORTED_SEARCH_METHODS:
@@ -174,6 +227,28 @@ def _normalise_method(search_method: str) -> str:
             f"unknown search_method {search_method!r}; expected one of {sorted(SUPPORTED_SEARCH_METHODS)}"
         )
     return method
+
+
+def _hbt_parameter_family_from_metadata(metadata: Mapping[str, Any]) -> str:
+    search = metadata.get("candidate_search")
+    if isinstance(search, Mapping):
+        method = str(search.get("selected_method") or search.get("requested_method") or "grid")
+        method = _normalise_method(method)
+        return _HBT_PARAMETER_FAMILY_BY_METHOD[method]
+    return "grid"
+
+
+def _hbt_parameter_set_key(spec: Mapping[str, Any]) -> str:
+    payload = {
+        "canonical_model_id": spec["canonical_model_id"],
+        "parameter_family": spec["parameter_family"],
+        "strategy_params": spec["strategy_params"],
+    }
+    return _canonical_json(payload)
+
+
+def _canonical_json(payload: Mapping[str, Any]) -> str:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 def _normalise_grid(grid: Mapping[str, Sequence[Any]]) -> dict[str, list[Any]]:
@@ -352,6 +427,10 @@ __all__ = [
     "DEFAULT_THRESHOLDS",
     "SUPPORTED_SEARCH_METHODS",
     "SearchSelection",
+    "HBT_PARAMETER_SET_AUTHORITY_REFS",
+    "HBT_PARAMETER_SET_SCHEMA_VERSION",
+    "hbt_parameter_set_from_candidate",
+    "hbt_parameter_sets_from_candidates",
     "model_ids_for_search",
     "parameter_grid",
     "search_plan",

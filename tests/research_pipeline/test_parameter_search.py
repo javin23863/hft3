@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from research_pipeline.model_generation import generate_candidates
-from research_pipeline.parameter_search import parameter_grid, select_parameters
+from research_pipeline.parameter_search import (
+    hbt_parameter_sets_from_candidates,
+    parameter_grid,
+    select_parameters,
+)
 from research_pipeline.types import ParsedHypothesis
 
 
@@ -66,3 +70,40 @@ def test_generate_candidates_records_search_receipt():
         assert receipt["backend"] == "stdlib"
         assert receipt["seed"] == 11
         assert receipt["optimizer_stage"] == "pre_vectorbt_candidate_generation"
+
+
+def test_hbt_parameter_sets_export_self_learning_proposals() -> None:
+    candidates = []
+    for method in ("grid", "bayesian", "evolutionary"):
+        candidates.extend(
+            generate_candidates(
+                _parsed(),
+                max_candidates=1,
+                expand_for_vectorbt=True,
+                search_method=method,
+                search_seed=11,
+            )
+        )
+
+    specs = hbt_parameter_sets_from_candidates(candidates)
+
+    assert [spec["parameter_family"] for spec in specs] == [
+        "grid",
+        "bayesian-prior",
+        "evolutionary-prior",
+    ]
+    assert {spec["canonical_model_id"] for spec in specs} == {
+        "SPREAD_BLOWOUT_RECOMPRESSION"
+    }
+    assert {spec["source"] for spec in specs} == {"autoresearch_self_learning_loop"}
+    assert {spec["parameter_proposal_status"] for spec in specs} == {"declared_pre_hbt"}
+    assert {spec["objective_evaluations"] for spec in specs} == {0}
+    assert {spec["optimizer_claim"] for spec in specs} == {False}
+    assert all(
+        "packages/research_pipeline/parameter_search.py" in spec["authority_refs"]
+        for spec in specs
+    )
+    assert all(
+        "packages/research_pipeline/generation_loop.py" in spec["authority_refs"]
+        for spec in specs
+    )

@@ -163,23 +163,107 @@ def _write_prepared_unit_with_bytes(
     return manifest_path
 
 
+def _parameter_set(
+    parameter_family: str,
+    strategy_params: dict[str, object],
+    **overrides: object,
+) -> dict[str, object]:
+    spec: dict[str, object] = {
+        "schema_version": manifest_module.HBT_SELF_LEARNING_PARAMETER_SET_SCHEMA_VERSION,
+        "source": manifest_module.HBT_SELF_LEARNING_PARAMETER_SET_SOURCE,
+        "authority_refs": list(manifest_module.HBT_SELF_LEARNING_PARAMETER_SET_AUTHORITY_REFS),
+        "parameter_family": parameter_family,
+        "strategy_params": strategy_params,
+    }
+    spec.update(overrides)
+    return spec
+
+
 def _parameter_sets() -> list[dict[str, object]]:
     return [
-        {
-            "parameter_family": "grid",
-            "strategy_params": {"entry_threshold": 0.25, "max_position": 1},
-        },
-        {
-            "parameter_family": "bayesian-prior",
-            "strategy_params": {"entry_threshold": 0.5, "max_position": 1},
-            "objective_evaluations": 0,
-            "optimizer_claim": False,
-        },
-        {
-            "parameter_family": "evolutionary-prior",
-            "strategy_params": {"entry_threshold": 0.75, "max_position": 2},
-        },
+        _parameter_set(
+            "grid",
+            {"entry_threshold": 0.25, "max_position": 1},
+        ),
+        _parameter_set(
+            "bayesian-prior",
+            {"entry_threshold": 0.5, "max_position": 1},
+            objective_evaluations=0,
+            optimizer_claim=False,
+        ),
+        _parameter_set(
+            "evolutionary-prior",
+            {"entry_threshold": 0.75, "max_position": 2},
+        ),
     ]
+
+
+def _parameter_sets_payload(parameter_sets: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "schema_version": manifest_module.HBT_SELF_LEARNING_PARAMETER_SET_SCHEMA_VERSION,
+        "source": manifest_module.HBT_SELF_LEARNING_PARAMETER_SET_SOURCE,
+        "authority_refs": list(manifest_module.HBT_SELF_LEARNING_PARAMETER_SET_AUTHORITY_REFS),
+        "parameter_proposal_status": "declared_pre_hbt",
+        "objective_evaluations": 0,
+        "optimizer_claim": False,
+        "parameter_set_count": len(parameter_sets),
+        "parameter_sets": parameter_sets,
+    }
+
+
+def test_self_learning_parameter_export_requires_envelope_authority_refs() -> None:
+    payload = _parameter_sets_payload(_parameter_sets()[:1])
+    payload["authority_refs"] = []
+
+    with pytest.raises(
+        HftBacktestOnlyCampaignManifestError,
+        match="parameter_surface_missing_self_learning_authority_refs",
+    ):
+        manifest_module.normalize_self_learning_parameter_sets_payload(payload)
+
+
+def test_self_learning_parameter_export_requires_pre_hbt_envelope_status() -> None:
+    payload = _parameter_sets_payload(_parameter_sets()[:1])
+    payload["parameter_proposal_status"] = "optimized_after_hbt"
+
+    with pytest.raises(
+        HftBacktestOnlyCampaignManifestError,
+        match="parameter_surface_invalid_self_learning_proposal_status",
+    ):
+        manifest_module.normalize_self_learning_parameter_sets_payload(payload)
+
+
+def test_self_learning_parameter_export_requires_zero_envelope_objective_evaluations() -> None:
+    payload = _parameter_sets_payload(_parameter_sets()[:1])
+    payload["objective_evaluations"] = 1
+
+    with pytest.raises(
+        HftBacktestOnlyCampaignManifestError,
+        match="parameter_surface_pre_hbt_objective_evaluations_must_be_zero",
+    ):
+        manifest_module.normalize_self_learning_parameter_sets_payload(payload)
+
+
+def test_self_learning_parameter_export_rejects_envelope_optimizer_claim() -> None:
+    payload = _parameter_sets_payload(_parameter_sets()[:1])
+    payload["optimizer_claim"] = True
+
+    with pytest.raises(
+        HftBacktestOnlyCampaignManifestError,
+        match="parameter_surface_self_learning_optimizer_claim_must_be_false",
+    ):
+        manifest_module.normalize_self_learning_parameter_sets_payload(payload)
+
+
+def test_self_learning_parameter_export_requires_matching_parameter_set_count() -> None:
+    payload = _parameter_sets_payload(_parameter_sets()[:1])
+    payload["parameter_set_count"] = 2
+
+    with pytest.raises(
+        HftBacktestOnlyCampaignManifestError,
+        match="parameter_surface_self_learning_parameter_set_count_mismatch",
+    ):
+        manifest_module.normalize_self_learning_parameter_sets_payload(payload)
 
 
 def test_canonical_slug_resolution_accepts_descriptive_slugs() -> None:
@@ -832,19 +916,13 @@ def test_parameter_hash_canonicalizes_strategy_params(tmp_path: Path) -> None:
     first = build_parameter_surface_rows(
         campaign_rows=campaign_rows[:1],
         parameter_sets=[
-            {
-                "parameter_family": "grid",
-                "strategy_params": {"b": 2, "a": 1},
-            }
+            _parameter_set("grid", {"b": 2, "a": 1}),
         ],
     )
     second = build_parameter_surface_rows(
         campaign_rows=campaign_rows[:1],
         parameter_sets=[
-            {
-                "parameter_family": "grid",
-                "strategy_params": {"a": 1, "b": 2},
-            }
+            _parameter_set("grid", {"a": 1, "b": 2}),
         ],
     )
 
@@ -865,18 +943,53 @@ def test_parameter_hash_includes_parameter_family(tmp_path: Path) -> None:
     surface_rows = build_parameter_surface_rows(
         campaign_rows=campaign_rows[:1],
         parameter_sets=[
-            {
-                "parameter_family": "grid",
-                "strategy_params": {"entry_threshold": 0.5},
-            },
-            {
-                "parameter_family": "bayesian-prior",
-                "strategy_params": {"entry_threshold": 0.5},
-            },
+            _parameter_set("grid", {"entry_threshold": 0.5}),
+            _parameter_set("bayesian-prior", {"entry_threshold": 0.5}),
         ],
     )
 
     assert surface_rows[0]["parameter_hash"] != surface_rows[1]["parameter_hash"]
+
+
+def test_model_scoped_parameter_sets_do_not_omit_ready_models(tmp_path: Path) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)
+    campaign_rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+    )
+    parameter_sets = [
+        _parameter_set(
+            "grid",
+            {"signal_threshold": 0.15},
+            canonical_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        )
+    ]
+
+    spread_only = [
+        row
+        for row in campaign_rows
+        if row["canonical_model_id"] == "SPREAD_BLOWOUT_RECOMPRESSION"
+    ]
+    surface_rows = build_parameter_surface_rows(
+        campaign_rows=spread_only,
+        parameter_sets=parameter_sets,
+    )
+    assert len(surface_rows) == 1
+    assert surface_rows[0]["canonical_model_id"] == "SPREAD_BLOWOUT_RECOMPRESSION"
+    assert "packages/research_pipeline/parameter_search.py" in surface_rows[0]["authority_refs"]
+
+    with pytest.raises(
+        HftBacktestOnlyCampaignManifestError,
+        match="parameter_surface_missing_for_executable_model:QUEUE_TOXICITY_HAWKES",
+    ):
+        build_parameter_surface_rows(
+            campaign_rows=campaign_rows,
+            parameter_sets=parameter_sets,
+        )
 
 
 def test_parameter_surface_rejects_unknown_parameter_family(tmp_path: Path) -> None:
@@ -897,10 +1010,7 @@ def test_parameter_surface_rejects_unknown_parameter_family(tmp_path: Path) -> N
         build_parameter_surface_rows(
             campaign_rows=campaign_rows,
             parameter_sets=[
-                {
-                    "parameter_family": "adaptive-optimizer",
-                    "strategy_params": {"entry_threshold": 0.5},
-                }
+                _parameter_set("adaptive-optimizer", {"entry_threshold": 0.5})
             ],
         )
 
@@ -925,11 +1035,11 @@ def test_pre_hbt_surface_requires_zero_objective_evaluations(
         build_parameter_surface_rows(
             campaign_rows=campaign_rows,
             parameter_sets=[
-                {
-                    "parameter_family": "evolutionary-prior",
-                    "strategy_params": {"entry_threshold": 0.5},
-                    "objective_evaluations": 1,
-                }
+                _parameter_set(
+                    "evolutionary-prior",
+                    {"entry_threshold": 0.5},
+                    objective_evaluations=1,
+                )
             ],
         )
 
@@ -954,11 +1064,11 @@ def test_pre_hbt_surface_rejects_fractional_objective_evaluations(
         build_parameter_surface_rows(
             campaign_rows=campaign_rows,
             parameter_sets=[
-                {
-                    "parameter_family": "grid",
-                    "strategy_params": {"entry_threshold": 0.5},
-                    "objective_evaluations": 0.5,
-                }
+                _parameter_set(
+                    "grid",
+                    {"entry_threshold": 0.5},
+                    objective_evaluations=0.5,
+                )
             ],
         )
 
@@ -981,10 +1091,7 @@ def test_parameter_hash_rejects_non_finite_strategy_params(tmp_path: Path) -> No
         build_parameter_surface_rows(
             campaign_rows=campaign_rows,
             parameter_sets=[
-                {
-                    "parameter_family": "grid",
-                    "strategy_params": {"entry_threshold": float("nan")},
-                }
+                _parameter_set("grid", {"entry_threshold": float("nan")})
             ],
         )
 
@@ -1009,14 +1116,8 @@ def test_parameter_surface_rejects_duplicate_unit_parameter_hash(
         build_parameter_surface_rows(
             campaign_rows=campaign_rows[:1],
             parameter_sets=[
-                {
-                    "parameter_family": "grid",
-                    "strategy_params": {"entry_threshold": 0.5},
-                },
-                {
-                    "parameter_family": "grid",
-                    "strategy_params": {"entry_threshold": 0.5},
-                },
+                _parameter_set("grid", {"entry_threshold": 0.5}),
+                _parameter_set("grid", {"entry_threshold": 0.5}),
             ],
         )
 
@@ -1119,12 +1220,12 @@ def test_parameter_surface_rejects_optimizer_claim_before_hbt_evidence(
         build_parameter_surface_rows(
             campaign_rows=campaign_rows,
             parameter_sets=[
-                {
-                    "parameter_family": "bayesian-prior",
-                    "strategy_params": {"entry_threshold": 0.5},
-                    "objective_evaluations": 0,
-                    "optimizer_claim": True,
-                }
+                _parameter_set(
+                    "bayesian-prior",
+                    {"entry_threshold": 0.5},
+                    objective_evaluations=0,
+                    optimizer_claim=True,
+                )
             ],
         )
 
@@ -1259,7 +1360,7 @@ def test_cli_writes_parameter_surface_manifest(tmp_path: Path, capsys: pytest.Ca
     _write_prepared_unit(prepared_root)
     parameter_sets_path = tmp_path / "parameter_sets.json"
     parameter_sets_path.write_text(
-        json.dumps({"parameter_sets": _parameter_sets()[:1]}),
+        json.dumps(_parameter_sets_payload(_parameter_sets()[:1])),
         encoding="utf-8",
     )
 
@@ -1283,6 +1384,12 @@ def test_cli_writes_parameter_surface_manifest(tmp_path: Path, capsys: pytest.Ca
             str(tmp_path / "parameter_surface.jsonl"),
             "--parameter-surface-summary-out",
             str(tmp_path / "parameter_surface_summary.json"),
+            "--canary-out",
+            str(tmp_path / "canary_manifest.jsonl"),
+            "--canary-count",
+            "2",
+            "--canary-summary-out",
+            str(tmp_path / "canary_manifest_summary.json"),
         ]
     ) == 0
 
@@ -1293,6 +1400,97 @@ def test_cli_writes_parameter_surface_manifest(tmp_path: Path, capsys: pytest.Ca
         (tmp_path / "parameter_surface_summary.json").read_text(encoding="utf-8")
     )
     assert surface_summary["parameter_family_counts"] == {"grid": 3}
+    canary_summary = output["canary_manifest"]
+    assert canary_summary["emitted_count"] == 2
+    assert canary_summary["source_manifest"].endswith("parameter_surface.jsonl")
+    assert canary_summary["parameter_surface_status"] == "parameter_surface_expanded"
+    assert canary_summary["parameter_surface_config_status"] == "parameter_config_present"
+
+
+def test_cli_rejects_non_self_learning_parameter_sets(
+    tmp_path: Path,
+) -> None:
+    repo = Path(__file__).resolve().parents[2]
+    script = repo / "scripts" / "build_hftbacktest_only_campaign_manifest.py"
+    spec = importlib.util.spec_from_file_location("build_hbt_campaign_manifest_cli", script)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)
+    parameter_sets_path = tmp_path / "parameter_sets.json"
+    parameter_sets_path.write_text(
+        json.dumps({"parameter_sets": [{"parameter_family": "grid", "strategy_params": {}}]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="self-learning export"):
+        module.main(
+            [
+                "--campaign-id",
+                "hbt_campaign_test",
+                "--prepared-root",
+                str(prepared_root),
+                "--model-registry",
+                str(registry),
+                "--adapter-status-json",
+                str(_write_adapter_status_json(tmp_path)),
+                "--out",
+                str(tmp_path / "campaign_manifest.jsonl"),
+                "--parameter-sets-json",
+                str(parameter_sets_path),
+                "--parameter-surface-out",
+                str(tmp_path / "parameter_surface.jsonl"),
+            ]
+        )
+
+
+def test_cli_reports_invalid_default_parameter_sets_as_config_blocker(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = Path(__file__).resolve().parents[2]
+    script = repo / "scripts" / "build_hftbacktest_only_campaign_manifest.py"
+    spec = importlib.util.spec_from_file_location("build_hbt_campaign_manifest_cli", script)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)
+    invalid_parameter_sets = tmp_path / "invalid_parameter_sets.json"
+    invalid_parameter_sets.write_text(
+        json.dumps({"parameter_sets": [{"parameter_family": "grid", "strategy_params": {}}]}),
+        encoding="utf-8",
+    )
+    module.DEFAULT_PARAMETER_SETS = invalid_parameter_sets
+
+    assert module.main(
+        [
+            "--campaign-id",
+            "hbt_campaign_test",
+            "--prepared-root",
+            str(prepared_root),
+            "--model-registry",
+            str(registry),
+            "--adapter-status-json",
+            str(_write_adapter_status_json(tmp_path)),
+            "--out",
+            str(tmp_path / "campaign_manifest.jsonl"),
+            "--summary-out",
+            str(tmp_path / "campaign_manifest_summary.json"),
+        ]
+    ) == 0
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["campaign_manifest"]["parameter_surface_config_status"].startswith(
+        "pipeline_blocker:parameter_sets_config_invalid:"
+    )
 
 
 def test_stream_parameter_surface_manifest_reads_base_rows_without_materializing(

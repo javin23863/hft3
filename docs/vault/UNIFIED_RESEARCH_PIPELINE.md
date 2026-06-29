@@ -1,6 +1,13 @@
-# Unified research pipeline (chronological order)
+# Unified research pipeline (historical chronological order)
 
-**Status:** canonical chronological spec for CME VectorBT → HftBacktest → workbench robustness → trade-manager lifecycle → CHI404 live/paper.
+**Status:** historical chronological spec for the older CME VectorBT →
+HftBacktest → workbench robustness → trade-manager lifecycle → CHI404
+live/paper lane. It is not the active HFTBacktest-only campaign router. Current
+HBT work uses
+[HFTBACKTEST_ONLY_PIPELINE_PLAN.md](../project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md)
+and [VAST_HFT_CAMPAIGN.md](../operations/VAST_HFT_CAMPAIGN.md): canonical
+model slug x HBT-normalized source/event x parameter hash, with VectorBT,
+Stage A, and `screening_artifact.json` diagnostic only.
 
 **Supersedes:** fragmented mental models across VBT paid screen, HBT realism, workbench robustness pack, autonomous promotion runner, and lifecycle registry. Does **not** replace lane-specific runbooks — it orders them.
 

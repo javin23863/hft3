@@ -358,9 +358,16 @@ Evidence-ledger and parameter-surface rule:
 - before full campaign execution, expand the campaign manifest into
   `canonical_model_id x source_npz/event x parameter_hash` rows;
 - `grid`, `bayesian-prior`, and `evolutionary-prior` parameter sets are
-  deterministic pre-HBT proposals only when `objective_evaluations=0`; they are
-  not adaptive optimizer evidence and cannot rank or reject parameters before
-  HftBacktest artifacts exist;
+  deterministic pre-HBT proposals only when exported by the existing
+  autoresearch/self-learning loop with
+  `schema_version=hft3_hbt_parameter_sets_from_self_learning_v1`,
+  `source=autoresearch_self_learning_loop`, self-learning authority refs, and
+  `objective_evaluations=0`; they are not adaptive optimizer evidence and
+  cannot rank or reject parameters before HftBacktest artifacts exist;
+- the HBT manifest builder must reject bare parameter lists or ad hoc
+  `parameter_sets` objects at the parameter-surface trust boundary;
+- HBT execution must consume declared `strategy_params` and must not mutate
+  thresholds or other parameters after a no-order/no-fill receipt;
 - evaluate parameter regions only after `recorder_result.npz` and
   `stats_summary.json` exist for the corresponding HBT row;
 - missing adapter, missing data, missing authority, or feature-surface mismatch
@@ -585,7 +592,7 @@ Implementation progress as of 2026-06-29:
 - Vast execution instructions are recorded in
   `docs/operations/VAST_HFT_CAMPAIGN.md`: build `hft3_features_cpp`, prepare
   the full lake, build the streaming canonical manifest summary, record missing
-  `config/hftbacktest/parameter_sets.json` as a pipeline/config blocker when
+  self-learning parameter-set export/config as a pipeline/config blocker when
   absent, then run only the deterministic eligible canary before any broad HBT
   executor campaign.
 
@@ -786,8 +793,9 @@ The HftBacktest-only active pipeline is accepted only when all are true:
     `prepared_unit_count`, `executable_unit_count`, `blocker_unit_count`,
     `expected_base_rows`, `emitted_base_rows`, adapter/authority/applicability
     counts, all legacy dependency booleans as false, and `hbt_jobs_started=0`.
-14. Missing `config/hftbacktest/parameter_sets.json` is a pipeline/config
-    blocker for parameter-surface expansion; no grid is invented.
+14. Missing or invalid self-learning parameter-set export/config is a
+    pipeline/config blocker for parameter-surface expansion; no grid is
+    invented.
 15. The next execution manifest is a deterministic first-N eligible canary from
     manifest order: data admissible, adapter ready/available, authority pass,
     parameter surface base-only or config-present, and no manual preference.
