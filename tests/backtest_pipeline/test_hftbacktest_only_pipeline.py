@@ -431,6 +431,61 @@ def test_prepare_lake_source_builds_snapshot_and_replay_pair(
     assert reused["reused_existing"] is True
 
 
+def test_prepare_lake_source_keeps_partial_trade_order_active(tmp_path: Path) -> None:
+    dtype, constants = _event_contract()
+    base_ns = int(datetime(2024, 9, 11, 12, 29, tzinfo=timezone.utc).timestamp() * 1_000_000_000)
+
+    def row(event_type: int, offset_ns: int, order_id: int, price: float, qty: float) -> dict[str, object]:
+        ts = base_ns + offset_ns
+        return {
+            "ev": event_type | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+            "exch_ts": ts,
+            "local_ts": ts + 100,
+            "px": price,
+            "qty": qty,
+            "order_id": order_id,
+            "ival": 0,
+            "fval": 0.0,
+        }
+
+    source_rows = [
+        row(constants["ADD_ORDER_EVENT"], 0, 1001, 5000.0, 1.0),
+        row(constants["CANCEL_ORDER_EVENT"], 100, 1001, 5000.0, 1.0),
+        row(constants["ADD_ORDER_EVENT"], 1_000_000_000, 2001, 5001.0, 5.0),
+        row(constants["TRADE_EVENT"], 1_000_000_100, 2001, 5001.0, 2.0),
+        row(constants["MODIFY_ORDER_EVENT"], 1_000_000_200, 2001, 5001.25, 3.0),
+        row(constants["CANCEL_ORDER_EVENT"], 1_000_000_300, 2001, 5001.25, 3.0),
+    ]
+    source = tmp_path / "partial_trade_source.npz"
+    events = np.zeros(len(source_rows), dtype=dtype)
+    for index, source_row in enumerate(source_rows):
+        for field, value in source_row.items():
+            events[index][field] = value
+    np.savez_compressed(source, data=events)
+
+    prepared = prepare_hftbacktest_only_l3_from_lake(
+        HftBacktestOnlyPrepareConfig(
+            source_npz=source,
+            symbol="MES",
+            contract="MESU4",
+            event_id="CPI_2024_09_11_TIGHT",
+            trade_date="2024-09-11",
+            out_root=tmp_path / "hbt",
+            warmup_seconds=1,
+        )
+    )
+
+    with np.load(prepared["normalized_npz"], allow_pickle=False) as payload:
+        replay = payload["data"]
+    assert [(int(row["ev"]) & 0xFF, int(row["order_id"])) for row in replay] == [
+        (constants["ADD_ORDER_EVENT"], 2001),
+        (constants["TRADE_EVENT"], 2001),
+        (constants["MODIFY_ORDER_EVENT"], 2001),
+        (constants["CANCEL_ORDER_EVENT"], 2001),
+    ]
+    assert prepared["dropped_rows"]["preexisting_or_unknown_lifecycle"] == 0
+
+
 def test_validation_allows_current_year_epoch_data_before_validation_clock(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

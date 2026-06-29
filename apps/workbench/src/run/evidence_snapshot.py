@@ -2448,6 +2448,13 @@ def _hbt_runs_snapshot(repo: Path) -> RunEvidenceSnapshot:
         "decision": promotion.get("decision", ""),
         "promotion_allowed": promotion.get("promotion_allowed", False),
     }
+    hbt_diagnostics_observed = (
+        bool(latency_report)
+        and bool(fill_quality)
+        and fill_quality.get("status") != "not_run"
+        and bool(queue_diagnostics)
+        and queue_diagnostics.get("status") != "not_run"
+    )
     coverage = [
         _coverage_row(
             "hbt_run_manifest",
@@ -2482,10 +2489,10 @@ def _hbt_runs_snapshot(repo: Path) -> RunEvidenceSnapshot:
         ),
         _coverage_row(
             "hbt_latency_fill_queue",
-            "OBSERVED" if latency_report and fill_quality and queue_diagnostics else "BLOCKING",
+            "OBSERVED" if hbt_diagnostics_observed else "BLOCKING",
             str(run_dir),
             "Latency, fill-quality, and queue diagnostics are attached to this HftBacktest run."
-            if latency_report and fill_quality and queue_diagnostics
+            if hbt_diagnostics_observed
             else "Latency, fill-quality, and queue diagnostics are incomplete.",
             authority="HftBacktest-only pipeline",
             role="microstructure_diagnostics",
@@ -2514,7 +2521,7 @@ def _hbt_runs_snapshot(repo: Path) -> RunEvidenceSnapshot:
             {"name": "hbt_run_manifest", "status": "observed"},
             {"name": "hbt_data_validation", "status": "pass" if data_passed else data_validation_status},
             {"name": "hbt_strategy_results", "status": "observed" if results_observed else "missing"},
-            {"name": "hbt_latency_fill_queue", "status": "observed" if latency_report and fill_quality and queue_diagnostics else "missing"},
+            {"name": "hbt_latency_fill_queue", "status": "observed" if hbt_diagnostics_observed else "missing"},
             {"name": "hbt_promotion_decision", "status": "observed" if promotion_exists else "missing"},
         ],
         artifacts=artifact_paths,

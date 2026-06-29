@@ -151,6 +151,52 @@ def test_hbt_runs_snapshot_surfaces_real_artifacts_without_vectorbt_active_truth
     assert all(row["stage"] != "vectorbt_filter" for row in snapshot.system["pipeline_coverage"])
 
 
+def test_hbt_runs_snapshot_blocks_placeholder_fill_queue_reports(tmp_path: Path) -> None:
+    run_dir = tmp_path / "artifacts" / "hbt_runs" / "hbt_placeholder"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_manifest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "hbt_placeholder",
+                "active_path": "hftbacktest_only",
+                "symbol": "MES",
+                "contract": "MESU4",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "strategy_id": "smoke_limit_order",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "data_manifest.json").write_text('{"validation_status":"pass"}', encoding="utf-8")
+    (run_dir / "hbt_config.json").write_text('{"queue_model":"L3FIFOQueueModel"}', encoding="utf-8")
+    (run_dir / "strategy_config.json").write_text('{"strategy_id":"smoke_limit_order"}', encoding="utf-8")
+    (run_dir / "normalized_input_manifest.json").write_text('{"validation_status":"pass"}', encoding="utf-8")
+    (run_dir / "data_validation.json").write_text('{"data_validation_status":"pass"}', encoding="utf-8")
+    (run_dir / "recorder_result.npz").write_bytes(b"npz")
+    (run_dir / "stats_summary.json").write_text(
+        '{"run_id":"hbt_placeholder","mechanical_validity_status":"pass"}',
+        encoding="utf-8",
+    )
+    (run_dir / "latency_report.json").write_text('{"latency_model":"constant_order_latency"}', encoding="utf-8")
+    (run_dir / "fill_quality_report.json").write_text('{"status":"not_run"}', encoding="utf-8")
+    (run_dir / "queue_diagnostics.json").write_text('{"status":"not_run"}', encoding="utf-8")
+    (run_dir / "robustness_report.json").write_text('{"status":"not_run"}', encoding="utf-8")
+    (run_dir / "promotion_decision.json").write_text(
+        '{"run_id":"hbt_placeholder","decision":"observe","promotion_allowed":false}',
+        encoding="utf-8",
+    )
+
+    snapshot = load_run_evidence(tmp_path, "hbt_runs")
+
+    coverage = {row["stage"]: row for row in snapshot.system["pipeline_coverage"]}
+    assert coverage["hbt_latency_fill_queue"]["status"] == "BLOCKING"
+    assert coverage["hbt_latency_fill_queue"]["reason"] == (
+        "Latency, fill-quality, and queue diagnostics are incomplete."
+    )
+    stages = {row["name"]: row["status"] for row in snapshot.stages}
+    assert stages["hbt_latency_fill_queue"] == "missing"
+
+
 def test_all_lanes_snapshot_requires_active_run_and_terminal_states(tmp_path: Path) -> None:
     snapshot = load_run_evidence(tmp_path, "all_lanes")
     assert snapshot.source == "all_lanes"

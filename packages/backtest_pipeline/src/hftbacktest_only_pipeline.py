@@ -852,7 +852,9 @@ def _snapshot_from_warmup(warmup: np.ndarray, cutoff_ts_ns: int) -> np.ndarray:
             active[order_id] = row.copy()
         elif event_type == _MODIFY_ORDER_EVENT and order_id in active:
             active[order_id] = row.copy()
-        elif event_type in {_TRADE_EVENT, _CANCEL_ORDER_EVENT, _FILL_EVENT}:
+        elif event_type == _TRADE_EVENT and order_id in active:
+            _reduce_active_order(active, order_id, row)
+        elif event_type in {_CANCEL_ORDER_EVENT, _FILL_EVENT}:
             active.pop(order_id, None)
 
     snapshot = np.zeros(len(active), dtype=warmup.dtype)
@@ -865,7 +867,7 @@ def _snapshot_from_warmup(warmup: np.ndarray, cutoff_ts_ns: int) -> np.ndarray:
 
 
 def _filter_replay_added_orders_only(replay: np.ndarray) -> tuple[np.ndarray, dict[str, int]]:
-    active_ids: set[int] = set()
+    active_quantities: dict[int, float] = {}
     keep = np.zeros(len(replay), dtype=bool)
     dropped = {
         "preexisting_or_unknown_lifecycle": 0,
@@ -878,20 +880,27 @@ def _filter_replay_added_orders_only(replay: np.ndarray) -> tuple[np.ndarray, di
         if event_type == _ADD_ORDER_EVENT:
             if order_id <= 0:
                 dropped["zero_order_id"] += 1
-            elif order_id in active_ids:
+            elif order_id in active_quantities:
                 dropped["duplicate_add"] += 1
             else:
-                active_ids.add(order_id)
+                active_quantities[order_id] = _row_quantity(row)
                 keep[index] = True
         elif event_type == _MODIFY_ORDER_EVENT:
-            if order_id in active_ids:
+            if order_id in active_quantities:
+                active_quantities[order_id] = _row_quantity(row)
                 keep[index] = True
             else:
                 dropped["preexisting_or_unknown_lifecycle"] += 1
-        elif event_type in {_TRADE_EVENT, _CANCEL_ORDER_EVENT, _FILL_EVENT}:
-            if order_id in active_ids:
+        elif event_type == _TRADE_EVENT:
+            if order_id in active_quantities:
                 keep[index] = True
-                active_ids.remove(order_id)
+                _reduce_active_quantity(active_quantities, order_id, row)
+            else:
+                dropped["preexisting_or_unknown_lifecycle"] += 1
+        elif event_type in {_CANCEL_ORDER_EVENT, _FILL_EVENT}:
+            if order_id in active_quantities:
+                keep[index] = True
+                active_quantities.pop(order_id, None)
             else:
                 dropped["preexisting_or_unknown_lifecycle"] += 1
         else:
@@ -901,6 +910,34 @@ def _filter_replay_added_orders_only(replay: np.ndarray) -> tuple[np.ndarray, di
 
 def _event_type(row: Any) -> int:
     return int(row["ev"]) & 0xFF
+
+
+def _row_quantity(row: Any) -> float:
+    try:
+        return max(0.0, float(row["qty"]))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _reduce_active_order(active: dict[int, Any], order_id: int, row: Any) -> None:
+    active_row = active.get(order_id)
+    if active_row is None:
+        return
+    remaining = _row_quantity(active_row) - _row_quantity(row)
+    if remaining <= 0.0:
+        active.pop(order_id, None)
+        return
+    updated = active_row.copy()
+    updated["qty"] = remaining
+    active[order_id] = updated
+
+
+def _reduce_active_quantity(active_quantities: dict[int, float], order_id: int, row: Any) -> None:
+    remaining = active_quantities.get(order_id, 0.0) - _row_quantity(row)
+    if remaining <= 0.0:
+        active_quantities.pop(order_id, None)
+    else:
+        active_quantities[order_id] = remaining
 
 
 def _replace_event_type(value: Any, event_type: int) -> int:
