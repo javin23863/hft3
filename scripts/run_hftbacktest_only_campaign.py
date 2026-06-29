@@ -311,9 +311,13 @@ def _as_list(value: Any) -> list[Any]:
 
 
 def _first_jsonl_row(path: Path) -> dict[str, Any]:
-    for row in _iter_jsonl(path):
-        return row
-    raise SystemExit("--campaign-manifest has no rows")
+    rows = _iter_jsonl(path)
+    try:
+        return next(rows)
+    except StopIteration as exc:
+        raise SystemExit("--campaign-manifest has no rows") from exc
+    finally:
+        rows.close()
 
 
 def _iter_jsonl(path: Path) -> Iterator[dict[str, Any]]:

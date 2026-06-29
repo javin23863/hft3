@@ -1524,7 +1524,7 @@ def _strategy_max_steps(params: Mapping[str, Any]) -> int:
         return _positive_int(params.get("max_feed_steps"), "strategy_params.max_feed_steps")
     if "holding_period_bars" in params:
         return _positive_int(params.get("holding_period_bars"), "strategy_params.holding_period_bars")
-    return _positive_int(3, "strategy_params.max_steps")
+    return 3
 
 
 def _positive_int(value: Any, name: str) -> int:
