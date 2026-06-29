@@ -240,11 +240,7 @@ def write_campaign_manifest(
         raise HftBacktestOnlyCampaignManifestError("campaign_manifest_invalid_checkpoint_every")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = (
-        Path(checkpoint_path)
-        if checkpoint_path is not None
-        else _path_with_added_suffix(out_path, ".checkpoint.json")
-    )
+    checkpoint_output = Path(checkpoint_path) if checkpoint_path is not None else None
     tmp = _path_with_added_suffix(out_path, ".tmp")
     expected_models = set(expected_canonical_model_ids or [])
     summary_builder = _CampaignManifestSummaryBuilder(
@@ -258,30 +254,42 @@ def write_campaign_manifest(
         parameter_surface_config_status=parameter_surface_config_status,
         parameter_sets_json=parameter_sets_json,
     )
-    with tmp.open("w", encoding="utf-8") as handle:
-        for raw_row in rows:
-            row = dict(raw_row)
-            _validate_required_row_fields(
-                row,
-                required_fields=REQUIRED_ROW_FIELDS,
-                error_prefix="campaign_manifest",
-            )
-            summary_builder.observe(row)
-            handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
-            if checkpoint_every_rows and summary_builder.emitted_base_rows % checkpoint_every_rows == 0:
-                handle.flush()
-                _write_json_atomic(checkpoint_path, summary_builder.summary(partial=True))
-        if summary_builder.emitted_base_rows == 0:
-            raise HftBacktestOnlyCampaignManifestError("campaign_manifest_empty")
-        handle.flush()
-    summary_builder.validate_complete()
+    try:
+        with tmp.open("w", encoding="utf-8") as handle:
+            for raw_row in rows:
+                row = dict(raw_row)
+                _validate_required_row_fields(
+                    row,
+                    required_fields=REQUIRED_ROW_FIELDS,
+                    error_prefix="campaign_manifest",
+                )
+                summary_builder.observe(row)
+                handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
+                if (
+                    checkpoint_output is not None
+                    and checkpoint_every_rows
+                    and summary_builder.emitted_base_rows % checkpoint_every_rows == 0
+                ):
+                    handle.flush()
+                    _write_json_atomic(
+                        checkpoint_output,
+                        summary_builder.summary(partial=True),
+                    )
+            if summary_builder.emitted_base_rows == 0:
+                raise HftBacktestOnlyCampaignManifestError("campaign_manifest_empty")
+            handle.flush()
+        summary_builder.validate_complete()
+    except Exception:
+        _cleanup_partial_outputs(tmp, checkpoint_output)
+        raise
     os.replace(tmp, out_path)
 
     summary = summary_builder.summary(partial=False)
     if summary_path is not None:
         summary_path = Path(summary_path)
         _write_json_atomic(summary_path, summary)
-    _write_json_atomic(checkpoint_path, summary)
+    if checkpoint_output is not None:
+        _write_json_atomic(checkpoint_output, summary)
     return summary
 
 
@@ -462,52 +470,72 @@ def stream_parameter_surface_manifest(
         raise HftBacktestOnlyCampaignManifestError("parameter_surface_invalid_checkpoint_every")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = (
-        Path(checkpoint_path)
-        if checkpoint_path is not None
-        else _path_with_added_suffix(out_path, ".checkpoint.json")
-    )
+    checkpoint_output = Path(checkpoint_path) if checkpoint_path is not None else None
     tmp = _path_with_added_suffix(out_path, ".tmp")
     sqlite_path = _path_with_added_suffix(out_path, ".dedupe.sqlite.tmp")
-    with _SqliteUniqueTracker(sqlite_path) as unique_tracker:
-        summary_builder = _ParameterSurfaceSummaryBuilder(unique_tracker=unique_tracker)
-        with tmp.open("w", encoding="utf-8") as handle:
-            for raw_row in rows:
-                row = dict(raw_row)
-                _validate_parameter_surface_row(row)
-                summary_builder.observe(row)
-                handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
-                if checkpoint_every_rows and summary_builder.row_count % checkpoint_every_rows == 0:
-                    handle.flush()
-                    _write_json_atomic(checkpoint_path, summary_builder.summary(partial=True))
-            if summary_builder.row_count == 0:
-                raise HftBacktestOnlyCampaignManifestError("parameter_surface_empty")
-            handle.flush()
-        os.replace(tmp, out_path)
-        summary = summary_builder.summary(partial=False)
-        if summary_path is not None:
-            _write_json_atomic(Path(summary_path), summary)
-        _write_json_atomic(checkpoint_path, summary)
+    try:
+        with _SqliteUniqueTracker(sqlite_path) as unique_tracker:
+            summary_builder = _ParameterSurfaceSummaryBuilder(unique_tracker=unique_tracker)
+            with tmp.open("w", encoding="utf-8") as handle:
+                for raw_row in rows:
+                    row = dict(raw_row)
+                    _validate_parameter_surface_row(row)
+                    summary_builder.observe(row)
+                    handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
+                    if (
+                        checkpoint_output is not None
+                        and checkpoint_every_rows
+                        and summary_builder.row_count % checkpoint_every_rows == 0
+                    ):
+                        handle.flush()
+                        _write_json_atomic(
+                            checkpoint_output,
+                            summary_builder.summary(partial=True),
+                        )
+                if summary_builder.row_count == 0:
+                    raise HftBacktestOnlyCampaignManifestError("parameter_surface_empty")
+                handle.flush()
+            os.replace(tmp, out_path)
+            summary = summary_builder.summary(partial=False)
+            if summary_path is not None:
+                _write_json_atomic(Path(summary_path), summary)
+            if checkpoint_output is not None:
+                _write_json_atomic(checkpoint_output, summary)
+    except Exception:
+        _cleanup_partial_outputs(tmp, checkpoint_output)
+        raise
     return summary
 
 
 def campaign_manifest_summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
-    builder = _CampaignManifestSummaryBuilder(
-        expected_canonical_model_ids=set(),
-        prepared_unit_count=None,
-        executable_unit_count=None,
-        blocker_unit_count=None,
-        model_applicability_counts=None,
-        instrument_applicability_counts=None,
-        parameter_surface_status="base_only",
-        parameter_surface_config_status="",
-        parameter_sets_json=None,
-    )
+    campaign_id = ""
+    row_count = 0
+    by_status: dict[str, int] = {}
+    blocker_codes: dict[str, int] = {}
+    model_ids: set[str] = set()
+    source_npzs: set[str] = set()
     for raw_row in rows:
-        builder.observe(dict(raw_row))
-    summary = builder.summary(partial=False)
-    summary["schema_version"] = SUMMARY_SCHEMA_VERSION
-    return summary
+        row = dict(raw_row)
+        if not campaign_id:
+            campaign_id = str(row.get("campaign_id") or "")
+        row_count += 1
+        status = str(row.get("admissibility_status") or "")
+        by_status[status] = by_status.get(status, 0) + 1
+        blocker_code = str(row.get("blocker_code") or "")
+        if blocker_code:
+            blocker_codes[blocker_code] = blocker_codes.get(blocker_code, 0) + 1
+        model_ids.add(str(row.get("canonical_model_id") or ""))
+        source_npzs.add(str(row.get("source_npz") or ""))
+    return {
+        "schema_version": SUMMARY_SCHEMA_VERSION,
+        "campaign_id": campaign_id,
+        "row_count": row_count,
+        "canonical_model_count": len(model_ids - {""}),
+        "source_npz_count": len(source_npzs - {""}),
+        "admissibility_status_counts": dict(sorted(by_status.items())),
+        "blocker_code_counts": dict(sorted(blocker_codes.items())),
+        "manifest_order": "registry_file_order_then_prepared_manifest_path",
+    }
 
 
 def parameter_surface_summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
@@ -1161,12 +1189,20 @@ def _build_row(
     if blocker_code:
         admissibility_status = blocker_code.split(":", 1)[0]
 
-    source_hash = str(prepared.get("source_npz_sha256") or "")
-    if not source_hash and source_exists and source_path:
-        source_hash = _sha256_file(source_path)
-    snapshot_hash = str(prepared.get("initial_snapshot_sha256") or "")
-    if not snapshot_hash and snapshot_exists and snapshot_path:
-        snapshot_hash = _sha256_file(snapshot_path)
+    source_hash = _prepared_cached_file_hash(
+        prepared,
+        key="source_npz_sha256",
+        verified_key="_source_npz_sha256_verified",
+        path=source_path,
+        path_exists=source_exists,
+    )
+    snapshot_hash = _prepared_cached_file_hash(
+        prepared,
+        key="initial_snapshot_sha256",
+        verified_key="_initial_snapshot_sha256_verified",
+        path=snapshot_path,
+        path_exists=snapshot_exists,
+    )
     unit_id = _unit_id(
         canonical_model_id=canonical_model_id,
         source_npz=source_npz,
@@ -1309,12 +1345,6 @@ def _load_prepared_units(prepared_root: Path) -> list[dict[str, Any]]:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         normalized_npz = _resolve_manifest_path(manifest_path, manifest.get("normalized_npz"))
         initial_snapshot = _resolve_manifest_path(manifest_path, manifest.get("initial_snapshot"))
-        source_hash = str(manifest.get("source_npz_sha256") or "")
-        if normalized_npz and normalized_npz.is_file():
-            source_hash = _sha256_file(normalized_npz)
-        snapshot_hash = str(manifest.get("initial_snapshot_sha256") or "")
-        if initial_snapshot and initial_snapshot.is_file():
-            snapshot_hash = _sha256_file(initial_snapshot)
         units.append(
             {
                 **manifest,
@@ -1324,8 +1354,6 @@ def _load_prepared_units(prepared_root: Path) -> list[dict[str, Any]]:
                 "trade_date": manifest.get("trade_date") or _trade_date_from_manifest_path(manifest_path),
                 "normalized_npz": str(normalized_npz) if normalized_npz else "",
                 "initial_snapshot": str(initial_snapshot) if initial_snapshot else "",
-                "source_npz_sha256": source_hash,
-                "initial_snapshot_sha256": snapshot_hash,
             }
         )
     return units
@@ -1456,8 +1484,34 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _prepared_cached_file_hash(
+    prepared: Mapping[str, Any],
+    *,
+    key: str,
+    verified_key: str,
+    path: Path | None,
+    path_exists: bool,
+) -> str:
+    if isinstance(prepared, dict) and prepared.get(verified_key):
+        return str(prepared.get(key) or "")
+    if path_exists and path is not None:
+        file_hash = _sha256_file(path)
+    else:
+        file_hash = str(prepared.get(key) or "")
+    if isinstance(prepared, dict):
+        prepared[key] = file_hash
+        prepared[verified_key] = True
+    return file_hash
+
+
 def _path_with_added_suffix(path: Path, suffix: str) -> Path:
     return Path(path).with_name(Path(path).name + suffix)
+
+
+def _cleanup_partial_outputs(tmp_path: Path, checkpoint_path: Path | None) -> None:
+    Path(tmp_path).unlink(missing_ok=True)
+    if checkpoint_path is not None:
+        Path(checkpoint_path).unlink(missing_ok=True)
 
 
 def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:

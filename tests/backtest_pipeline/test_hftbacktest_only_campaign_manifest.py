@@ -240,6 +240,8 @@ def test_manifest_uses_canonical_slugs_and_legacy_aliases_only(tmp_path: Path) -
     assert summary["canonical_model_count"] == 3
     assert summary["source_npz_count"] == 1
     assert summary["manifest_order"] == "registry_file_order_then_prepared_manifest_path"
+    assert "expected_base_rows" not in summary
+    assert "hbt_jobs_started" not in summary
 
 
 def test_stream_campaign_manifest_writes_pre_execution_summary_and_checkpoint(
@@ -326,6 +328,8 @@ def test_stream_campaign_manifest_fails_closed_on_row_count_mismatch(
             prepared_unit_count=2,
         )
     assert not (tmp_path / "campaign_manifest.jsonl").exists()
+    assert not (tmp_path / "campaign_manifest.jsonl.tmp").exists()
+    assert not (tmp_path / "campaign_manifest.jsonl.checkpoint.json").exists()
 
 
 def test_first_eligible_canary_uses_manifest_order_without_manual_filter(
@@ -343,6 +347,7 @@ def test_first_eligible_canary_uses_manifest_order_without_manual_filter(
         out_path=base_path,
         parameter_surface_config_status="pipeline_blocker:parameter_sets_config_missing",
     )
+    assert not (tmp_path / "campaign_manifest.jsonl.checkpoint.json").exists()
 
     summary = stream_first_eligible_canary_manifest(
         (json.loads(line) for line in base_path.read_text(encoding="utf-8").splitlines()),
@@ -1013,6 +1018,41 @@ def test_parameter_surface_rejects_duplicate_unit_parameter_hash(
                 },
             ],
         )
+
+
+def test_stream_parameter_surface_cleans_tmp_on_duplicate(
+    tmp_path: Path,
+) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)
+    campaign_rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+    )
+    surface_rows = build_parameter_surface_rows(
+        campaign_rows=campaign_rows,
+        parameter_sets=_parameter_sets()[:1],
+    )
+    duplicate_rows = [*surface_rows, dict(surface_rows[0])]
+    out_path = tmp_path / "parameter_surface.jsonl"
+    checkpoint_path = tmp_path / "parameter_surface.checkpoint.json"
+
+    with pytest.raises(
+        HftBacktestOnlyCampaignManifestError,
+        match="duplicate_unit_parameter_hash",
+    ):
+        stream_parameter_surface_manifest(
+            duplicate_rows,
+            out_path=out_path,
+            checkpoint_path=checkpoint_path,
+            checkpoint_every_rows=1,
+        )
+    assert not out_path.exists()
+    assert not (tmp_path / "parameter_surface.jsonl.tmp").exists()
+    assert not checkpoint_path.exists()
 
 
 def test_parameter_surface_rejects_optimizer_claim_before_hbt_evidence(
