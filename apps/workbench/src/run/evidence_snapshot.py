@@ -2408,12 +2408,21 @@ def _hbt_runs_snapshot(repo: Path) -> RunEvidenceSnapshot:
                 "artifact": str(run_dir / "run_manifest.json"),
             }
         )
-    if data_validation and not data_passed:
+    if not data_passed:
+        # Fail closed: a missing/unreadable data_validation.json is a blocker,
+        # not an implicit pass — otherwise a run directory with recorder/stats/
+        # promotion artifacts but no admissibility proof would display as
+        # observed.
         blocking_gates.append(
             {
                 "gate": "hbt_data_validation",
                 "status": "BLOCKING",
-                "reason": "HftBacktest data validation did not pass.",
+                "reason": (
+                    "HftBacktest data validation did not pass."
+                    if data_validation
+                    else "data_validation.json missing or unreadable; admissibility unproven."
+                ),
+                "data_validation_status": data_validation_status,
                 "fail_closed_reasons": data_validation.get("fail_closed_reasons", []),
                 "artifact": str(run_dir / "data_validation.json"),
             }
