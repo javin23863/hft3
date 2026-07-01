@@ -158,6 +158,10 @@ python scripts/run_hftbacktest_only_campaign.py \
   --resume
 ```
 
+The campaign runner fixes the HBT strategy to `hypothesis_limit_order`; do not
+add a strategy override to paid campaign launches. Single-row smoke strategies
+belong only in explicit diagnostic runs.
+
 Only after the canary receipts pass may the same execution contract be promoted
 to the broader parameter-surface or base-only eligible row set. The full base
 universe still remains a manifest/accounting artifact; blocked rows write

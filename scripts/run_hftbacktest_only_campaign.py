@@ -28,6 +28,7 @@ from backtest_pipeline.src.hftbacktest_only_pipeline import (  # noqa: E402
 SCHEMA_VERSION = "hft3_hftbacktest_only_campaign_run_summary_v1"
 ROW_RESULT_SCHEMA_VERSION = "hft3_hftbacktest_only_campaign_row_result_v1"
 PRODUCT_METADATA_POLICY = "explicit_per_symbol_contract_tick_lot_contract_required"
+MODEL_SPECIFIC_STRATEGY_ID = "hypothesis_limit_order"
 
 
 def run_campaign(
@@ -49,7 +50,8 @@ def run_campaign(
     campaign_root = Path(out_root) / safe_stem(campaign_id)
     campaign_root.mkdir(parents=True, exist_ok=True)
     settings = {
-        "strategy_id": strategy_id,
+        "strategy_id": MODEL_SPECIFIC_STRATEGY_ID,
+        "requested_strategy_id": strategy_id,
         "dry_run": dry_run,
         "resume": resume,
         "maker_fee": maker_fee,
@@ -99,6 +101,9 @@ def run_campaign(
         "row_count": row_count,
         "workers": worker_count,
         "max_tasks_per_child": task_limit,
+        "strategy_id": MODEL_SPECIFIC_STRATEGY_ID,
+        "requested_strategy_id": str(strategy_id or MODEL_SPECIFIC_STRATEGY_ID),
+        "strategy_override_ignored": str(strategy_id or MODEL_SPECIFIC_STRATEGY_ID) != MODEL_SPECIFIC_STRATEGY_ID,
         "dry_run": dry_run,
         "status_counts": dict(sorted(status_counts.items())),
         "blocker_counts": dict(sorted(blocker_counts.items())),
@@ -134,8 +139,12 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
     run_dir = campaign_root / safe_stem(row_key)
     result_path = run_dir / "campaign_row_result.json"
     if settings.get("resume") and result_path.is_file():
-        return json.loads(result_path.read_text(encoding="utf-8"))
+        cached = json.loads(result_path.read_text(encoding="utf-8"))
+        if _cached_receipt_matches_run(cached, settings):
+            return cached
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    strategy_id = MODEL_SPECIFIC_STRATEGY_ID
 
     blocker_code = str(row.get("blocker_code") or "")
     metadata_blocker = _metadata_blocker(row)
@@ -147,6 +156,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
             blocker_code=blocker_code or str(row.get("admissibility_status") or "pre_hbt_blocker"),
             blocker_detail=_join_blocker_details(row.get("blocker_detail"), metadata_blocker),
             hbt_run_id="",
+            dry_run=bool(settings.get("dry_run")),
         )
 
     if metadata_blocker:
@@ -157,6 +167,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
             blocker_code="authority_missing",
             blocker_detail=metadata_blocker,
             hbt_run_id="",
+            dry_run=bool(settings.get("dry_run")),
         )
 
     run_id = safe_stem(row_key)
@@ -169,7 +180,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
         event_id=str(row["event_id"]),
         normalized_npz=Path(str(row["source_npz"])),
         initial_snapshot=Path(str(row["initial_snapshot"])),
-        strategy_id=str(settings.get("strategy_id") or "hypothesis_limit_order"),
+        strategy_id=strategy_id,
         strategy_params=strategy_params,
         canonical_model_id=str(row["canonical_model_id"]),
         legacy_aliases=tuple(str(alias) for alias in row.get("legacy_aliases") or ()),
@@ -197,6 +208,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
             blocker_code="pipeline_blocker:hbt_runner_exception",
             blocker_detail=f"{type(exc).__name__}:{exc}",
             hbt_run_id=run_id,
+            dry_run=bool(settings.get("dry_run")),
         )
     status = str(result.get("status") or "unknown")
     fail_closed_reasons = [str(reason) for reason in result.get("fail_closed_reasons") or ()]
@@ -208,6 +220,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
         blocker_code=blocker_code,
         blocker_detail=";".join(fail_closed_reasons),
         hbt_run_id=run_id,
+        dry_run=bool(settings.get("dry_run")),
     )
 
 
@@ -239,6 +252,15 @@ def _metadata_blocker(row: Mapping[str, Any]) -> str:
         except (TypeError, ValueError):
             missing.append(field)
     return "missing_hbt_run_metadata:" + ",".join(missing) if missing else ""
+
+
+def _cached_receipt_matches_run(cached: Mapping[str, Any], settings: Mapping[str, Any]) -> bool:
+    if str(cached.get("strategy_id") or "") != MODEL_SPECIFIC_STRATEGY_ID:
+        return False
+    current_dry_run = bool(settings.get("dry_run"))
+    cached_status = str(cached.get("status") or "")
+    cached_dry_run = bool(cached.get("dry_run", cached_status == "dry_run"))
+    return cached_dry_run == current_dry_run
 
 
 def _join_blocker_details(*details: Any) -> str:
@@ -278,6 +300,7 @@ def _write_row_result(
     blocker_code: str,
     blocker_detail: str,
     hbt_run_id: str,
+    dry_run: bool,
 ) -> dict[str, Any]:
     payload = {
         "schema_version": ROW_RESULT_SCHEMA_VERSION,
@@ -297,6 +320,7 @@ def _write_row_result(
         "initial_snapshot_sha256": row.get("initial_snapshot_sha256", ""),
         "parameter_family": row.get("parameter_family", ""),
         "parameter_hash": row.get("parameter_hash", ""),
+        "strategy_id": MODEL_SPECIFIC_STRATEGY_ID,
         "strategy_params": row.get("strategy_params", {}),
         "parameter_proposal_status": row.get("parameter_proposal_status", ""),
         "objective_evaluations": row.get("objective_evaluations", ""),
@@ -307,6 +331,7 @@ def _write_row_result(
         "product_metadata_source": row.get("product_metadata_source", ""),
         "metadata_policy": row.get("metadata_policy", ""),
         "status": status,
+        "dry_run": dry_run,
         "blocker_code": blocker_code,
         "blocker_detail": blocker_detail,
         "adapter_status": row.get("adapter_status", ""),
@@ -363,7 +388,6 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a full HBT-only campaign manifest")
     parser.add_argument("--campaign-manifest", type=Path, required=True)
     parser.add_argument("--out-root", type=Path, default=REPO / "artifacts" / "hbt_campaign_runs")
-    parser.add_argument("--strategy-id", default="hypothesis_limit_order")
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument(
         "--max-tasks-per-child",
@@ -384,7 +408,6 @@ def main(argv: list[str] | None = None) -> int:
     summary = run_campaign(
         manifest_path=args.campaign_manifest,
         out_root=args.out_root,
-        strategy_id=args.strategy_id,
         dry_run=args.dry_run,
         workers=args.workers,
         max_tasks_per_child=args.max_tasks_per_child,
