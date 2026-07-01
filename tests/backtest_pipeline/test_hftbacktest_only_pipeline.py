@@ -124,6 +124,7 @@ def _config(
     strategy_params: dict[str, object] | None = None,
     canonical_model_id: str = "SPREAD_BLOWOUT_RECOMPRESSION",
     legacy_aliases: tuple[str, ...] = ("HYP_5",),
+    event_window: dict[str, object] | None = None,
 ) -> HftBacktestOnlyRunConfig:
     return HftBacktestOnlyRunConfig(
         run_id="hbt_only_test",
@@ -144,6 +145,7 @@ def _config(
         taker_fee=0.47,
         entry_latency_ns=100_000,
         response_latency_ns=100_000,
+        event_window=event_window or {},
     )
 
 
@@ -333,7 +335,13 @@ def test_hbt_loop_uses_holding_period_bars_after_explicit_step_params(
     def max_replay_step(name: str, strategy_params: dict[str, object]) -> int:
         out_dir = tmp_path / "artifacts" / "hbt_runs" / name
         result = run_hftbacktest_only(
-            _config(tmp_path, data_path, snapshot_path, strategy_params=strategy_params),
+            _config(
+                tmp_path,
+                data_path,
+                snapshot_path,
+                strategy_params=strategy_params,
+                event_window={"cutoff_ts_ns": 0, "end_ts_ns": 10_000_000_000},
+            ),
             out_dir=out_dir,
         )
         assert result["status"] == "completed"
@@ -352,6 +360,63 @@ def test_hbt_loop_uses_holding_period_bars_after_explicit_step_params(
         "max_steps",
         {"side": "BUY", "quantity": 1.0, "max_steps": 2, "max_feed_steps": 3, "holding_period_bars": 4},
     ) == 2
+
+
+def test_hypothesis_limit_order_scans_event_window_before_holding_period(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import backtest_pipeline.src.hftbacktest_only_pipeline as pipeline
+
+    _install_fake_hftbacktest(monkeypatch, successful_elapses=10)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz", include_trade_event=True)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "event_scan_late_signal"
+
+    def late_signal_lookup(_config: object, _params: object):
+        def lookup(timestamp_ns: int | None) -> float:
+            return 1.0 if int(timestamp_ns or 0) >= 4_000_000_000 else 0.0
+
+        return lookup, {
+            "adapter_status": "available",
+            "signal_observations": 8,
+            "signal_source": "test_late_signal",
+            "signal_field": "hypothesis.evaluate",
+            "feature_backend": "cpp",
+            "signal_min": 0.0,
+            "signal_max": 1.0,
+            "signal_abs_max": 1.0,
+        }, []
+
+    monkeypatch.setattr(pipeline, "_build_model_signal_lookup", late_signal_lookup)
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={
+            "model_id": "SECOND_WAVE_CONTINUATION",
+            "quantity": 1.0,
+            "holding_period_bars": 1,
+            "signal_threshold": 0.5,
+        },
+        canonical_model_id="SECOND_WAVE_CONTINUATION",
+        legacy_aliases=("HYP_1",),
+        event_window={"cutoff_ts_ns": 0, "end_ts_ns": 8_000_000_000},
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed"
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    submitted = [row for row in replay["orders"] if row["event_type"] == "ORDER_SUBMITTED"]
+    assert replay["entry_scan_steps"] == 8
+    assert replay["max_loop_steps"] == 9
+    assert replay["holding_period_bars"] == 1
+    assert replay["strategy_surface_version"] == pipeline.HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION
+    assert replay["signal_abs_max"] == 1.0
+    assert submitted
+    assert submitted[0]["step"] >= 3
 
 
 def test_hypothesis_limit_order_evaluates_canonical_model_signal(
@@ -375,6 +440,7 @@ def test_hypothesis_limit_order_evaluates_canonical_model_signal(
         },
         canonical_model_id="SECOND_WAVE_CONTINUATION",
         legacy_aliases=("HYP_1",),
+        event_window={"cutoff_ts_ns": 0, "end_ts_ns": 3_000_000_000},
     )
 
     result = run_hftbacktest_only(config, out_dir=out_dir)
@@ -413,6 +479,7 @@ def test_signal_below_threshold_fails_closed_without_promotion(
         },
         canonical_model_id="SECOND_WAVE_CONTINUATION",
         legacy_aliases=("HYP_1",),
+        event_window={"cutoff_ts_ns": 0, "end_ts_ns": 3_000_000_000},
     )
 
     result = run_hftbacktest_only(config, out_dir=out_dir)
@@ -425,6 +492,42 @@ def test_signal_below_threshold_fails_closed_without_promotion(
     assert not (out_dir / "recorder_result.npz").exists()
     assert not (out_dir / "stats_summary.json").exists()
     assert not (out_dir / "promotion_decision.json").exists()
+
+
+def test_hypothesis_limit_order_requires_event_window_for_entry_scan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import backtest_pipeline.src.hftbacktest_only_pipeline as pipeline
+
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz", include_trade_event=True)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "missing_event_window"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={
+            "model_id": "SECOND_WAVE_CONTINUATION",
+            "quantity": 1.0,
+            "holding_period_bars": 5,
+            "signal_threshold": 0.01,
+        },
+        canonical_model_id="SECOND_WAVE_CONTINUATION",
+        legacy_aliases=("HYP_1",),
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "pipeline_blocker"
+    assert "pipeline_blocker:event_window_required_for_entry_scan" in result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["official_hftbacktest_replay_status"] == "not_run"
+    assert replay["strategy_surface_version"] == pipeline.HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION
+    assert replay["signal_observations"] == 0
+    assert not (out_dir / "recorder_result.npz").exists()
 
 
 def test_structural_limit_order_evaluates_canonical_payload_signal(
@@ -448,6 +551,7 @@ def test_structural_limit_order_evaluates_canonical_payload_signal(
         },
         canonical_model_id="BOOK_PRESSURE",
         legacy_aliases=("PDF_MODEL_1",),
+        event_window={"cutoff_ts_ns": 0, "end_ts_ns": 3_000_000_000},
     )
 
     result = run_hftbacktest_only(config, out_dir=out_dir)
@@ -490,6 +594,7 @@ def test_missing_uniform_hbt_adapter_is_pipeline_blocker(
         strategy_params={"model_id": "BOOK_PRESSURE", "quantity": 1.0, "max_steps": 3},
         canonical_model_id="BOOK_PRESSURE",
         legacy_aliases=("PDF_MODEL_1",),
+        event_window={"cutoff_ts_ns": 0, "end_ts_ns": 3_000_000_000},
     )
 
     result = run_hftbacktest_only(config, out_dir=out_dir)
@@ -526,6 +631,7 @@ def test_structural_model_without_signal_fields_fails_closed(
         },
         canonical_model_id="QUANTUM_SPREAD_DEFENSE",
         legacy_aliases=("PDF_MODEL_9",),
+        event_window={"cutoff_ts_ns": 0, "end_ts_ns": 3_000_000_000},
     )
 
     result = run_hftbacktest_only(config, out_dir=out_dir)

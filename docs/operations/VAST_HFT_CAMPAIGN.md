@@ -162,6 +162,17 @@ The campaign runner fixes the HBT strategy to `hypothesis_limit_order`; do not
 add a strategy override to paid campaign launches. Single-row smoke strategies
 belong only in explicit diagnostic runs.
 
+The paid model-specific surface version is
+`hypothesis_limit_order_event_scan_v2`. This surface scans the HBT event window
+for an entry and applies `holding_period_bars` only after an order is submitted.
+Receipts from older surfaces, including canonical `hypothesis_limit_order`
+receipts without `strategy_surface_version`, are stale for paid resume and must
+be rerun.
+
+Rows without usable `event_window.cutoff_ts_ns`/`end_ts_ns` bounds fail closed as
+`pipeline_blocker:event_window_required_for_entry_scan`; the paid runner must
+not replace a missing event window with a tiny fallback loop.
+
 Only after the canary receipts pass may the same execution contract be promoted
 to the broader parameter-surface or base-only eligible row set. The full base
 universe still remains a manifest/accounting artifact; blocked rows write

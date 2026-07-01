@@ -21,6 +21,7 @@ sys.path[:0] = [str(REPO), str(REPO / "packages")]
 from backtest_pipeline.src.hftbacktest_only_io import safe_stem, write_json_atomic
 from backtest_pipeline.src.hftbacktest_only_pipeline import (  # noqa: E402
     HftBacktestOnlyRunConfig,
+    HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION,
     run_hftbacktest_only,
 )
 
@@ -29,6 +30,7 @@ SCHEMA_VERSION = "hft3_hftbacktest_only_campaign_run_summary_v1"
 ROW_RESULT_SCHEMA_VERSION = "hft3_hftbacktest_only_campaign_row_result_v1"
 PRODUCT_METADATA_POLICY = "explicit_per_symbol_contract_tick_lot_contract_required"
 MODEL_SPECIFIC_STRATEGY_ID = "hypothesis_limit_order"
+MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION = HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION
 
 
 def run_campaign(
@@ -51,6 +53,7 @@ def run_campaign(
     campaign_root.mkdir(parents=True, exist_ok=True)
     settings = {
         "strategy_id": MODEL_SPECIFIC_STRATEGY_ID,
+        "strategy_surface_version": MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
         "requested_strategy_id": strategy_id,
         "dry_run": dry_run,
         "resume": resume,
@@ -102,6 +105,7 @@ def run_campaign(
         "workers": worker_count,
         "max_tasks_per_child": task_limit,
         "strategy_id": MODEL_SPECIFIC_STRATEGY_ID,
+        "strategy_surface_version": MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
         "requested_strategy_id": str(strategy_id or MODEL_SPECIFIC_STRATEGY_ID),
         "strategy_override_ignored": str(strategy_id or MODEL_SPECIFIC_STRATEGY_ID) != MODEL_SPECIFIC_STRATEGY_ID,
         "dry_run": dry_run,
@@ -257,6 +261,8 @@ def _metadata_blocker(row: Mapping[str, Any]) -> str:
 def _cached_receipt_matches_run(cached: Mapping[str, Any], settings: Mapping[str, Any]) -> bool:
     if str(cached.get("strategy_id") or "") != MODEL_SPECIFIC_STRATEGY_ID:
         return False
+    if str(cached.get("strategy_surface_version") or "") != MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION:
+        return False
     current_dry_run = bool(settings.get("dry_run"))
     cached_status = str(cached.get("status") or "")
     cached_dry_run = bool(cached.get("dry_run", cached_status == "dry_run"))
@@ -321,6 +327,7 @@ def _write_row_result(
         "parameter_family": row.get("parameter_family", ""),
         "parameter_hash": row.get("parameter_hash", ""),
         "strategy_id": MODEL_SPECIFIC_STRATEGY_ID,
+        "strategy_surface_version": MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
         "strategy_params": row.get("strategy_params", {}),
         "parameter_proposal_status": row.get("parameter_proposal_status", ""),
         "objective_evaluations": row.get("objective_evaluations", ""),
