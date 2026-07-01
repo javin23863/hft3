@@ -24,6 +24,7 @@ PLAN_PATH = "docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md"
 UPSTREAM_REPO_URL = "https://github.com/nkaz001/hftbacktest"
 UPSTREAM_DOCS_URL = "https://hftbacktest.readthedocs.io/en/latest/"
 EXPECTED_EVENT_FIELDS = ("ev", "exch_ts", "local_ts", "px", "qty", "order_id", "ival", "fval")
+HBT_DATA_CONTRACT_VERSION = "hft3_hbt_l3_side_flags_v1"
 _FUTURE_DATA_GRACE_NS = 86_400 * 1_000_000_000
 _NS_PER_SECOND = 1_000_000_000
 _TRADE_EVENT = 2
@@ -368,6 +369,7 @@ def validate_hftbacktest_only_input(config: HftBacktestOnlyRunConfig) -> dict[st
     reasons = list(dict.fromkeys(reasons))
     return {
         "schema_version": "hft3_hftbacktest_only_data_validation_v1",
+        "data_contract_version": HBT_DATA_CONTRACT_VERSION,
         "plan": PLAN_PATH,
         "data_path": str(data_path),
         "initial_snapshot": str(snapshot_path),

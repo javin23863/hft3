@@ -386,6 +386,7 @@ def test_campaign_runner_multiworker_recycles_and_resumes_existing_receipts(
         "blocker_code": "",
         "strategy_id": "hypothesis_limit_order",
         "strategy_surface_version": module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
+        "data_contract_version": module.HBT_DATA_CONTRACT_VERSION,
         "dry_run": True,
         "canonical_model_id": rows[0]["canonical_model_id"],
     }
@@ -478,6 +479,97 @@ def test_campaign_runner_resume_reruns_stale_receipts_without_strategy_id(
     assert receipt["strategy_surface_version"] == module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION
     assert receipt["dry_run"] is False
     assert receipt["hbt_run_id"] == "unit_admissible"
+
+
+def test_campaign_runner_resume_reruns_stale_receipts_without_data_contract(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_runner_module()
+    _write_valid_npz(tmp_path / "data.npz")
+    _write_valid_npz(tmp_path / "snapshot.npz")
+    row = _campaign_row(tmp_path)
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    out_root = tmp_path / "runs"
+    existing_dir = out_root / "hbt_campaign_test" / "unit_admissible"
+    existing_dir.mkdir(parents=True)
+    (existing_dir / "campaign_row_result.json").write_text(
+        json.dumps(
+            {
+                "status": "pipeline_blocker",
+                "strategy_id": "hypothesis_limit_order",
+                "strategy_surface_version": module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
+                "dry_run": False,
+                "blocker_code": "pipeline_blocker:no_hbt_order_submitted",
+            }
+        ),
+        encoding="utf-8",
+    )
+    captured_strategy_ids: list[str] = []
+
+    def fake_run(config: object, **_kwargs: object) -> dict[str, object]:
+        captured_strategy_ids.append(config.strategy_id)
+        return {"status": "completed", "fail_closed_reasons": []}
+
+    monkeypatch.setattr(module, "run_hftbacktest_only", fake_run)
+
+    summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=out_root,
+        dry_run=False,
+        workers=1,
+        resume=True,
+    )
+
+    assert summary["status_counts"] == {"completed": 1}
+    assert captured_strategy_ids == ["hypothesis_limit_order"]
+    receipt = json.loads((existing_dir / "campaign_row_result.json").read_text(encoding="utf-8"))
+    assert receipt["data_contract_version"] == module.HBT_DATA_CONTRACT_VERSION
+    assert receipt["status"] == "completed"
+
+
+def test_campaign_runner_resume_keeps_current_data_contract_receipts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_runner_module()
+    _write_valid_npz(tmp_path / "data.npz")
+    _write_valid_npz(tmp_path / "snapshot.npz")
+    row = _campaign_row(tmp_path)
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    out_root = tmp_path / "runs"
+    existing_dir = out_root / "hbt_campaign_test" / "unit_admissible"
+    existing_dir.mkdir(parents=True)
+    (existing_dir / "campaign_row_result.json").write_text(
+        json.dumps(
+            {
+                "status": "pipeline_blocker",
+                "strategy_id": "hypothesis_limit_order",
+                "strategy_surface_version": module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
+                "data_contract_version": module.HBT_DATA_CONTRACT_VERSION,
+                "dry_run": False,
+                "blocker_code": "pipeline_blocker:no_hbt_order_submitted",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fail_run(_config: object, **_kwargs: object) -> dict[str, object]:
+        raise AssertionError("current data-contract receipts should be reused under --resume")
+
+    monkeypatch.setattr(module, "run_hftbacktest_only", fail_run)
+
+    summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=out_root,
+        dry_run=False,
+        workers=1,
+        resume=True,
+    )
+
+    assert summary["status_counts"] == {"pipeline_blocker": 1}
 
 
 def test_campaign_runner_paid_resume_reruns_dry_run_receipts(

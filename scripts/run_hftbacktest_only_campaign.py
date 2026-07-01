@@ -20,6 +20,7 @@ sys.path[:0] = [str(REPO), str(REPO / "packages")]
 
 from backtest_pipeline.src.hftbacktest_only_io import safe_stem, write_json_atomic
 from backtest_pipeline.src.hftbacktest_only_pipeline import (  # noqa: E402
+    HBT_DATA_CONTRACT_VERSION,
     HftBacktestOnlyRunConfig,
     HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION,
     run_hftbacktest_only,
@@ -54,6 +55,7 @@ def run_campaign(
     settings = {
         "strategy_id": MODEL_SPECIFIC_STRATEGY_ID,
         "strategy_surface_version": MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
+        "data_contract_version": HBT_DATA_CONTRACT_VERSION,
         "requested_strategy_id": strategy_id,
         "dry_run": dry_run,
         "resume": resume,
@@ -106,6 +108,7 @@ def run_campaign(
         "max_tasks_per_child": task_limit,
         "strategy_id": MODEL_SPECIFIC_STRATEGY_ID,
         "strategy_surface_version": MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
+        "data_contract_version": HBT_DATA_CONTRACT_VERSION,
         "requested_strategy_id": str(strategy_id or MODEL_SPECIFIC_STRATEGY_ID),
         "strategy_override_ignored": str(strategy_id or MODEL_SPECIFIC_STRATEGY_ID) != MODEL_SPECIFIC_STRATEGY_ID,
         "dry_run": dry_run,
@@ -263,6 +266,8 @@ def _cached_receipt_matches_run(cached: Mapping[str, Any], settings: Mapping[str
         return False
     if str(cached.get("strategy_surface_version") or "") != MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION:
         return False
+    if str(cached.get("data_contract_version") or "") != HBT_DATA_CONTRACT_VERSION:
+        return False
     current_dry_run = bool(settings.get("dry_run"))
     cached_status = str(cached.get("status") or "")
     cached_dry_run = bool(cached.get("dry_run", cached_status == "dry_run"))
@@ -328,6 +333,7 @@ def _write_row_result(
         "parameter_hash": row.get("parameter_hash", ""),
         "strategy_id": MODEL_SPECIFIC_STRATEGY_ID,
         "strategy_surface_version": MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
+        "data_contract_version": HBT_DATA_CONTRACT_VERSION,
         "strategy_params": row.get("strategy_params", {}),
         "parameter_proposal_status": row.get("parameter_proposal_status", ""),
         "objective_evaluations": row.get("objective_evaluations", ""),

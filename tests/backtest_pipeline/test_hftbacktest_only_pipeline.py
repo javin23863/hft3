@@ -718,6 +718,7 @@ def test_validation_records_l3_hftbacktest_contract(
     validation = validate_hftbacktest_only_input(_config(tmp_path, data_path, snapshot_path))
 
     assert validation["data_validation_status"] == "pass"
+    assert validation["data_contract_version"] == "hft3_hbt_l3_side_flags_v1"
     assert validation["dtype_exact_match"] is True
     assert validation["timestamp_units"] == "nanoseconds"
     assert validation["official_validate_event_order_status"] == "pass"
