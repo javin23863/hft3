@@ -38,16 +38,39 @@ def test_stop_barrier_hit_short_side() -> None:
     assert frame.loc[0, "y_tb_return_ticks"] == -3.0
 
 
-def test_vertical_barrier_timeout() -> None:
-    # Flat path never touches barriers; 300ms max holding exits at last
-    # in-window observation.
+def test_vertical_barrier_timeout_exits_at_horizon_row() -> None:
+    # Flat path never touches barriers; 300ms max holding exits at the first
+    # observation at/after the horizon (the vertical-barrier row itself).
     mid = np.array([100.0, 100.0, 100.0, 100.0, 100.0])
     frame = build_triple_barrier_labels(
         mid, _ts(5), pt_ticks=2.0, sl_ticks=2.0, max_holding_ms=300, tick_size=TICK
     )
     assert frame.loc[0, "y_tb_outcome"] == 0.0
-    assert frame.loc[0, "y_tb_exit_idx"] == 2
-    assert frame.loc[0, "y_tb_holding_ms"] == 200.0
+    assert frame.loc[0, "y_tb_exit_idx"] == 3
+    assert frame.loc[0, "y_tb_holding_ms"] == 300.0
+
+
+def test_barrier_crossed_exactly_at_horizon_row_is_a_hit() -> None:
+    # Profit barrier first crossed AT the vertical-barrier timestamp counts
+    # as a profit hit, not a timeout at the previous tick.
+    mid = np.array([100.0, 100.0, 100.0, 101.0, 100.0])
+    frame = build_triple_barrier_labels(
+        mid, _ts(5), pt_ticks=2.0, sl_ticks=2.0, max_holding_ms=300, tick_size=TICK
+    )
+    assert frame.loc[0, "y_tb_outcome"] == 1.0
+    assert frame.loc[0, "y_tb_exit_idx"] == 3
+    assert frame.loc[0, "y_tb_return_ticks"] == 4.0
+
+
+def test_censored_horizon_without_barrier_hit_is_nan() -> None:
+    # Horizon extends beyond recorded data and no barrier hit: the timeout
+    # outcome is unknowable — NaN, never an invented early exit.
+    mid = np.array([100.0, 100.1, 100.1])
+    frame = build_triple_barrier_labels(
+        mid, _ts(3), pt_ticks=2.0, sl_ticks=2.0, max_holding_ms=10_000, tick_size=TICK
+    )
+    assert np.isnan(frame.loc[0, "y_tb_outcome"])
+    assert frame.loc[0, "y_tb_exit_idx"] == -1
 
 
 def test_tail_rows_have_nan_outcome() -> None:

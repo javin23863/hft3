@@ -128,25 +128,28 @@ def build_triple_barrier_labels(
 
     for i in range(n):
         start = i + 1  # strictly future
-        end = int(horizon_idx[i])
+        end = int(horizon_idx[i])  # first index with ts >= t0 + max_holding_ms
         if start >= n:
             continue
-        window = mid[start : max(end, start)]
+        # The vertical-barrier row itself is INCLUDED in the scan: a barrier
+        # first crossed exactly at the horizon timestamp is a barrier hit, and
+        # the timeout exit executes at that row (first observation at/after
+        # the horizon), not at the previous tick.
+        end_incl = min(end, n - 1)
+        window = mid[start : end_incl + 1]
         if len(window) == 0:
-            # Vertical barrier lands beyond recorded data with no interior
-            # ticks: fall back to the first strictly-future observation if it
-            # exists inside the frame, else leave NaN.
-            if end >= n:
-                continue
-            window = mid[start : end + 1]
-            if len(window) == 0:
-                continue
+            continue
         move_ticks = side_arr[i] * (window - mid[i]) / tick_size
         hit_pt = np.flatnonzero(move_ticks >= pt_ticks)
         hit_sl = np.flatnonzero(move_ticks <= -sl_ticks)
         first_pt = hit_pt[0] if len(hit_pt) else np.inf
         first_sl = hit_sl[0] if len(hit_sl) else np.inf
         if first_pt == np.inf and first_sl == np.inf:
+            if end > n - 1:
+                # Horizon extends beyond recorded data and no barrier hit:
+                # the timeout outcome is censored — leave NaN rather than
+                # inventing an early exit.
+                continue
             j = len(window) - 1
             outcome[i] = 0.0
         elif first_sl <= first_pt:
