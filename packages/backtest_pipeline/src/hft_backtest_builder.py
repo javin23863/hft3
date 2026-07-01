@@ -169,6 +169,11 @@ def build_hftbacktest(
     product: str = "MES",
     force_l3: Optional[bool] = None,
     prepared_data: bool = False,
+    initial_snapshot: Optional[str] = None,
+    maker_fee: Optional[float] = None,
+    taker_fee: Optional[float] = None,
+    contract_size: Optional[float] = None,
+    exchange_fill_model: str = "NoPartialFillExchange",
 ) -> HashMapMarketDepthBacktest:
     """Build a HashMapMarketDepthBacktest for the given NPZ data file.
 
@@ -245,13 +250,31 @@ def build_hftbacktest(
         # L2 path: pass file path directly (no filtering needed).
         asset.data(data_path)
 
+    if initial_snapshot:
+        asset.initial_snapshot(str(initial_snapshot))
+    if contract_size is not None and hasattr(asset, "linear_asset"):
+        asset.linear_asset(float(contract_size))
+
     asset.tick_size(tick_size)
     asset.lot_size(lot_size)
     _apply_latency_model(asset, latency_ms=latency_ms, latency_model=latency_model)
-    asset.no_partial_fill_exchange()
+    # NoPartialFillExchange stays the conservative base; PartialFillExchange
+    # matches CME reality (orders can split) and is a required Gate-3
+    # sensitivity axis — never a silent default change.
+    if exchange_fill_model == "NoPartialFillExchange":
+        asset.no_partial_fill_exchange()
+    elif exchange_fill_model == "PartialFillExchange":
+        asset.partial_fill_exchange()
+    else:
+        raise ValueError(f"Unsupported exchange fill model: {exchange_fill_model}")
 
-    fee = fee_model.get_fee_per_contract()
-    asset.trading_qty_fee_model(fee, fee)
+    # Explicit fee overrides (declared run economics) win over the FeeModel
+    # product default so executed fees always match the emitted config.
+    if maker_fee is not None or taker_fee is not None:
+        asset.trading_qty_fee_model(float(maker_fee or 0.0), float(taker_fee or 0.0))
+    else:
+        fee = fee_model.get_fee_per_contract()
+        asset.trading_qty_fee_model(fee, fee)
 
     if use_l3:
         # L3FIFOQueueModel: exact FIFO queue position tracked by order_id.

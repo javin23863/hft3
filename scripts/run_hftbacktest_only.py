@@ -91,6 +91,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--response-latency-ns", type=int, default=100_000)
     parser.add_argument("--exchange-fill-model", default="NoPartialFillExchange")
     parser.add_argument("--queue-model", default="L3FIFOQueueModel")
+    parser.add_argument(
+        "--latency-model",
+        default="constant_order_latency",
+        help=(
+            "constant_order_latency (default) or chi404_measured[:regime] to "
+            "use the measured CHI404 native-probe latency model; fails closed "
+            "when the probe summary is missing."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -153,6 +162,7 @@ def main(argv: list[str] | None = None) -> int:
         response_latency_ns=args.response_latency_ns,
         exchange_fill_model=args.exchange_fill_model,
         queue_model=args.queue_model,
+        latency_model=args.latency_model,
     )
     out_dir = (args.out_root / run_id).resolve()
     result = run_hftbacktest_only(config, out_dir=out_dir, dry_run=args.dry_run)

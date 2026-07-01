@@ -1224,13 +1224,40 @@ def _hbt_current_timestamp(hbt: Any) -> int | None:
         return None
 
 
+def _resolve_latency_ns(config: HftBacktestOnlyRunConfig) -> tuple[int, int]:
+    """Resolve (entry_ns, response_ns) for the declared latency model.
+
+    - "constant_order_latency" (default): entry/response ns from the config.
+    - "chi404_measured" or "chi404_measured:<regime>": measured CHI404
+      native-probe latency via chi404_latency.resolve_latency_model. Fails
+      closed when the probe summary is missing or unmeasured — never a
+      silent fallback to the constant default.
+    """
+    declared = str(config.latency_model)
+    if declared == "constant_order_latency":
+        return int(config.entry_latency_ns), int(config.response_latency_ns)
+    if declared == "chi404_measured" or declared.startswith("chi404_measured:"):
+        regime = declared.split(":", 1)[1] if ":" in declared else "stress"
+        try:
+            from backtest_pipeline.src.chi404_latency import resolve_latency_model
+
+            model = resolve_latency_model(regime=regime)
+        except (FileNotFoundError, ValueError) as exc:
+            raise HftBacktestOnlyPipelineError(f"chi404_latency_unmeasured:{exc}") from exc
+        entry_ms = model.get("order_entry_latency_ms")
+        resp_ms = model.get("order_response_latency_ms")
+        if not isinstance(entry_ms, (int, float)) or not isinstance(resp_ms, (int, float)):
+            raise HftBacktestOnlyPipelineError("chi404_latency_model_missing_components")
+        return int(float(entry_ms) * 1_000_000), int(float(resp_ms) * 1_000_000)
+    raise HftBacktestOnlyPipelineError(f"unsupported_latency_model:{declared}")
+
+
 def _apply_latency(asset: Any, config: HftBacktestOnlyRunConfig) -> None:
-    if config.latency_model != "constant_order_latency":
-        raise HftBacktestOnlyPipelineError("only_constant_order_latency_wired_in_minimal_slice")
+    entry_ns, response_ns = _resolve_latency_ns(config)
     if hasattr(asset, "constant_order_latency"):
-        asset.constant_order_latency(int(config.entry_latency_ns), int(config.response_latency_ns))
+        asset.constant_order_latency(entry_ns, response_ns)
     elif hasattr(asset, "constant_latency"):
-        asset.constant_latency(int(config.entry_latency_ns), int(config.response_latency_ns))
+        asset.constant_latency(entry_ns, response_ns)
     else:
         raise HftBacktestOnlyPipelineError("hftbacktest_constant_latency_api_missing")
 
