@@ -66,3 +66,44 @@ def test_toy_strategy_runs_all_adapter_modes(minimal_npz: str, tmp_path: Path) -
     assert 'if mode == "replay"' not in text
     assert 'if mode == "paper"' not in text
     assert 'if mode == "live"' not in text
+
+
+def test_no_direct_hbt_submit_outside_adapter_boundary() -> None:
+    """Grep-gate: hftbacktest submit_* calls stay behind the adapter boundary.
+
+    The OrderIntent adapter (HftBacktestSimulatedExchangeAdapter) and the
+    HBT-only lane's minimal probe are the only sanctioned direct callers.
+    Any other `.submit_buy_order(` / `.submit_sell_order(` call site is a
+    parity regression: order flow outside the audited lifecycle path.
+    """
+    repo = Path(__file__).resolve().parents[1]
+    allowed = {
+        # The OrderIntent adapter itself.
+        repo / "packages" / "execution" / "adapters" / "hftbacktest_simulated_exchange.py",
+        # HBT-only lane minimal probe (single sanctioned smoke order).
+        repo / "packages" / "backtest_pipeline" / "src" / "hftbacktest_only_pipeline.py",
+        # Legacy Stage-3 HBT4 minimal official replay (probe-class, same as above).
+        repo / "packages" / "backtest_pipeline" / "src" / "hftbacktest_realism.py",
+        # KNOWN DEBT: hybrid quote engine still drives hbt directly; its lane
+        # is fail-closed in hbt_strategy_factory until migrated to the adapter.
+        # Do not add new entries here without migrating them instead.
+        repo / "packages" / "backtest_pipeline" / "src" / "pdf_hybrid_strategy.py",
+    }
+    offenders: list[str] = []
+    for root in ("packages", "scripts", "apps"):
+        for path in (repo / root).rglob("*.py"):
+            if path in allowed or "__pycache__" in path.parts:
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if ".submit_buy_order(" in text or ".submit_sell_order(" in text:
+                offenders.append(str(path.relative_to(repo)))
+    assert offenders == [], f"direct hbt submit calls outside adapter boundary: {offenders}"
+
+
+def test_removed_direct_submit_strategy_raises_import_error() -> None:
+    import backtest_pipeline.src.hft_strategy as hft_strategy
+
+    with pytest.raises(ImportError, match="CombinedHypothesisStrategy was removed"):
+        hft_strategy.CombinedHypothesisStrategy  # noqa: B018
+    # Canonical replacement stays importable from the shim.
+    assert hft_strategy.CombinedHypothesisReplayStrategy is not None

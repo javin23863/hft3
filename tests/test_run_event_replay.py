@@ -42,7 +42,11 @@ def test_load_event_row_from_run_event_replay():
 
 
 def test_combined_strategy_max_abs_beats_mean_on_sparse_signals():
-    from backtest_pipeline.src.hft_strategy import CombinedHypothesisStrategy
+    from hftbacktest.types import event_dtype
+
+    from backtest_pipeline.src.hypothesis_replay_strategy import (
+        CombinedHypothesisReplayStrategy,
+    )
     from features_engine.src.hypotheses.modules import BaseHypothesis, MarketState
 
     class AlwaysZero(BaseHypothesis):
@@ -60,8 +64,13 @@ def test_combined_strategy_max_abs_beats_mean_on_sparse_signals():
             return -0.5
 
     hyps = [AlwaysZero(), AlwaysZero(), AlwaysZero(), StrongShort()]
-    mean_strat = CombinedHypothesisStrategy(hyps, aggregate_mode="mean", signal_threshold=0.15)
-    max_strat = CombinedHypothesisStrategy(hyps, aggregate_mode="max_abs", signal_threshold=0.15)
+    no_events = np.zeros(0, dtype=event_dtype)
+    mean_strat = CombinedHypothesisReplayStrategy(
+        hyps, no_events, aggregate_mode="mean", signal_threshold=0.15
+    )
+    max_strat = CombinedHypothesisReplayStrategy(
+        hyps, no_events, aggregate_mode="max_abs", signal_threshold=0.15
+    )
     state = MarketState(
         primary_features={},
         cross_asset_features={},
