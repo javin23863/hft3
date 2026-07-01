@@ -57,6 +57,7 @@ _STRUCTURAL_SIGNAL_FIELDS_BY_CLASS = {
     "StochasticThermoModel": (),
     "HawkesToxicFlowModel": ("reservation_price_skew",),
 }
+HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION = "hypothesis_limit_order_event_scan_v2"
 
 
 class HftBacktestOnlyPipelineError(ValueError):
@@ -107,6 +108,7 @@ class HftBacktestOnlyRunConfig:
             "normalized_npz": str(self.normalized_npz),
             "initial_snapshot": str(self.initial_snapshot),
             "strategy_id": self.strategy_id,
+            "strategy_surface_version": _strategy_surface_version(self.strategy_id),
             "strategy_params": dict(self.strategy_params),
             "canonical_model_id": self.canonical_model_id,
             "legacy_aliases": list(self.legacy_aliases),
@@ -495,8 +497,14 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         side = str(params.get("side", "BUY")).upper()
     try:
         quantity = _positive_float(params.get("quantity", 1.0), "strategy_params.quantity")
-        max_steps = _strategy_max_steps(params)
         interval_ns = _positive_int(params.get("interval_ns", 1_000_000_000), "strategy_params.interval_ns")
+        entry_scan_steps, max_loop_steps = _strategy_entry_scan_steps(
+            config,
+            params,
+            interval_ns,
+            require_event_window=config.strategy_id == "hypothesis_limit_order",
+        )
+        holding_steps = _strategy_holding_steps(params)
         order_id = _positive_int(params.get("order_id", 9001), "strategy_params.order_id")
         signal_threshold = _positive_float(params.get("signal_threshold", 0.15), "strategy_params.signal_threshold")
     except HftBacktestOnlyPipelineError as exc:
@@ -552,6 +560,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     cancel_response_ret = None
     order_snapshot: dict[str, Any] = {}
     last_recorded_exec_qty = 0.0
+    submitted_step: int | None = None
 
     def record_order_state(event_type: str, state: Any, step: int) -> None:
         nonlocal last_recorded_exec_qty, order_snapshot
@@ -580,7 +589,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         )
 
     try:
-        for step in range(max_steps):
+        for step in range(max_loop_steps):
             ret, api_name = _advance_hbt(hbt, interval_ns)
             api_calls.append(api_name)
             if ret != 0:
@@ -593,9 +602,13 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                 record_order_state("ORDER_STATE_AFTER_ELAPSE", state, step)
                 _maybe_call(hbt, "clear_inactive_orders", 0)
                 api_calls.append("HashMapMarketDepthBacktest.clear_inactive_orders")
+                if submitted_step is not None and step - submitted_step >= holding_steps:
+                    break
                 continue
             signal_value = None
             if signal_lookup is not None:
+                if step >= entry_scan_steps:
+                    continue
                 signal_value = signal_lookup(_hbt_current_timestamp(hbt))
                 if abs(signal_value) < signal_threshold:
                     continue
@@ -616,10 +629,12 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             response_ret = int(hbt.wait_order_response(0, order_id, interval_ns))
             api_calls.append("HashMapMarketDepthBacktest.wait_order_response")
             submitted = True
+            submitted_step = step
             orders.append(
                 {
                     "order_id": order_id,
                     "event_type": "ORDER_SUBMITTED",
+                    "step": step,
                     "side": side,
                     "price": price,
                     "quantity": quantity,
@@ -632,6 +647,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             api_calls.append("HashMapMarketDepthBacktest.state_values")
             record_order_state("ORDER_STATE", state, step)
         if submitted and float(order_snapshot.get("leaves_qty") or 0.0) > 0 and hasattr(hbt, "cancel"):
+            cancel_step = min(max_loop_steps, int(submitted_step or 0) + holding_steps)
             cancel_ret = int(hbt.cancel(0, order_id, False))
             api_calls.append("HashMapMarketDepthBacktest.cancel")
             cancel_response_ret = int(hbt.wait_order_response(0, order_id, interval_ns))
@@ -640,13 +656,14 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                 {
                     "order_id": order_id,
                     "event_type": "ORDER_CANCEL_REQUESTED",
+                    "step": cancel_step,
                     "cancel_return_code": cancel_ret,
                     "cancel_response_return_code": cancel_response_ret,
                 }
             )
             state = _state_values(hbt)
             api_calls.append("HashMapMarketDepthBacktest.state_values")
-            record_order_state("ORDER_STATE_AFTER_CANCEL", state, max_steps)
+            record_order_state("ORDER_STATE_AFTER_CANCEL", state, cancel_step)
         _maybe_call(hbt, "clear_inactive_orders", 0)
         final_state = _state_values(hbt)
     except Exception as exc:
@@ -687,11 +704,18 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "contract": config.contract,
         "event_id": config.event_id,
         "strategy_id": config.strategy_id,
+        "strategy_surface_version": _strategy_surface_version(config.strategy_id),
         "strategy_params": params,
+        "entry_scan_steps": entry_scan_steps,
+        "max_loop_steps": max_loop_steps,
+        "holding_period_bars": holding_steps,
         "legacy_aliases": list(config.legacy_aliases),
         "authority_refs": list(config.authority_refs),
         "strategy_adapter_status": signal_meta.get("adapter_status", "smoke_limit_order"),
         "signal_observations": signal_meta.get("signal_observations", 0),
+        "signal_min": signal_meta.get("signal_min"),
+        "signal_max": signal_meta.get("signal_max"),
+        "signal_abs_max": signal_meta.get("signal_abs_max"),
         "signal_source": signal_meta.get("signal_source", "none"),
         "signal_field": signal_meta.get("signal_field", ""),
         "feature_backend": signal_meta.get("feature_backend", "none"),
@@ -769,6 +793,7 @@ def _build_model_signal_lookup(
     return lookup, {
         "adapter_status": "available",
         "signal_observations": len(observations),
+        **_signal_stats(observations),
         "signal_source": "hbt_normalized_mbo_market_state_pipeline",
         "signal_field": "hypothesis.evaluate",
         "feature_backend": getattr(pipeline, "feature_backend", "unknown"),
@@ -829,6 +854,7 @@ def _build_structural_signal_lookup(
     return lookup, {
         "adapter_status": "available",
         "signal_observations": len(observations),
+        **_signal_stats(observations),
         "signal_source": "hbt_normalized_mbo_structural_integrator",
         "signal_field": ",".join(sorted(signal_fields)),
         "feature_backend": "structural_integrator_python",
@@ -1011,6 +1037,7 @@ def _strategy_config(config: HftBacktestOnlyRunConfig) -> dict[str, Any]:
     return {
         "schema_version": "hft3_hftbacktest_only_strategy_config_v1",
         "strategy_id": config.strategy_id,
+        "strategy_surface_version": _strategy_surface_version(config.strategy_id),
         "strategy_params": dict(config.strategy_params),
         "canonical_model_id": config.canonical_model_id,
         "legacy_aliases": list(config.legacy_aliases),
@@ -1056,6 +1083,7 @@ def _stats_summary(config: HftBacktestOnlyRunConfig, replay: Mapping[str, Any], 
         "contract": config.contract,
         "event_id": config.event_id,
         "strategy_id": config.strategy_id,
+        "strategy_surface_version": _strategy_surface_version(config.strategy_id),
         "recorder_result": str(recorder_path),
         "mechanical_validity_status": "pass" if mechanical_pass else "fail",
         "economic_result_status": "pass" if isinstance(net_pnl, (int, float)) and net_pnl > 0 else "observe",
@@ -1158,12 +1186,16 @@ def _not_run_replay(reason: str, config: HftBacktestOnlyRunConfig) -> dict[str, 
         "contract": config.contract,
         "event_id": config.event_id,
         "strategy_id": config.strategy_id,
+        "strategy_surface_version": _strategy_surface_version(config.strategy_id),
         "strategy_adapter_status": (
             "missing_uniform_hbt_adapter"
             if "missing_uniform_hbt_adapter" in reason
             else "not_run"
         ),
         "signal_observations": 0,
+        "signal_min": None,
+        "signal_max": None,
+        "signal_abs_max": None,
         "signal_source": "none",
         "legacy_aliases": list(config.legacy_aliases),
         "authority_refs": list(config.authority_refs),
@@ -1517,14 +1549,73 @@ def _positive_float(value: Any, name: str) -> float:
     return parsed
 
 
-def _strategy_max_steps(params: Mapping[str, Any]) -> int:
+def _strategy_surface_version(strategy_id: str) -> str:
+    if strategy_id == "hypothesis_limit_order":
+        return HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION
+    return "smoke_limit_order_single_order_v1"
+
+
+def _strategy_entry_scan_steps(
+    config: HftBacktestOnlyRunConfig,
+    params: Mapping[str, Any],
+    interval_ns: int,
+    *,
+    require_event_window: bool = False,
+) -> tuple[int, int]:
     if "max_steps" in params:
-        return _positive_int(params.get("max_steps"), "strategy_params.max_steps")
+        steps = _positive_int(params.get("max_steps"), "strategy_params.max_steps")
+        return steps, steps
     if "max_feed_steps" in params:
-        return _positive_int(params.get("max_feed_steps"), "strategy_params.max_feed_steps")
+        steps = _positive_int(params.get("max_feed_steps"), "strategy_params.max_feed_steps")
+        return steps, steps
+    cutoff_ts = _int_mapping_value(config.event_window, "cutoff_ts_ns")
+    end_ts = _int_mapping_value(config.event_window, "end_ts_ns")
+    if cutoff_ts is None:
+        cutoff_ts = _int_mapping_value(config.event_window, "start_ts_ns")
+    if cutoff_ts is not None and end_ts is not None and end_ts > cutoff_ts:
+        entry_steps = max(1, int(math.ceil((end_ts - cutoff_ts) / float(interval_ns))))
+    elif require_event_window:
+        raise HftBacktestOnlyPipelineError("pipeline_blocker:event_window_required_for_entry_scan")
+    else:
+        entry_steps = 3
+    return entry_steps, entry_steps + _strategy_holding_steps(params)
+
+
+def _strategy_holding_steps(params: Mapping[str, Any]) -> int:
     if "holding_period_bars" in params:
         return _positive_int(params.get("holding_period_bars"), "strategy_params.holding_period_bars")
     return 3
+
+
+def _int_mapping_value(payload: Mapping[str, Any], key: str) -> int | None:
+    try:
+        value = payload.get(key)
+    except AttributeError:
+        return None
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _signal_stats(observations: list[tuple[int, float]]) -> dict[str, float | None]:
+    values: list[float] = []
+    for _timestamp, value in observations:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(numeric):
+            values.append(numeric)
+    if not values:
+        return {"signal_min": None, "signal_max": None, "signal_abs_max": None}
+    return {
+        "signal_min": min(values),
+        "signal_max": max(values),
+        "signal_abs_max": max(abs(value) for value in values),
+    }
 
 
 def _positive_int(value: Any, name: str) -> int:

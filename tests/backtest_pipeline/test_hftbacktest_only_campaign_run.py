@@ -368,6 +368,8 @@ def test_campaign_runner_multiworker_recycles_and_resumes_existing_receipts(
         "status": "dry_run",
         "blocker_code": "",
         "strategy_id": "hypothesis_limit_order",
+        "strategy_surface_version": module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
+        "dry_run": True,
         "canonical_model_id": rows[0]["canonical_model_id"],
     }
     existing_dir = out_root / "hbt_campaign_test" / "unit_admissible"
@@ -456,6 +458,7 @@ def test_campaign_runner_resume_reruns_stale_receipts_without_strategy_id(
     receipt = json.loads((existing_dir / "campaign_row_result.json").read_text(encoding="utf-8"))
     assert receipt["status"] == "completed"
     assert receipt["strategy_id"] == "hypothesis_limit_order"
+    assert receipt["strategy_surface_version"] == module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION
     assert receipt["dry_run"] is False
     assert receipt["hbt_run_id"] == "unit_admissible"
 
@@ -482,6 +485,7 @@ def test_campaign_runner_paid_resume_reruns_dry_run_receipts(
     receipt_path = next(Path(dry_summary["out_root"]).glob("*/campaign_row_result.json"))
     dry_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     assert dry_receipt["strategy_id"] == "hypothesis_limit_order"
+    assert dry_receipt["strategy_surface_version"] == module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION
     assert dry_receipt["status"] == "dry_run"
     assert dry_receipt["dry_run"] is True
     captured_strategy_ids: list[str] = []
@@ -505,8 +509,57 @@ def test_campaign_runner_paid_resume_reruns_dry_run_receipts(
     paid_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     assert paid_receipt["status"] == "completed"
     assert paid_receipt["strategy_id"] == "hypothesis_limit_order"
+    assert paid_receipt["strategy_surface_version"] == module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION
     assert paid_receipt["dry_run"] is False
     assert paid_receipt["hbt_run_id"] == "unit_admissible"
+
+
+def test_campaign_runner_resume_reruns_stale_receipts_without_surface_version(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_runner_module()
+    _write_valid_npz(tmp_path / "data.npz")
+    _write_valid_npz(tmp_path / "snapshot.npz")
+    row = _campaign_row(tmp_path)
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    out_root = tmp_path / "runs"
+    existing_dir = out_root / "hbt_campaign_test" / "unit_admissible"
+    existing_dir.mkdir(parents=True)
+    (existing_dir / "campaign_row_result.json").write_text(
+        json.dumps(
+            {
+                "status": "pipeline_blocker",
+                "blocker_code": "pipeline_blocker:no_hbt_order_submitted",
+                "strategy_id": "hypothesis_limit_order",
+                "dry_run": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    captured_strategy_ids: list[str] = []
+
+    def fake_run(config: object, **_kwargs: object) -> dict[str, object]:
+        captured_strategy_ids.append(config.strategy_id)
+        return {"status": "completed", "fail_closed_reasons": []}
+
+    monkeypatch.setattr(module, "run_hftbacktest_only", fake_run)
+
+    summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=out_root,
+        dry_run=False,
+        workers=1,
+        resume=True,
+    )
+
+    assert summary["status_counts"] == {"completed": 1}
+    assert captured_strategy_ids == ["hypothesis_limit_order"]
+    receipt = json.loads((existing_dir / "campaign_row_result.json").read_text(encoding="utf-8"))
+    assert receipt["status"] == "completed"
+    assert receipt["strategy_id"] == "hypothesis_limit_order"
+    assert receipt["strategy_surface_version"] == module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION
 
 
 def test_campaign_runner_resume_reruns_stale_receipts_with_noncanonical_strategy_id(
