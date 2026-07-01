@@ -7,6 +7,19 @@ from pathlib import Path
 from types import ModuleType
 
 import numpy as np
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _restore_hftbacktest_modules():
+    module_names = ("hftbacktest", "hftbacktest.data", "hftbacktest.types")
+    original = {name: sys.modules.get(name) for name in module_names}
+    yield
+    for name, module in original.items():
+        if module is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
 
 
 def _load_runner_module():
@@ -27,6 +40,8 @@ def _install_fake_hftbacktest() -> None:
     hft_types.EXCH_EVENT = 1 << 8
     hft_types.LOCAL_EVENT = 1 << 9
     hft_types.ADD_ORDER_EVENT = 10
+    hft_types.BUY_EVENT = 1 << 10
+    hft_types.SELL_EVENT = 1 << 11
     hft_types.DEPTH_EVENT = 1
     hft_types.TRADE_EVENT = 2
     hft_types.CANCEL_ORDER_EVENT = 11
@@ -70,7 +85,8 @@ def _write_valid_npz(path: Path) -> Path:
     )
     events = np.zeros(2, dtype=dtype)
     for index in range(2):
-        events[index]["ev"] = 10 | (1 << 8) | (1 << 9)
+        side = (1 << 10) if index == 0 else (1 << 11)
+        events[index]["ev"] = 10 | side | (1 << 8) | (1 << 9)
         events[index]["exch_ts"] = 1_000_000_000 + index * 100
         events[index]["local_ts"] = 1_000_000_100 + index * 100
         events[index]["px"] = 5000.0 + index * 0.25
@@ -356,6 +372,7 @@ def test_campaign_runner_multiworker_recycles_and_resumes_existing_receipts(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    _install_fake_hftbacktest()
     module = _load_runner_module()
     rows = [
         _campaign_row(tmp_path),
@@ -467,6 +484,7 @@ def test_campaign_runner_paid_resume_reruns_dry_run_receipts(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    _install_fake_hftbacktest()
     module = _load_runner_module()
     _write_valid_npz(tmp_path / "data.npz")
     _write_valid_npz(tmp_path / "snapshot.npz")

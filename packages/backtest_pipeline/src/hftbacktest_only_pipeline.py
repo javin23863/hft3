@@ -344,9 +344,11 @@ def validate_hftbacktest_only_input(config: HftBacktestOnlyRunConfig) -> dict[st
                 elif l2_l3_classification == "unknown_rejected":
                     reasons.append("EVENT_TYPE_UNKNOWN")
                 elif l2_l3_classification == "l3_mbo":
-                    add_mask = ((events["ev"].astype("int64") & 0xFF) == constants["ADD_ORDER_EVENT"])
+                    ev = events["ev"].astype("uint64")
+                    add_mask = ((ev & 0xFF) == constants["ADD_ORDER_EVENT"])
                     if bool(add_mask.any()) and bool((events["order_id"][add_mask] == 0).any()):
                         reasons.append("L3_ORDER_ID_MISSING")
+                    reasons.extend(_l3_add_side_flag_reasons(events, constants))
             else:
                 reasons.append("HFTBACKTEST_EVENT_CONSTANTS_UNAVAILABLE")
 
@@ -1239,6 +1241,7 @@ def _require_event_fields(events: Any) -> None:
 
 def _snapshot_from_warmup(warmup: np.ndarray, cutoff_ts_ns: int) -> np.ndarray:
     active: dict[int, Any] = {}
+    constants = _event_constants()
     for row in warmup:
         event_type = _event_type(row)
         order_id = int(row["order_id"])
@@ -1247,7 +1250,9 @@ def _snapshot_from_warmup(warmup: np.ndarray, cutoff_ts_ns: int) -> np.ndarray:
         if event_type == _ADD_ORDER_EVENT:
             active[order_id] = row.copy()
         elif event_type == _MODIFY_ORDER_EVENT and order_id in active:
-            active[order_id] = row.copy()
+            updated = row.copy()
+            updated["ev"] = _preserve_l3_side_bits(updated["ev"], active[order_id]["ev"], constants)
+            active[order_id] = updated
         elif event_type == _TRADE_EVENT and order_id in active:
             _reduce_active_order(active, order_id, row)
         elif event_type in {_CANCEL_ORDER_EVENT, _FILL_EVENT}:
@@ -1373,13 +1378,23 @@ def _timestamp_units_value(value: Any) -> str:
 
 
 def _snapshot_read_reasons(path: Path) -> list[str]:
+    reasons: list[str] = []
     try:
         with np.load(path, allow_pickle=False) as payload:
             if "data" not in payload.files:
                 return ["INITIAL_SNAPSHOT_MISSING_DATA_ARRAY"]
+            constants = _event_constants()
+            if constants:
+                reasons.extend(
+                    _l3_add_side_flag_reasons(
+                        payload["data"],
+                        constants,
+                        reason="INITIAL_SNAPSHOT_L3_SIDE_FLAG_MISSING_OR_AMBIGUOUS",
+                    )
+                )
     except Exception as exc:
         return [f"INITIAL_SNAPSHOT_READ_FAILED:{type(exc).__name__}"]
-    return []
+    return reasons
 
 
 def _expected_event_dtype() -> Any | None:
@@ -1399,6 +1414,8 @@ def _event_constants() -> dict[str, int]:
             "EXCH_EVENT": int(hbt_types.EXCH_EVENT),
             "LOCAL_EVENT": int(hbt_types.LOCAL_EVENT),
             "ADD_ORDER_EVENT": int(hbt_types.ADD_ORDER_EVENT),
+            "BUY_EVENT": int(hbt_types.BUY_EVENT),
+            "SELL_EVENT": int(hbt_types.SELL_EVENT),
             "DEPTH_EVENT": int(hbt_types.DEPTH_EVENT),
             "TRADE_EVENT": int(getattr(hbt_types, "TRADE_EVENT", 2)),
             "CANCEL_ORDER_EVENT": int(hbt_types.CANCEL_ORDER_EVENT),
@@ -1407,6 +1424,33 @@ def _event_constants() -> dict[str, int]:
         }
     except Exception:
         return {}
+
+
+def _l3_add_side_flag_reasons(
+    events: Any,
+    constants: Mapping[str, int],
+    *,
+    reason: str = "L3_SIDE_FLAG_MISSING_OR_AMBIGUOUS",
+) -> list[str]:
+    try:
+        ev = events["ev"].astype("uint64")
+    except Exception:
+        return []
+    add_mask = ((ev & 0xFF) == constants["ADD_ORDER_EVENT"])
+    if not bool(add_mask.any()):
+        return []
+    buy_mask = (ev & constants["BUY_EVENT"]) == constants["BUY_EVENT"]
+    sell_mask = (ev & constants["SELL_EVENT"]) == constants["SELL_EVENT"]
+    has_exactly_one_side = np.logical_xor(buy_mask[add_mask], sell_mask[add_mask])
+    return [] if bool(has_exactly_one_side.all()) else [reason]
+
+
+def _preserve_l3_side_bits(value: Any, previous_value: Any, constants: Mapping[str, int]) -> int:
+    if not constants:
+        return int(value)
+    side_mask = int(constants["BUY_EVENT"]) | int(constants["SELL_EVENT"])
+    current = int(value)
+    return (current & ~side_mask) | (int(previous_value) & side_mask)
 
 
 def _classify_events(events: Any, constants: Mapping[str, int]) -> str:
