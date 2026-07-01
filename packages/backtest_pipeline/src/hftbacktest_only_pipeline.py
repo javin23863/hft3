@@ -59,6 +59,7 @@ _STRUCTURAL_SIGNAL_FIELDS_BY_CLASS = {
     "HawkesToxicFlowModel": ("reservation_price_skew",),
 }
 HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION = "hypothesis_limit_order_event_scan_v2"
+HYPOTHESIS_LIMIT_ORDER_EXIT_LEG_SURFACE_VERSION = "hypothesis_limit_order_event_scan_v3_exit_leg"
 
 
 class HftBacktestOnlyPipelineError(ValueError):
@@ -109,7 +110,7 @@ class HftBacktestOnlyRunConfig:
             "normalized_npz": str(self.normalized_npz),
             "initial_snapshot": str(self.initial_snapshot),
             "strategy_id": self.strategy_id,
-            "strategy_surface_version": _strategy_surface_version(self.strategy_id),
+            "strategy_surface_version": _strategy_surface_version(self.strategy_id, self.strategy_params),
             "strategy_params": dict(self.strategy_params),
             "canonical_model_id": self.canonical_model_id,
             "legacy_aliases": list(self.legacy_aliases),
@@ -511,9 +512,32 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         holding_steps = _strategy_holding_steps(params)
         order_id = _positive_int(params.get("order_id", 9001), "strategy_params.order_id")
         signal_threshold = _positive_float(params.get("signal_threshold", 0.15), "strategy_params.signal_threshold")
+        stop_loss_pct = (
+            _positive_float(params.get("stop_loss_pct"), "strategy_params.stop_loss_pct")
+            if params.get("stop_loss_pct") is not None
+            else None
+        )
+        take_profit_pct = (
+            _positive_float(params.get("take_profit_pct"), "strategy_params.take_profit_pct")
+            if params.get("take_profit_pct") is not None
+            else None
+        )
+        exit_at_holding = bool(params.get("exit_at_holding", False))
+        exit_fill_grace_steps = _positive_int(
+            params.get("exit_fill_grace_steps", 10), "strategy_params.exit_fill_grace_steps"
+        )
     except HftBacktestOnlyPipelineError as exc:
         reason = str(exc)
         return _not_run_replay(reason, config), [reason]
+    # Exit leg: closes the filled position with a second marketable order on
+    # stop-loss / take-profit / holding expiry, producing closed-trade
+    # realized PnL. Off by default: without exit params the surface keeps the
+    # exact v2 semantics (hold, then cancel leaves; position never closed).
+    # stop_loss_pct/take_profit_pct are percent of the entry execution price
+    # (VectorBT screen parity).
+    exit_leg_enabled = (
+        stop_loss_pct is not None or take_profit_pct is not None or exit_at_holding
+    )
     price_mode = str(params.get("price_mode", "passive_best_bid_or_ask"))
     if side not in {"BUY", "SELL"}:
         return _not_run_replay("invalid_strategy_side", config), ["invalid_strategy_side"]
@@ -565,6 +589,17 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     order_snapshot: dict[str, Any] = {}
     last_recorded_exec_qty = 0.0
     submitted_step: int | None = None
+    # Exit-leg state (all inert when exit_leg_enabled is False).
+    exit_order_id = order_id + 1
+    exit_snapshot: dict[str, Any] = {}
+    last_exit_exec_qty = 0.0
+    exit_submitted = False
+    exit_submitted_step: int | None = None
+    exit_submit_ret: int | None = None
+    exit_response_ret: int | None = None
+    exit_reason = ""
+    last_mid: float | None = None
+    max_abs_position = 0.0
 
     def record_order_state(event_type: str, state: Any, step: int) -> None:
         nonlocal last_recorded_exec_qty, order_snapshot
@@ -592,21 +627,143 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             }
         )
 
+    def record_exit_order_state(event_type: str, state: Any, step: int) -> None:
+        nonlocal last_exit_exec_qty, exit_snapshot
+        active_orders = hbt.orders(0)
+        api_calls.append("HashMapMarketDepthBacktest.orders")
+        order_obj = _get_order(active_orders, exit_order_id)
+        snapshot = _order_snapshot(order_obj)
+        if not snapshot:
+            return
+        exit_snapshot = snapshot
+        orders.append({"order_id": exit_order_id, "event_type": event_type, "step": step, **snapshot})
+        exec_qty = float(snapshot.get("exec_qty") or 0.0)
+        if exec_qty <= last_exit_exec_qty:
+            return
+        fill_delta = exec_qty - last_exit_exec_qty
+        last_exit_exec_qty = exec_qty
+        fills.append(
+            {
+                "order_id": exit_order_id,
+                "step": step,
+                "filled_quantity": fill_delta,
+                "cumulative_exec_qty": exec_qty,
+                "avg_fill_price": float(snapshot.get("exec_price") or 0.0),
+                "fees": _float_field(state, "fee"),
+                "leg": "exit",
+            }
+        )
+
     try:
-        for step in range(max_loop_steps):
+        total_loop_steps = max_loop_steps + (exit_fill_grace_steps + 1 if exit_leg_enabled else 0)
+        for step in range(total_loop_steps):
             ret, api_name = _advance_hbt(hbt, interval_ns)
             api_calls.append(api_name)
             if ret != 0:
                 break
             state = _state_values(hbt)
             api_calls.append("HashMapMarketDepthBacktest.state_values")
-            positions.append({"step": step, "position": _float_field(state, "position"), "balance": _float_field(state, "balance"), "fee": _float_field(state, "fee")})
+            step_position = _float_field(state, "position")
+            max_abs_position = max(max_abs_position, abs(step_position))
+            positions.append({"step": step, "position": step_position, "balance": _float_field(state, "balance"), "fee": _float_field(state, "fee")})
             equity.append({"step": step, "net_pnl": _float_field(state, "balance")})
             if submitted:
                 record_order_state("ORDER_STATE_AFTER_ELAPSE", state, step)
+                if exit_submitted:
+                    record_exit_order_state("EXIT_ORDER_STATE_AFTER_ELAPSE", state, step)
+                    _maybe_call(hbt, "clear_inactive_orders", 0)
+                    api_calls.append("HashMapMarketDepthBacktest.clear_inactive_orders")
+                    if last_exit_exec_qty >= last_recorded_exec_qty - 1e-12:
+                        break
+                    if (
+                        exit_submitted_step is not None
+                        and step - exit_submitted_step >= exit_fill_grace_steps
+                    ):
+                        break
+                    continue
                 _maybe_call(hbt, "clear_inactive_orders", 0)
                 api_calls.append("HashMapMarketDepthBacktest.clear_inactive_orders")
-                if submitted_step is not None and step - submitted_step >= holding_steps:
+                time_exit_due = (
+                    submitted_step is not None and step - submitted_step >= holding_steps
+                )
+                if exit_leg_enabled and last_recorded_exec_qty > 0:
+                    entry_avg_px = float(order_snapshot.get("exec_price") or 0.0)
+                    depth = hbt.depth(0)
+                    api_calls.append("HashMapMarketDepthBacktest.depth")
+                    best_bid = _float_field(depth, "best_bid", math.nan)
+                    best_ask = _float_field(depth, "best_ask", math.nan)
+                    if (
+                        not math.isnan(best_bid)
+                        and not math.isnan(best_ask)
+                        and best_bid > 0
+                        and best_ask > 0
+                    ):
+                        last_mid = (best_bid + best_ask) / 2.0
+                    if entry_avg_px > 0 and last_mid is not None:
+                        direction = 1.0 if side == "BUY" else -1.0
+                        pnl_frac = direction * (last_mid - entry_avg_px) / entry_avg_px
+                        if stop_loss_pct is not None and pnl_frac <= -stop_loss_pct / 100.0:
+                            exit_reason = "stop_loss"
+                        elif take_profit_pct is not None and pnl_frac >= take_profit_pct / 100.0:
+                            exit_reason = "take_profit"
+                    if not exit_reason and time_exit_due:
+                        exit_reason = "max_holding"
+                    if exit_reason:
+                        if float(order_snapshot.get("leaves_qty") or 0.0) > 0 and hasattr(hbt, "cancel"):
+                            cancel_ret = int(hbt.cancel(0, order_id, False))
+                            api_calls.append("HashMapMarketDepthBacktest.cancel")
+                            cancel_response_ret = int(hbt.wait_order_response(0, order_id, interval_ns))
+                            api_calls.append("HashMapMarketDepthBacktest.wait_order_response")
+                            orders.append(
+                                {
+                                    "order_id": order_id,
+                                    "event_type": "ORDER_CANCEL_REQUESTED",
+                                    "step": step,
+                                    "cancel_return_code": cancel_ret,
+                                    "cancel_response_return_code": cancel_response_ret,
+                                }
+                            )
+                        exit_side = "SELL" if side == "BUY" else "BUY"
+                        depth = hbt.depth(0)
+                        api_calls.append("HashMapMarketDepthBacktest.depth")
+                        exit_price = _price_from_depth(depth, exit_side, "cross_spread")
+                        if exit_price is None:
+                            # Book unusable this step; retry next step.
+                            exit_reason = ""
+                            continue
+                        exit_qty = last_recorded_exec_qty
+                        if exit_side == "BUY":
+                            exit_submit_ret = int(
+                                hbt.submit_buy_order(0, exit_order_id, exit_price, exit_qty, GTC, LIMIT, False)
+                            )
+                            api_calls.append("HashMapMarketDepthBacktest.submit_buy_order")
+                        else:
+                            exit_submit_ret = int(
+                                hbt.submit_sell_order(0, exit_order_id, exit_price, exit_qty, GTC, LIMIT, False)
+                            )
+                            api_calls.append("HashMapMarketDepthBacktest.submit_sell_order")
+                        exit_response_ret = int(hbt.wait_order_response(0, exit_order_id, interval_ns))
+                        api_calls.append("HashMapMarketDepthBacktest.wait_order_response")
+                        exit_submitted = True
+                        exit_submitted_step = step
+                        orders.append(
+                            {
+                                "order_id": exit_order_id,
+                                "event_type": "EXIT_ORDER_SUBMITTED",
+                                "step": step,
+                                "side": exit_side,
+                                "price": exit_price,
+                                "quantity": exit_qty,
+                                "reason_code": exit_reason,
+                                "submit_return_code": exit_submit_ret,
+                                "response_return_code": exit_response_ret,
+                            }
+                        )
+                        state = _state_values(hbt)
+                        api_calls.append("HashMapMarketDepthBacktest.state_values")
+                        record_exit_order_state("EXIT_ORDER_STATE", state, step)
+                        continue
+                if time_exit_due:
                     break
                 continue
             signal_value = None
@@ -668,6 +825,23 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             state = _state_values(hbt)
             api_calls.append("HashMapMarketDepthBacktest.state_values")
             record_order_state("ORDER_STATE_AFTER_CANCEL", state, cancel_step)
+        if exit_submitted and float(exit_snapshot.get("leaves_qty") or 0.0) > 0 and hasattr(hbt, "cancel"):
+            # Grace window expired with exit residual: cancel leaves and report
+            # the residual honestly as open inventory.
+            hbt.cancel(0, exit_order_id, False)
+            api_calls.append("HashMapMarketDepthBacktest.cancel")
+            hbt.wait_order_response(0, exit_order_id, interval_ns)
+            api_calls.append("HashMapMarketDepthBacktest.wait_order_response")
+            orders.append(
+                {
+                    "order_id": exit_order_id,
+                    "event_type": "EXIT_ORDER_CANCEL_REQUESTED",
+                    "step": exit_submitted_step,
+                }
+            )
+            state = _state_values(hbt)
+            api_calls.append("HashMapMarketDepthBacktest.state_values")
+            record_exit_order_state("EXIT_ORDER_STATE_AFTER_CANCEL", state, exit_submitted_step or 0)
         _maybe_call(hbt, "clear_inactive_orders", 0)
         final_state = _state_values(hbt)
     except Exception as exc:
@@ -698,6 +872,41 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     total_filled_qty = sum(float(row.get("filled_quantity") or 0.0) for row in fills)
     filled_orders = 1 if total_filled_qty > 0 else 0
     fill_rate = filled_orders / orders_submitted if orders_submitted else 0.0
+
+    # Exit-leg economics: closed-trade realized PnL in account currency
+    # (price move x closed qty x contract multiplier, minus total fees), plus
+    # any residual open inventory marked to the last observed two-sided mid.
+    direction = 1.0 if side == "BUY" else -1.0
+    contract_multiplier = float(config.contract_size or 1.0)
+    total_fees_currency = _float_field(final_state, "fee")
+    entry_avg_price = float(order_snapshot.get("exec_price") or 0.0) if last_recorded_exec_qty > 0 else None
+    exit_avg_price = float(exit_snapshot.get("exec_price") or 0.0) if last_exit_exec_qty > 0 else None
+    closed_quantity = min(last_recorded_exec_qty, last_exit_exec_qty)
+    realized_closed_trade_pnl = None
+    unrealized_pnl_marked_to_mid: float | None = None
+    residual_position = direction * (last_recorded_exec_qty - last_exit_exec_qty)
+    if exit_leg_enabled:
+        if closed_quantity > 0 and entry_avg_price and exit_avg_price:
+            realized_closed_trade_pnl = (
+                direction * (exit_avg_price - entry_avg_price) * closed_quantity * contract_multiplier
+                - total_fees_currency
+            )
+        elif submitted and last_recorded_exec_qty <= 0:
+            realized_closed_trade_pnl = 0.0 - total_fees_currency if total_fees_currency else 0.0
+        if abs(residual_position) > 1e-12:
+            if last_mid is not None and entry_avg_price:
+                unrealized_pnl_marked_to_mid = (
+                    (last_mid - entry_avg_price) * residual_position * contract_multiplier
+                )
+            else:
+                unrealized_pnl_marked_to_mid = None
+        else:
+            unrealized_pnl_marked_to_mid = 0.0
+    exit_leg_observation = (
+        "exit_leg_unfilled_residual_position"
+        if exit_leg_enabled and exit_submitted and last_exit_exec_qty < last_recorded_exec_qty - 1e-12
+        else ""
+    )
     replay = {
         "schema_version": "hft3_hftbacktest_only_official_replay_v1",
         "official_hftbacktest_replay_status": "pass" if not reasons else "fail",
@@ -708,11 +917,23 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "contract": config.contract,
         "event_id": config.event_id,
         "strategy_id": config.strategy_id,
-        "strategy_surface_version": _strategy_surface_version(config.strategy_id),
+        "strategy_surface_version": _strategy_surface_version(config.strategy_id, params),
         "strategy_params": params,
         "entry_scan_steps": entry_scan_steps,
         "max_loop_steps": max_loop_steps,
         "holding_period_bars": holding_steps,
+        "exit_leg_enabled": exit_leg_enabled,
+        "exit_reason": exit_reason,
+        "exit_order_id": exit_order_id if exit_submitted else None,
+        "exit_leg_observation": exit_leg_observation,
+        "entry_avg_price": entry_avg_price,
+        "exit_avg_price": exit_avg_price,
+        "closed_quantity": closed_quantity,
+        "realized_closed_trade_pnl": realized_closed_trade_pnl,
+        "unrealized_pnl_marked_to_mid": unrealized_pnl_marked_to_mid,
+        "mark_mid": last_mid,
+        "end_position": _float_field(final_state, "position"),
+        "max_inventory_excursion": max_abs_position,
         "legacy_aliases": list(config.legacy_aliases),
         "authority_refs": list(config.authority_refs),
         "strategy_adapter_status": signal_meta.get("adapter_status", "smoke_limit_order"),
@@ -1041,7 +1262,7 @@ def _strategy_config(config: HftBacktestOnlyRunConfig) -> dict[str, Any]:
     return {
         "schema_version": "hft3_hftbacktest_only_strategy_config_v1",
         "strategy_id": config.strategy_id,
-        "strategy_surface_version": _strategy_surface_version(config.strategy_id),
+        "strategy_surface_version": _strategy_surface_version(config.strategy_id, config.strategy_params),
         "strategy_params": dict(config.strategy_params),
         "canonical_model_id": config.canonical_model_id,
         "legacy_aliases": list(config.legacy_aliases),
@@ -1079,6 +1300,12 @@ def _latency_report(config: HftBacktestOnlyRunConfig) -> dict[str, Any]:
 def _stats_summary(config: HftBacktestOnlyRunConfig, replay: Mapping[str, Any], recorder_path: Path) -> dict[str, Any]:
     mechanical_pass = replay.get("official_hftbacktest_replay_status") == "pass"
     net_pnl = replay.get("net_pnl")
+    # With the exit leg, closed-trade realized PnL is the economic gate
+    # metric: cash balance alone marks a held position as a loss (cash out)
+    # and can never grant a filled long an economic pass. Without the exit
+    # leg the legacy cash metric is kept.
+    realized = replay.get("realized_closed_trade_pnl")
+    economic_metric = realized if isinstance(realized, (int, float)) else net_pnl
     return {
         "schema_version": "hft3_hftbacktest_only_stats_summary_v1",
         "run_id": config.run_id,
@@ -1087,10 +1314,15 @@ def _stats_summary(config: HftBacktestOnlyRunConfig, replay: Mapping[str, Any], 
         "contract": config.contract,
         "event_id": config.event_id,
         "strategy_id": config.strategy_id,
-        "strategy_surface_version": _strategy_surface_version(config.strategy_id),
+        "strategy_surface_version": _strategy_surface_version(config.strategy_id, config.strategy_params),
         "recorder_result": str(recorder_path),
         "mechanical_validity_status": "pass" if mechanical_pass else "fail",
-        "economic_result_status": "pass" if isinstance(net_pnl, (int, float)) and net_pnl > 0 else "observe",
+        "economic_result_status": (
+            "pass" if isinstance(economic_metric, (int, float)) and economic_metric > 0 else "observe"
+        ),
+        "economic_gate_metric": (
+            "realized_closed_trade_pnl" if isinstance(realized, (int, float)) else "net_pnl_cash"
+        ),
         "orders_submitted": replay.get("orders_submitted", 0),
         "orders_acknowledged": replay.get("orders_acknowledged", 0),
         "orders_cancelled": replay.get("orders_cancelled", 0),
@@ -1100,6 +1332,13 @@ def _stats_summary(config: HftBacktestOnlyRunConfig, replay: Mapping[str, Any], 
         "fill_rate": replay.get("fill_rate", 0.0),
         "gross_pnl": replay.get("gross_pnl"),
         "net_pnl": replay.get("net_pnl"),
+        "realized_closed_trade_pnl": realized,
+        "unrealized_pnl_marked_to_mid": replay.get("unrealized_pnl_marked_to_mid"),
+        "max_inventory_excursion": replay.get("max_inventory_excursion"),
+        "end_position": replay.get("end_position"),
+        "exit_leg_enabled": replay.get("exit_leg_enabled", False),
+        "exit_reason": replay.get("exit_reason", ""),
+        "exit_leg_observation": replay.get("exit_leg_observation", ""),
         "fail_closed_reasons": list(replay.get("fail_closed_reasons") or []),
     }
 
@@ -1190,7 +1429,7 @@ def _not_run_replay(reason: str, config: HftBacktestOnlyRunConfig) -> dict[str, 
         "contract": config.contract,
         "event_id": config.event_id,
         "strategy_id": config.strategy_id,
-        "strategy_surface_version": _strategy_surface_version(config.strategy_id),
+        "strategy_surface_version": _strategy_surface_version(config.strategy_id, config.strategy_params),
         "strategy_adapter_status": (
             "missing_uniform_hbt_adapter"
             if "missing_uniform_hbt_adapter" in reason
@@ -1595,9 +1834,18 @@ def _positive_float(value: Any, name: str) -> float:
     return parsed
 
 
-def _strategy_surface_version(strategy_id: str) -> str:
+def _strategy_surface_version(strategy_id: str, params: Mapping[str, Any] | None = None) -> str:
+    exit_leg = bool(params) and (
+        params.get("stop_loss_pct") is not None
+        or params.get("take_profit_pct") is not None
+        or bool(params.get("exit_at_holding", False))
+    )
     if strategy_id == "hypothesis_limit_order":
+        if exit_leg:
+            return HYPOTHESIS_LIMIT_ORDER_EXIT_LEG_SURFACE_VERSION
         return HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION
+    if exit_leg:
+        return "smoke_limit_order_exit_leg_v2"
     return "smoke_limit_order_single_order_v1"
 
 

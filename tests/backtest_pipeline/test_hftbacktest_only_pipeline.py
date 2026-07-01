@@ -1107,3 +1107,292 @@ def test_validation_blocks_epoch_data_after_validation_clock(
 
     assert validation["data_validation_status"] == "fail"
     assert "FUTURE_DATA_AFTER_VALIDATION_CLOCK" in validation["fail_closed_reasons"]
+
+
+def _install_exit_leg_fake_hftbacktest(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    mids: list[float],
+    entry_fill_step: int = 1,
+    exit_fill_delay: int = 1,
+    fee_per_fill: float = 0.0,
+) -> None:
+    """Fake hftbacktest where the entry fills and the mid then follows `mids`.
+
+    The exit order (any second order id) fills `exit_fill_delay` steps after
+    submission at its limit price, so exit-leg stop/take-profit/holding paths
+    can be exercised deterministically.
+    """
+    dtype, constants = _event_contract()
+
+    class RecordingAsset:
+        def __getattr__(self, _name: str):
+            def _accept(*_args: object, **_kwargs: object) -> "RecordingAsset":
+                return self
+
+            return _accept
+
+    class _Orders:
+        def __init__(self, rows: dict[int, dict[str, object]]) -> None:
+            self._rows = rows
+
+        def get(self, order_id: int) -> dict[str, object] | None:
+            return self._rows.get(order_id)
+
+    class ExitLegBacktest:
+        def __init__(self, _assets: list[object]) -> None:
+            self.steps = -1
+            self.current_timestamp = 1_000_000_000
+            self.entry_id: int | None = None
+            self.entry_price = 0.0
+            self.entry_qty = 0.0
+            self.exit_id: int | None = None
+            self.exit_price = 0.0
+            self.exit_qty = 0.0
+            self.exit_submit_step: int | None = None
+            self.fee = 0.0
+            self._fees_charged: set[str] = set()
+
+        def _mid(self) -> float:
+            index = min(max(self.steps, 0), len(mids) - 1)
+            return mids[index]
+
+        def elapse(self, interval_ns: int) -> int:
+            self.steps += 1
+            self.current_timestamp += int(interval_ns)
+            return 0 if self.steps < len(mids) else 1
+
+        def clear_inactive_orders(self, _asset_no: int) -> None:
+            return None
+
+        def depth(self, _asset_no: int) -> object:
+            mid = self._mid()
+            return SimpleNamespace(best_bid=mid - 0.125, best_ask=mid + 0.125, tick_size=0.25)
+
+        def _entry_filled(self) -> bool:
+            return self.entry_id is not None and self.steps >= entry_fill_step
+
+        def _exit_filled(self) -> bool:
+            return (
+                self.exit_id is not None
+                and self.exit_submit_step is not None
+                and self.steps >= self.exit_submit_step + exit_fill_delay
+            )
+
+        def state_values(self, _asset_no: int) -> dict[str, float]:
+            position = 0.0
+            balance = 0.0
+            if self._entry_filled():
+                position += self.entry_qty
+                balance -= self.entry_price * self.entry_qty
+                if "entry" not in self._fees_charged:
+                    self.fee += fee_per_fill
+                    self._fees_charged.add("entry")
+            if self._exit_filled():
+                position -= self.exit_qty
+                balance += self.exit_price * self.exit_qty
+                if "exit" not in self._fees_charged:
+                    self.fee += fee_per_fill
+                    self._fees_charged.add("exit")
+            return {"position": position, "balance": balance, "fee": self.fee}
+
+        def submit_buy_order(self, _asset_no: int, order_id: int, price: float, qty: float, *_args: object) -> int:
+            return self._submit(order_id, price, qty)
+
+        def submit_sell_order(self, _asset_no: int, order_id: int, price: float, qty: float, *_args: object) -> int:
+            return self._submit(order_id, price, qty)
+
+        def _submit(self, order_id: int, price: float, qty: float) -> int:
+            if self.entry_id is None:
+                self.entry_id = order_id
+                self.entry_price = float(price)
+                self.entry_qty = float(qty)
+            else:
+                self.exit_id = order_id
+                self.exit_price = float(price)
+                self.exit_qty = float(qty)
+                self.exit_submit_step = self.steps
+            return 0
+
+        def wait_order_response(self, *_args: object) -> int:
+            return 0
+
+        def orders(self, _asset_no: int) -> _Orders:
+            rows: dict[int, dict[str, object]] = {}
+            if self.entry_id is not None:
+                filled = self._entry_filled()
+                rows[self.entry_id] = {
+                    "status": 3 if filled else 1,
+                    "qty": self.entry_qty,
+                    "leaves_qty": 0.0 if filled else self.entry_qty,
+                    "exec_qty": self.entry_qty if filled else 0.0,
+                    "price": self.entry_price,
+                    "exec_price": self.entry_price if filled else 0.0,
+                    "exch_timestamp": self.current_timestamp,
+                    "local_timestamp": self.current_timestamp,
+                }
+            if self.exit_id is not None:
+                filled = self._exit_filled()
+                rows[self.exit_id] = {
+                    "status": 3 if filled else 1,
+                    "qty": self.exit_qty,
+                    "leaves_qty": 0.0 if filled else self.exit_qty,
+                    "exec_qty": self.exit_qty if filled else 0.0,
+                    "price": self.exit_price,
+                    "exec_price": self.exit_price if filled else 0.0,
+                    "exch_timestamp": self.current_timestamp,
+                    "local_timestamp": self.current_timestamp,
+                }
+            return _Orders(rows)
+
+        def cancel(self, *_args: object) -> int:
+            return 0
+
+    fake_data = ModuleType("hftbacktest.data")
+    fake_data.validate_event_order = lambda _events: None  # type: ignore[attr-defined]
+    fake_types = ModuleType("hftbacktest.types")
+    fake_types.event_dtype = dtype  # type: ignore[attr-defined]
+    for key, value in constants.items():
+        setattr(fake_types, key, value)
+    fake_order = ModuleType("hftbacktest.order")
+    fake_order.GTC = 0  # type: ignore[attr-defined]
+    fake_order.LIMIT = 0  # type: ignore[attr-defined]
+    fake_pkg = ModuleType("hftbacktest")
+    fake_pkg.__path__ = []  # type: ignore[attr-defined]
+    fake_pkg.BacktestAsset = RecordingAsset  # type: ignore[attr-defined]
+    fake_pkg.HashMapMarketDepthBacktest = ExitLegBacktest  # type: ignore[attr-defined]
+    fake_pkg.data = fake_data  # type: ignore[attr-defined]
+    fake_pkg.types = fake_types  # type: ignore[attr-defined]
+    fake_pkg.order = fake_order  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "hftbacktest", fake_pkg)
+    monkeypatch.setitem(sys.modules, "hftbacktest.data", fake_data)
+    monkeypatch.setitem(sys.modules, "hftbacktest.types", fake_types)
+    monkeypatch.setitem(sys.modules, "hftbacktest.order", fake_order)
+
+
+def test_exit_leg_take_profit_produces_realized_pnl(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Entry fills at ask 5000.125; mid then rallies past the 0.1%
+    # take-profit; exit sells marketable and fills.
+    _install_exit_leg_fake_hftbacktest(
+        monkeypatch, mids=[5000.0, 5000.0, 5012.0, 5012.0, 5012.0, 5012.0]
+    )
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "exit_tp"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_params={
+            "side": "BUY",
+            "quantity": 1.0,
+            "max_steps": 2,
+            "take_profit_pct": 0.1,
+            "holding_period_bars": 50,
+        },
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed", result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["exit_leg_enabled"] is True
+    assert replay["exit_reason"] == "take_profit"
+    assert replay["closed_quantity"] == 1.0
+    assert replay["realized_closed_trade_pnl"] > 0
+    assert replay["end_position"] == 0.0
+    assert replay["strategy_surface_version"] == "smoke_limit_order_exit_leg_v2"
+    stats = json.loads((out_dir / "stats_summary.json").read_text(encoding="utf-8"))
+    assert stats["economic_gate_metric"] == "realized_closed_trade_pnl"
+    assert stats["economic_result_status"] == "pass"
+
+
+def test_exit_leg_stop_loss_realizes_negative_pnl(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_exit_leg_fake_hftbacktest(
+        monkeypatch, mids=[5000.0, 5000.0, 4985.0, 4985.0, 4985.0, 4985.0]
+    )
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "exit_sl"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_params={
+            "side": "BUY",
+            "quantity": 1.0,
+            "max_steps": 2,
+            "stop_loss_pct": 0.1,
+            "holding_period_bars": 50,
+        },
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed", result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["exit_reason"] == "stop_loss"
+    assert replay["realized_closed_trade_pnl"] < 0
+    assert replay["end_position"] == 0.0
+    stats = json.loads((out_dir / "stats_summary.json").read_text(encoding="utf-8"))
+    assert stats["economic_result_status"] == "observe"
+
+
+def test_exit_leg_holding_expiry_closes_position(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_exit_leg_fake_hftbacktest(monkeypatch, mids=[5000.0] * 8)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "exit_hold"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_params={
+            "side": "BUY",
+            "quantity": 1.0,
+            "max_steps": 2,
+            "exit_at_holding": True,
+            "holding_period_bars": 2,
+        },
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed", result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["exit_reason"] == "max_holding"
+    assert replay["closed_quantity"] == 1.0
+    assert replay["end_position"] == 0.0
+    # Flat mids: the round trip pays the spread crossing, never profits.
+    assert replay["realized_closed_trade_pnl"] <= 0
+
+
+def test_exit_leg_disabled_keeps_v2_surface_semantics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_exit_leg_fake_hftbacktest(monkeypatch, mids=[5000.0] * 6)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "exit_off"
+    config = _config(tmp_path, data_path, snapshot_path)
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed", result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["exit_leg_enabled"] is False
+    assert replay["strategy_surface_version"] == "smoke_limit_order_single_order_v1"
+    assert replay["realized_closed_trade_pnl"] is None
+    assert not any(str(row.get("event_type", "")).startswith("EXIT_") for row in replay["orders"])
+    stats = json.loads((out_dir / "stats_summary.json").read_text(encoding="utf-8"))
+    assert stats["economic_gate_metric"] == "net_pnl_cash"
