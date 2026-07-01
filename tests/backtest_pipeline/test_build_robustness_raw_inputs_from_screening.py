@@ -801,6 +801,43 @@ def test_missing_stress_args_fails_closed_without_output(tmp_path: Path) -> None
     assert not (tmp_path / "raw_robustness_inputs.json").exists()
 
 
+def test_fees_from_model_derives_stress_inputs_per_product(tmp_path: Path) -> None:
+    artifact = _complete_surface_artifact()
+    result = _run_script(tmp_path, artifact, "--fees-from-model")
+
+    assert result.returncode == 0, result.stderr
+    receipt = json.loads(result.stdout)
+    assert receipt["status"] == "ok"
+    assert receipt["packaged_count"] == 1
+
+    payload = json.loads((tmp_path / "raw_robustness_inputs.json").read_text(encoding="utf-8"))
+    candidate_id = receipt["packaged_candidate_ids"][0]
+    entry = payload["candidates"][candidate_id]
+    raw = entry["robustness_input"]
+    # ES non-member all-in per side: 1.25 exchange+clearing + 0.25 broker
+    # + 0.02 NFA = 1.52; round trip = 3.04. Tick value 12.50.
+    assert raw["per_event_fee_per_rt"] == [3.04] * len(raw["per_event_expectancies"])
+    assert raw["per_event_tick_value"] == [12.50] * len(raw["per_event_expectancies"])
+    assert entry["diagnostics"]["stress_input_source"] == "fee_model_derived:ES"
+
+
+def test_fees_from_model_conflicts_with_explicit_args(tmp_path: Path) -> None:
+    artifact = _complete_surface_artifact()
+    result = _run_script(
+        tmp_path,
+        artifact,
+        "--fees-from-model",
+        "--fee-per-rt",
+        "0.001",
+        "--tick-value",
+        "0.01",
+    )
+
+    assert result.returncode != 0
+    assert "fees_from_model_conflicts_with_explicit_fee_args" in result.stderr
+    assert not (tmp_path / "raw_robustness_inputs.json").exists()
+
+
 def test_incomplete_surface_fails_closed_without_output(tmp_path: Path) -> None:
     artifact = _complete_surface_artifact(omit_last_cell=True)
     result = _run_script(
