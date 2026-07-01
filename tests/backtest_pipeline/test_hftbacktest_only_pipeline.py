@@ -56,11 +56,19 @@ def _write_valid_l3_npz(
     base_exch_ts: int = 1_000_000_000,
     include_timestamp_units: bool = True,
     include_trade_event: bool = False,
+    include_side_flags: bool = True,
+    ambiguous_side_flags: bool = False,
 ) -> Path:
     dtype, constants = _event_contract()
+    if ambiguous_side_flags:
+        buy_add_event = constants["ADD_ORDER_EVENT"] | constants["BUY_EVENT"] | constants["SELL_EVENT"]
+        sell_add_event = buy_add_event
+    else:
+        buy_add_event = constants["ADD_ORDER_EVENT"] | constants["BUY_EVENT"] if include_side_flags else constants["ADD_ORDER_EVENT"]
+        sell_add_event = constants["ADD_ORDER_EVENT"] | constants["SELL_EVENT"] if include_side_flags else constants["ADD_ORDER_EVENT"]
     rows = [
         {
-            "ev": constants["ADD_ORDER_EVENT"] | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+            "ev": buy_add_event | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
             "exch_ts": base_exch_ts,
             "local_ts": base_exch_ts + 100,
             "px": 5000.0,
@@ -70,7 +78,7 @@ def _write_valid_l3_npz(
             "fval": 0.0,
         },
         {
-            "ev": constants["ADD_ORDER_EVENT"] | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+            "ev": sell_add_event | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
             "exch_ts": base_exch_ts + 500,
             "local_ts": base_exch_ts + 600,
             "px": 5000.25,
@@ -107,7 +115,12 @@ def _write_valid_l3_npz(
 def _write_invalid_npz(path: Path) -> Path:
     dtype, constants = _event_contract()
     events = np.zeros(1, dtype=dtype)
-    events[0]["ev"] = constants["ADD_ORDER_EVENT"] | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"]
+    events[0]["ev"] = (
+        constants["ADD_ORDER_EVENT"]
+        | constants["BUY_EVENT"]
+        | constants["EXCH_EVENT"]
+        | constants["LOCAL_EVENT"]
+    )
     events[0]["exch_ts"] = 1_000_000_000
     events[0]["local_ts"] = 999_999_999
     events[0]["order_id"] = 1001
@@ -711,6 +724,37 @@ def test_validation_records_l3_hftbacktest_contract(
     assert validation["l2_l3_classification"] == "l3_mbo"
 
 
+def test_validation_rejects_l3_add_rows_without_side_flags(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3_no_side.npz", include_side_flags=False)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "snapshot_no_side.npz", include_side_flags=False)
+
+    validation = validate_hftbacktest_only_input(_config(tmp_path, data_path, snapshot_path))
+
+    assert validation["data_validation_status"] == "fail"
+    assert validation["l2_l3_classification"] == "l3_mbo"
+    assert "L3_SIDE_FLAG_MISSING_OR_AMBIGUOUS" in validation["fail_closed_reasons"]
+    assert "INITIAL_SNAPSHOT_L3_SIDE_FLAG_MISSING_OR_AMBIGUOUS" in validation["fail_closed_reasons"]
+
+
+def test_validation_rejects_l3_add_rows_with_ambiguous_side_flags(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3_ambiguous_side.npz", ambiguous_side_flags=True)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "snapshot_ambiguous_side.npz", ambiguous_side_flags=True)
+
+    validation = validate_hftbacktest_only_input(_config(tmp_path, data_path, snapshot_path))
+
+    assert validation["data_validation_status"] == "fail"
+    assert "L3_SIDE_FLAG_MISSING_OR_AMBIGUOUS" in validation["fail_closed_reasons"]
+    assert "INITIAL_SNAPSHOT_L3_SIDE_FLAG_MISSING_OR_AMBIGUOUS" in validation["fail_closed_reasons"]
+
+
 def test_validation_accepts_converted_lake_l3_with_trades_and_inferred_ns(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -744,8 +788,11 @@ def test_prepare_lake_source_builds_snapshot_and_replay_pair(
 
     def row(event_type: int, offset_ns: int, order_id: int, price: float, qty: float = 1.0) -> dict[str, object]:
         ts = base_ns + offset_ns
+        ev = event_type | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"]
+        if event_type == constants["ADD_ORDER_EVENT"]:
+            ev |= constants["BUY_EVENT"] if order_id % 2 else constants["SELL_EVENT"]
         return {
-            "ev": event_type | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+            "ev": ev,
             "exch_ts": ts,
             "local_ts": ts + 100,
             "px": price,
@@ -798,6 +845,7 @@ def test_prepare_lake_source_builds_snapshot_and_replay_pair(
     assert len(snapshot) == 1
     assert int(snapshot[0]["order_id"]) == 1001
     assert int(snapshot[0]["ev"]) & 0xFF == constants["ADD_ORDER_EVENT"]
+    assert int(snapshot[0]["ev"]) & constants["BUY_EVENT"] == constants["BUY_EVENT"]
     assert int(snapshot[0]["exch_ts"]) == base_ns + 1_000_000_000 - 1
     assert float(snapshot[0]["px"]) == 5000.25
 
@@ -839,14 +887,76 @@ def test_prepare_lake_source_builds_snapshot_and_replay_pair(
     assert reused["reused_existing"] is True
 
 
+def test_prepare_lake_source_preserves_add_side_through_modify_snapshot(tmp_path: Path) -> None:
+    from hftbacktest.types import (
+        ADD_ORDER_EVENT,
+        BUY_EVENT,
+        EXCH_EVENT,
+        LOCAL_EVENT,
+        MODIFY_ORDER_EVENT,
+        SELL_EVENT,
+        event_dtype,
+    )
+
+    dtype = event_dtype
+    base_ns = int(datetime(2024, 9, 11, 12, 29, tzinfo=timezone.utc).timestamp() * 1_000_000_000)
+
+    def row(event_type: int, side_event: int, offset_ns: int, order_id: int, price: float) -> dict[str, object]:
+        ts = base_ns + offset_ns
+        return {
+            "ev": event_type | side_event | EXCH_EVENT | LOCAL_EVENT,
+            "exch_ts": ts,
+            "local_ts": ts + 100,
+            "px": price,
+            "qty": 1.0,
+            "order_id": order_id,
+            "ival": 0,
+            "fval": 0.0,
+        }
+
+    source_rows = [
+        row(ADD_ORDER_EVENT, BUY_EVENT, 0, 1001, 5000.0),
+        row(MODIFY_ORDER_EVENT, SELL_EVENT, 100, 1001, 5000.25),
+        row(ADD_ORDER_EVENT, SELL_EVENT, 1_000_000_100, 1002, 5001.0),
+    ]
+    source = tmp_path / "side_flip_source.npz"
+    events = np.zeros(len(source_rows), dtype=dtype)
+    for index, source_row in enumerate(source_rows):
+        for field, value in source_row.items():
+            events[index][field] = value
+    np.savez_compressed(source, data=events)
+
+    prepared = prepare_hftbacktest_only_l3_from_lake(
+        HftBacktestOnlyPrepareConfig(
+            source_npz=source,
+            symbol="MES",
+            contract="MESU4",
+            event_id="CPI_2024_09_11_TIGHT",
+            trade_date="2024-09-11",
+            out_root=tmp_path / "hbt",
+            warmup_seconds=1,
+        )
+    )
+
+    with np.load(prepared["initial_snapshot"], allow_pickle=False) as payload:
+        snapshot = payload["data"]
+    assert len(snapshot) == 1
+    assert int(snapshot[0]["order_id"]) == 1001
+    assert int(snapshot[0]["ev"]) & BUY_EVENT == BUY_EVENT
+    assert int(snapshot[0]["ev"]) & SELL_EVENT == 0
+
+
 def test_prepare_lake_source_default_preserves_full_l3_replay(tmp_path: Path) -> None:
     dtype, constants = _event_contract()
     base_ns = int(datetime(2024, 9, 11, 12, 29, tzinfo=timezone.utc).timestamp() * 1_000_000_000)
 
     def row(event_type: int, offset_ns: int, order_id: int, price: float) -> dict[str, object]:
         ts = base_ns + offset_ns
+        ev = event_type | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"]
+        if event_type == constants["ADD_ORDER_EVENT"]:
+            ev |= constants["BUY_EVENT"] if order_id % 2 else constants["SELL_EVENT"]
         return {
-            "ev": event_type | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+            "ev": ev,
             "exch_ts": ts,
             "local_ts": ts + 100,
             "px": price,
@@ -908,8 +1018,11 @@ def test_prepare_lake_source_keeps_partial_trade_order_active(tmp_path: Path) ->
 
     def row(event_type: int, offset_ns: int, order_id: int, price: float, qty: float) -> dict[str, object]:
         ts = base_ns + offset_ns
+        ev = event_type | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"]
+        if event_type == constants["ADD_ORDER_EVENT"]:
+            ev |= constants["BUY_EVENT"] if order_id % 2 else constants["SELL_EVENT"]
         return {
-            "ev": event_type | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+            "ev": ev,
             "exch_ts": ts,
             "local_ts": ts + 100,
             "px": price,
