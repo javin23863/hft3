@@ -91,6 +91,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--response-latency-ns", type=int, default=100_000)
     parser.add_argument("--exchange-fill-model", default="NoPartialFillExchange")
     parser.add_argument("--queue-model", default="L3FIFOQueueModel")
+    parser.add_argument(
+        "--latency-model",
+        default="constant_order_latency",
+        help=(
+            "constant_order_latency (default) or chi404_measured[:regime] to "
+            "use the measured CHI404 native-probe latency model; fails closed "
+            "when the probe summary is missing."
+        ),
+    )
+    parser.add_argument(
+        "--sensitivity-battery",
+        action="store_true",
+        help=(
+            "After a completed run, execute the Gate-3 fill-model x latency x "
+            "fee sensitivity battery and refresh the promotion decision."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -153,9 +170,19 @@ def main(argv: list[str] | None = None) -> int:
         response_latency_ns=args.response_latency_ns,
         exchange_fill_model=args.exchange_fill_model,
         queue_model=args.queue_model,
+        latency_model=args.latency_model,
     )
     out_dir = (args.out_root / run_id).resolve()
     result = run_hftbacktest_only(config, out_dir=out_dir, dry_run=args.dry_run)
+    if args.sensitivity_battery and result["status"] == "completed":
+        from backtest_pipeline.src.hbt_only_gates import run_sensitivity_battery
+        from backtest_pipeline.src.hftbacktest_only_pipeline import write_promotion_decision
+
+        gate3 = run_sensitivity_battery(
+            config, out_dir=out_dir, base_stats=result.get("stats_summary") or {}
+        )
+        result["gate3_sensitivity"] = gate3
+        result["promotion_decision"] = write_promotion_decision(out_dir)
     print(json.dumps(result, indent=2, default=str))
     return 0 if result["status"] in {"completed", "dry_run"} else 2
 
