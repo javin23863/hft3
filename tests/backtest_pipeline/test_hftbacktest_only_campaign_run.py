@@ -157,6 +157,7 @@ def test_campaign_runner_processes_manifest_without_eager_jsonl_load(tmp_path: P
     assert {payload["registry_hash"] for payload in payloads} == {"a" * 64}
     assert {payload["source_npz_sha256"] for payload in payloads} == {"b" * 64}
     assert {payload["initial_snapshot_sha256"] for payload in payloads} == {"c" * 64}
+    assert {payload["strategy_id"] for payload in payloads} == {"hypothesis_limit_order"}
     assert {payload["adapter_status"] for payload in payloads} == {
         "available",
         "missing_uniform_hbt_adapter",
@@ -165,6 +166,7 @@ def test_campaign_runner_processes_manifest_without_eager_jsonl_load(tmp_path: P
     assert all(payload["product_metadata_source"] == "config/hftbacktest/cme_lake_product_metadata.yaml" for payload in payloads)
     assert all(payload["metadata_policy"] == "explicit_per_symbol_contract_tick_lot_contract_required" for payload in payloads)
     assert {payload["status"] for payload in payloads} == {"dry_run", "blocked_before_hbt"}
+    assert {payload["dry_run"] for payload in payloads} == {True}
     assert "model_" + "rejected" not in json.dumps(payloads)
 
 
@@ -200,6 +202,8 @@ def test_campaign_runner_accepts_parameter_surface_rows(tmp_path: Path) -> None:
     assert payload["surface_unit_id"] == "surface_unit_abc"
     assert payload["parameter_family"] == "grid"
     assert payload["parameter_hash"] == "d" * 64
+    assert payload["strategy_id"] == "hypothesis_limit_order"
+    assert payload["dry_run"] is True
     assert payload["strategy_params"] == {"quantity": 1.0, "max_steps": 1, "holding_period_bars": 7}
     assert payload["strategy_params"]["max_steps"] == 1
     assert payload["strategy_params"]["holding_period_bars"] == 7
@@ -209,6 +213,62 @@ def test_campaign_runner_accepts_parameter_surface_rows(tmp_path: Path) -> None:
     assert payload["tick_size"] == 0.25
     assert payload["lot_size"] == 1.0
     assert payload["contract_size"] == 50.0
+
+
+def test_campaign_runner_forces_model_specific_hbt_strategy_for_paid_rows(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_fake_hftbacktest()
+    module = _load_runner_module()
+    _write_valid_npz(tmp_path / "data.npz")
+    _write_valid_npz(tmp_path / "snapshot.npz")
+    row = _campaign_row(tmp_path)
+    row["strategy_params"] = {"quantity": 1.0, "max_steps": 1}
+    blocked_row = _campaign_row(tmp_path, blocker_code="pipeline_blocker:missing_uniform_hbt_adapter")
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text(
+        "\n".join(json.dumps(candidate) for candidate in (row, blocked_row)) + "\n",
+        encoding="utf-8",
+    )
+    captured_strategy_ids: list[str] = []
+
+    def fake_run(config: object, **_kwargs: object) -> dict[str, object]:
+        captured_strategy_ids.append(config.strategy_id)
+        return {"status": "completed", "fail_closed_reasons": []}
+
+    monkeypatch.setattr(module, "run_hftbacktest_only", fake_run)
+
+    summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=tmp_path / "runs",
+        strategy_id="smoke_limit_order",
+        dry_run=False,
+        workers=1,
+    )
+
+    assert summary["row_count"] == 2
+    assert summary["strategy_id"] == "hypothesis_limit_order"
+    assert summary["requested_strategy_id"] == "smoke_limit_order"
+    assert summary["strategy_override_ignored"] is True
+    assert summary["status_counts"] == {"blocked_before_hbt": 1, "completed": 1}
+    assert summary["blocker_counts"] == {"pipeline_blocker:missing_uniform_hbt_adapter": 1}
+    assert captured_strategy_ids == ["hypothesis_limit_order"]
+    receipts = sorted(Path(summary["out_root"]).glob("*/campaign_row_result.json"))
+    assert len(receipts) == 2
+    payloads = [json.loads(receipt.read_text(encoding="utf-8")) for receipt in receipts]
+    assert {payload["canonical_model_id"] for payload in payloads} == {
+        "SPREAD_BLOWOUT_RECOMPRESSION"
+    }
+    assert {payload["strategy_id"] for payload in payloads} == {"hypothesis_limit_order"}
+    assert {payload["dry_run"] for payload in payloads} == {False}
+    assert any(payload["status"] == "completed" and payload["hbt_run_id"] for payload in payloads)
+    assert any(
+        payload["status"] == "blocked_before_hbt"
+        and payload["blocker_code"] == "pipeline_blocker:missing_uniform_hbt_adapter"
+        for payload in payloads
+    )
+    assert any(payload["strategy_params"] == {"quantity": 1.0, "max_steps": 1} for payload in payloads)
 
 
 def test_campaign_runner_pool_kwargs_enable_worker_recycling() -> None:
@@ -274,6 +334,24 @@ def test_campaign_runner_cli_rejects_negative_worker_recycling_limit(tmp_path: P
         raise AssertionError("negative worker recycling limit must fail closed")
 
 
+def test_campaign_runner_cli_rejects_strategy_override(tmp_path: Path) -> None:
+    module = _load_runner_module()
+
+    try:
+        module.main(
+            [
+                "--campaign-manifest",
+                str(tmp_path / "campaign.jsonl"),
+                "--strategy-id",
+                "smoke_limit_order",
+            ]
+        )
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("full campaign CLI must not accept strategy overrides")
+
+
 def test_campaign_runner_multiworker_recycles_and_resumes_existing_receipts(
     tmp_path: Path,
     monkeypatch,
@@ -289,6 +367,7 @@ def test_campaign_runner_multiworker_recycles_and_resumes_existing_receipts(
     existing_receipt = {
         "status": "dry_run",
         "blocker_code": "",
+        "strategy_id": "hypothesis_limit_order",
         "canonical_model_id": rows[0]["canonical_model_id"],
     }
     existing_dir = out_root / "hbt_campaign_test" / "unit_admissible"
@@ -337,6 +416,138 @@ def test_campaign_runner_multiworker_recycles_and_resumes_existing_receipts(
     assert summary["workers"] == 217
     assert summary["max_tasks_per_child"] == 256
     assert summary["status_counts"] == {"blocked_before_hbt": 1, "dry_run": 1}
+
+
+def test_campaign_runner_resume_reruns_stale_receipts_without_strategy_id(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_runner_module()
+    _write_valid_npz(tmp_path / "data.npz")
+    _write_valid_npz(tmp_path / "snapshot.npz")
+    row = _campaign_row(tmp_path)
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    out_root = tmp_path / "runs"
+    existing_dir = out_root / "hbt_campaign_test" / "unit_admissible"
+    existing_dir.mkdir(parents=True)
+    (existing_dir / "campaign_row_result.json").write_text(
+        json.dumps({"status": "dry_run", "blocker_code": ""}),
+        encoding="utf-8",
+    )
+    captured_strategy_ids: list[str] = []
+
+    def fake_run(config: object, **_kwargs: object) -> dict[str, object]:
+        captured_strategy_ids.append(config.strategy_id)
+        return {"status": "completed", "fail_closed_reasons": []}
+
+    monkeypatch.setattr(module, "run_hftbacktest_only", fake_run)
+
+    summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=out_root,
+        dry_run=False,
+        workers=1,
+        resume=True,
+    )
+
+    assert summary["status_counts"] == {"completed": 1}
+    assert captured_strategy_ids == ["hypothesis_limit_order"]
+    receipt = json.loads((existing_dir / "campaign_row_result.json").read_text(encoding="utf-8"))
+    assert receipt["status"] == "completed"
+    assert receipt["strategy_id"] == "hypothesis_limit_order"
+    assert receipt["dry_run"] is False
+    assert receipt["hbt_run_id"] == "unit_admissible"
+
+
+def test_campaign_runner_paid_resume_reruns_dry_run_receipts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_runner_module()
+    _write_valid_npz(tmp_path / "data.npz")
+    _write_valid_npz(tmp_path / "snapshot.npz")
+    row = _campaign_row(tmp_path)
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    out_root = tmp_path / "runs"
+
+    dry_summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=out_root,
+        dry_run=True,
+        workers=1,
+    )
+    assert dry_summary["status_counts"] == {"dry_run": 1}
+    receipt_path = next(Path(dry_summary["out_root"]).glob("*/campaign_row_result.json"))
+    dry_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert dry_receipt["strategy_id"] == "hypothesis_limit_order"
+    assert dry_receipt["status"] == "dry_run"
+    assert dry_receipt["dry_run"] is True
+    captured_strategy_ids: list[str] = []
+
+    def fake_run(config: object, **_kwargs: object) -> dict[str, object]:
+        captured_strategy_ids.append(config.strategy_id)
+        return {"status": "completed", "fail_closed_reasons": []}
+
+    monkeypatch.setattr(module, "run_hftbacktest_only", fake_run)
+
+    paid_summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=out_root,
+        dry_run=False,
+        workers=1,
+        resume=True,
+    )
+
+    assert paid_summary["status_counts"] == {"completed": 1}
+    assert captured_strategy_ids == ["hypothesis_limit_order"]
+    paid_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert paid_receipt["status"] == "completed"
+    assert paid_receipt["strategy_id"] == "hypothesis_limit_order"
+    assert paid_receipt["dry_run"] is False
+    assert paid_receipt["hbt_run_id"] == "unit_admissible"
+
+
+def test_campaign_runner_resume_reruns_stale_receipts_with_noncanonical_strategy_id(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_runner_module()
+    _write_valid_npz(tmp_path / "data.npz")
+    _write_valid_npz(tmp_path / "snapshot.npz")
+    row = _campaign_row(tmp_path)
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    out_root = tmp_path / "runs"
+    existing_dir = out_root / "hbt_campaign_test" / "unit_admissible"
+    existing_dir.mkdir(parents=True)
+    (existing_dir / "campaign_row_result.json").write_text(
+        json.dumps({"status": "completed", "blocker_code": "", "strategy_id": "smoke_limit_order"}),
+        encoding="utf-8",
+    )
+    captured_strategy_ids: list[str] = []
+
+    def fake_run(config: object, **_kwargs: object) -> dict[str, object]:
+        captured_strategy_ids.append(config.strategy_id)
+        return {"status": "completed", "fail_closed_reasons": []}
+
+    monkeypatch.setattr(module, "run_hftbacktest_only", fake_run)
+
+    summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=out_root,
+        dry_run=False,
+        workers=1,
+        resume=True,
+    )
+
+    assert summary["status_counts"] == {"completed": 1}
+    assert captured_strategy_ids == ["hypothesis_limit_order"]
+    receipt = json.loads((existing_dir / "campaign_row_result.json").read_text(encoding="utf-8"))
+    assert receipt["status"] == "completed"
+    assert receipt["strategy_id"] == "hypothesis_limit_order"
+    assert receipt["hbt_run_id"] == "unit_admissible"
 
 
 def test_campaign_runner_blocks_missing_product_metadata_authority(tmp_path: Path) -> None:
