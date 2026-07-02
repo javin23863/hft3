@@ -141,3 +141,29 @@ def test_lifecycle_corrupt_registry_blocks(monkeypatch, tmp_path: Path) -> None:
     payload = views.build_lifecycle()
     assert payload["blocked"] is True
     assert payload["evidence"]["status"] == "corrupt"
+
+
+def test_campaign_corrupt_receipt_blocks(monkeypatch, tmp_path: Path) -> None:
+    receipts_dir = tmp_path / "vast_receipts"
+    receipts_dir.mkdir()
+    (receipts_dir / "instance_teardown.json").write_text("{broken", encoding="utf-8")
+    monkeypatch.setattr(data, "CAMPAIGN_MONITOR_GLOBS", (receipts_dir,))
+    payload = views.build_campaign()
+    assert payload["blocked"] is True
+    assert "unreadable_campaign_receipts=1" in payload["reason"]
+
+
+def test_transitions_hash_race_reports_corrupt_not_500(monkeypatch, tmp_path: Path) -> None:
+    registry = tmp_path / "model_lifecycle.json"
+    registry.write_text(json.dumps({"models": {}}), encoding="utf-8")
+    transitions = tmp_path / "transitions.jsonl"
+    transitions.write_text('{"ok": true}\n', encoding="utf-8")
+    monkeypatch.setattr(data, "LIFECYCLE_REGISTRY", registry)
+    monkeypatch.setattr(data, "LIFECYCLE_TRANSITIONS", transitions)
+    # Simulate a permission race: hashing the file fails after is_file().
+    def _boom(path):
+        raise OSError("permission denied")
+    monkeypatch.setattr(data, "_sha256_file", _boom)
+    _registry, loaded = data.load_lifecycle()
+    assert loaded.evidence.status == "corrupt"
+    assert loaded.evidence.reason == "OSError"
