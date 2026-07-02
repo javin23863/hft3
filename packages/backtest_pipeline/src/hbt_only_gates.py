@@ -212,6 +212,21 @@ def run_sensitivity_battery(
     return report
 
 
+def _matrix_cell_error(performance_matrix: Sequence[Sequence[Any]]) -> str:
+    """Return a fail-closed reason for the first non-numeric matrix cell."""
+    import math as _math
+
+    for row_idx, matrix_row in enumerate(performance_matrix):
+        if not isinstance(matrix_row, (list, tuple)):
+            return f"cscv_matrix_invalid_row:{row_idx}"
+        for col_idx, cell in enumerate(matrix_row):
+            if isinstance(cell, bool) or not isinstance(cell, (int, float)):
+                return f"cscv_matrix_invalid_cell:[{row_idx}][{col_idx}]={cell!r}"
+            if not _math.isfinite(float(cell)):
+                return f"cscv_matrix_invalid_cell:[{row_idx}][{col_idx}]={cell!r}"
+    return ""
+
+
 def run_robustness_gate(
     event_stats: Sequence[Mapping[str, Any]],
     *,
@@ -276,12 +291,19 @@ def run_robustness_gate(
             f"cscv_matrix_row_mismatch:{len(performance_matrix)}!={len(rows)}"
         )
     else:
-        cscv = dict(combinatorially_symmetric_cv(performance_matrix))
-        pbo = cscv.get("pbo")
-        if not isinstance(pbo, (int, float)):
-            reasons.append(f"pbo_not_computed:{cscv.get('reason')}")
-        elif pbo > max_pbo:
-            reasons.append(f"pbo_above_max:{pbo:.4f}>{max_pbo}")
+        matrix_cell_error = _matrix_cell_error(performance_matrix)
+        if matrix_cell_error:
+            # Fail closed with an auditable reason instead of raising inside
+            # combinatorially_symmetric_cv (which would abort the run before
+            # robustness_report.json is written).
+            reasons.append(matrix_cell_error)
+        else:
+            cscv = dict(combinatorially_symmetric_cv(performance_matrix))
+            pbo = cscv.get("pbo")
+            if not isinstance(pbo, (int, float)):
+                reasons.append(f"pbo_not_computed:{cscv.get('reason')}")
+            elif pbo > max_pbo:
+                reasons.append(f"pbo_above_max:{pbo:.4f}>{max_pbo}")
 
     reasons = list(dict.fromkeys(reasons))
     report = {

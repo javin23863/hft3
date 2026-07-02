@@ -510,6 +510,11 @@ def write_promotion_decision(out_dir: Path, *, stats_summary: Mapping[str, Any] 
             "gate3": list(gate3.get("fail_closed_reasons") or []),
             "gate4": list(gate4.get("fail_closed_reasons") or []),
         },
+        # Sensitivity axes the pinned engine cannot exercise (e.g. L3 partial
+        # fill in hftbacktest 2.4.2). Surfaced HERE so a promotion granted
+        # without those axes is auditable at the decision layer — the gate is
+        # not silently narrower than declared.
+        "gate3_axes_unavailable_upstream": list(gate3.get("axes_unavailable_upstream") or []),
         "required_artifacts": {
             "recorder_result": str(recorder_path),
             "stats_summary": str(stats_path),
@@ -519,7 +524,17 @@ def write_promotion_decision(out_dir: Path, *, stats_summary: Mapping[str, Any] 
             "promotion_allowed requires mechanical, economic, microstructure "
             "(gate3_sensitivity.json), and robustness (robustness_report.json) "
             "gates to all pass; missing gate reports keep promotion denied.",
-        ],
+        ]
+        + (
+            [
+                "Gate 3 passed with upstream-unavailable sensitivity axes: "
+                + ", ".join(str(a) for a in gate3.get("axes_unavailable_upstream") or [])
+                + ". The pinned hftbacktest has no L3 partial-fill exchange; "
+                "review this caveat before certification."
+            ]
+            if gate3.get("axes_unavailable_upstream")
+            else []
+        ),
     }
     _write_json(out_dir / "promotion_decision.json", decision)
     return decision

@@ -241,3 +241,42 @@ def test_promotion_denied_when_economic_gate_observes(tmp_path: Path) -> None:
     decision = write_promotion_decision(tmp_path)
     assert decision["promotion_allowed"] is False
     assert decision["decision"] == "observe"
+
+
+def test_robustness_gate_fails_closed_on_invalid_matrix_cell(tmp_path: Path) -> None:
+    # Non-numeric cells must produce an auditable fail-closed reason and a
+    # written report, never an exception before robustness_report.json exists.
+    events = [
+        {"event_id": f"CPI_{i}", "realized_closed_trade_pnl": pnl}
+        for i, pnl in enumerate([10.0, 12.0, 11.0, 13.0])
+    ]
+    bad_matrix = [[10.0, 5.0], [12.0, "oops"], [11.0, 5.5], [13.0, 6.5]]
+    report = run_robustness_gate(events, out_dir=tmp_path, performance_matrix=bad_matrix)
+    assert report["status"] == "fail"
+    assert any(r.startswith("cscv_matrix_invalid_cell:[1][1]") for r in report["fail_closed_reasons"])
+    assert (tmp_path / "robustness_report.json").is_file()
+
+
+def test_promotion_decision_surfaces_unavailable_axes(tmp_path: Path) -> None:
+    _write_minimal_outputs(tmp_path)
+    (tmp_path / "gate3_sensitivity.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "fail_closed_reasons": [],
+                "axes_unavailable_upstream": [
+                    "PartialFillExchange__lat1x__fee_declared",
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "robustness_report.json").write_text(
+        json.dumps({"status": "pass", "fail_closed_reasons": []}), encoding="utf-8"
+    )
+    decision = write_promotion_decision(tmp_path)
+    assert decision["promotion_allowed"] is True
+    assert decision["gate3_axes_unavailable_upstream"] == [
+        "PartialFillExchange__lat1x__fee_declared"
+    ]
+    assert any("upstream-unavailable sensitivity axes" in n for n in decision["notes"])
