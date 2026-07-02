@@ -2230,7 +2230,7 @@ def test_meta_gate_blocks_entries_and_records_provenance(
         def predict(matrix):
             return _np.zeros(len(matrix))
 
-        return predict, ["spread_stress"], "f" * 64
+        return predict, ["spread_stress"], "f" * 64, None
 
     monkeypatch.setattr(pl, "_load_meta_model", fake_loader)
     data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
@@ -2268,7 +2268,7 @@ def test_meta_gate_passthrough_when_scores_clear_threshold(
         def predict(matrix):
             return _np.ones(len(matrix))
 
-        return predict, ["spread_stress"], "a" * 64
+        return predict, ["spread_stress"], "a" * 64, None
 
     monkeypatch.setattr(pl, "_load_meta_model", fake_loader)
     data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
@@ -2341,3 +2341,152 @@ def test_toxicity_gate_absent_keeps_baseline_behavior(
     assert replay["toxicity_gate_enabled"] is False
     assert replay["toxicity_gated_out"] == 0
     assert replay["toxicity_unavailable_steps"] == 0
+
+
+def test_calibrated_sizing_scales_entry_quantity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Calibrated p=0.8 -> size factor clip(2*0.8-1)=0.6 -> base qty 2 sizes to
+    # lot-rounded 1.0; the order receipt must carry the SIZED quantity.
+    import numpy as _np
+
+    import backtest_pipeline.src.hftbacktest_only_pipeline as pl
+
+    _install_fake_hftbacktest(monkeypatch)
+
+    def fake_loader(path: str, expected_model_id: str = ""):
+        def predict(matrix):
+            return _np.full(len(matrix), 0.8)
+
+        calibration = {"method": "isotonic_pav_train_only", "x": [0.0, 1.0], "y": [0.0, 1.0]}
+        return predict, ["spread_stress"], "c" * 64, calibration
+
+    monkeypatch.setattr(pl, "_load_meta_model", fake_loader)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "sized"
+    config = _meta_config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        meta_model_path=str(tmp_path / "meta.lgb.txt"),
+        meta_threshold=0.1,
+        meta_sizing_mode="calibrated",
+        quantity=2.0,
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["meta_sizing_mode"] == "calibrated"
+    submitted = [row for row in replay["orders"] if row["event_type"] == "ORDER_SUBMITTED"]
+    if submitted:
+        assert submitted[0]["quantity"] == 1.0
+
+
+def test_calibrated_sizing_without_calibration_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import numpy as _np
+
+    import backtest_pipeline.src.hftbacktest_only_pipeline as pl
+
+    _install_fake_hftbacktest(monkeypatch)
+
+    def fake_loader(path: str, expected_model_id: str = ""):
+        def predict(matrix):
+            return _np.full(len(matrix), 0.8)
+
+        return predict, ["spread_stress"], "d" * 64, None
+
+    monkeypatch.setattr(pl, "_load_meta_model", fake_loader)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "sized_nocal"
+    config = _meta_config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        meta_model_path=str(tmp_path / "meta.lgb.txt"),
+        meta_sizing_mode="calibrated",
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert "meta_sizing_calibration_missing" in result["fail_closed_reasons"]
+    assert not (out_dir / "stats_summary.json").is_file()
+
+
+def test_round_trips_carry_timestamps(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mids = [5000.0, 5000.0, 5012.0, 5012.0, 5012.0, 5012.0]
+    _install_multi_trip_fake_hftbacktest(monkeypatch, mids=mids)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "trip_ts"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_params={
+            "side": "BUY",
+            "quantity": 1.0,
+            "take_profit_pct": 0.1,
+            "holding_period_bars": 50,
+            "max_round_trips": 1,
+        },
+        event_window={"cutoff_ts_ns": 1_000_000_000, "end_ts_ns": 7_000_000_000},
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed", result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    (trip,) = replay["round_trips"]
+    assert trip["entry_ts_ns"] is not None
+    assert trip["exit_ts_ns"] is not None
+    assert trip["exit_ts_ns"] >= trip["entry_ts_ns"]
+
+
+def test_calibrated_sizing_skips_sub_lot_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Calibrated p=0.51 -> size factor 0.02 -> base qty 1 rounds to 0 lots.
+    # The entry must be SKIPPED, never bumped up to a minimum full lot.
+    import numpy as _np
+
+    import backtest_pipeline.src.hftbacktest_only_pipeline as pl
+
+    _install_fake_hftbacktest(monkeypatch)
+
+    def fake_loader(path: str, expected_model_id: str = ""):
+        def predict(matrix):
+            return _np.full(len(matrix), 0.51)
+
+        calibration = {"method": "isotonic_pav_train_only", "x": [0.0, 1.0], "y": [0.0, 1.0]}
+        return predict, ["spread_stress"], "c" * 64, calibration
+
+    monkeypatch.setattr(pl, "_load_meta_model", fake_loader)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "sublot"
+    config = _meta_config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        meta_model_path=str(tmp_path / "meta.lgb.txt"),
+        meta_threshold=0.1,
+        meta_sizing_mode="calibrated",
+        quantity=1.0,
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    submitted = [row for row in replay["orders"] if row["event_type"] == "ORDER_SUBMITTED"]
+    assert submitted == []
