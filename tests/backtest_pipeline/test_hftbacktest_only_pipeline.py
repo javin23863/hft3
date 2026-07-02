@@ -1615,3 +1615,259 @@ def test_prepare_unknown_symbol_fails_closed(tmp_path: Path) -> None:
                 warmup_seconds=1,
             )
         )
+
+
+def _install_multi_trip_fake_hftbacktest(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    mids: list[float],
+    fill_delay: int = 1,
+    fee_per_fill: float = 0.0,
+) -> None:
+    """Fake hftbacktest where EVERY submitted order fills fill_delay steps
+    after submission at its limit price, so N sequential entry/exit pairs can
+    be exercised deterministically."""
+    dtype, constants = _event_contract()
+
+    class RecordingAsset:
+        def __getattr__(self, _name: str):
+            def _accept(*_args: object, **_kwargs: object) -> "RecordingAsset":
+                return self
+
+            return _accept
+
+    class _Orders:
+        def __init__(self, rows: dict[int, dict[str, object]]) -> None:
+            self._rows = rows
+
+        def get(self, order_id: int) -> dict[str, object] | None:
+            return self._rows.get(order_id)
+
+    class MultiTripBacktest:
+        def __init__(self, _assets: list[object]) -> None:
+            self.steps = -1
+            self.current_timestamp = 1_000_000_000
+            # order_id -> {side, price, qty, submit_step}
+            self.book: dict[int, dict[str, float]] = {}
+            self.fee = 0.0
+            self._fees_charged: set[int] = set()
+
+        def _mid(self) -> float:
+            index = min(max(self.steps, 0), len(mids) - 1)
+            return mids[index]
+
+        def elapse(self, interval_ns: int) -> int:
+            self.steps += 1
+            self.current_timestamp += int(interval_ns)
+            return 0 if self.steps < len(mids) else 1
+
+        def clear_inactive_orders(self, _asset_no: int) -> None:
+            return None
+
+        def depth(self, _asset_no: int) -> object:
+            mid = self._mid()
+            return SimpleNamespace(best_bid=mid - 0.125, best_ask=mid + 0.125, tick_size=0.25)
+
+        def _filled(self, order_id: int) -> bool:
+            row = self.book.get(order_id)
+            return row is not None and self.steps >= row["submit_step"] + fill_delay
+
+        def state_values(self, _asset_no: int) -> dict[str, float]:
+            position = 0.0
+            balance = 0.0
+            for order_id, row in self.book.items():
+                if not self._filled(order_id):
+                    continue
+                signed = row["qty"] if row["side"] > 0 else -row["qty"]
+                position += signed
+                balance -= row["price"] * signed
+                if order_id not in self._fees_charged:
+                    self.fee += fee_per_fill
+                    self._fees_charged.add(order_id)
+            return {"position": position, "balance": balance, "fee": self.fee}
+
+        def submit_buy_order(self, _asset_no: int, order_id: int, price: float, qty: float, *_args: object) -> int:
+            self.book[order_id] = {"side": 1.0, "price": float(price), "qty": float(qty), "submit_step": self.steps}
+            return 0
+
+        def submit_sell_order(self, _asset_no: int, order_id: int, price: float, qty: float, *_args: object) -> int:
+            self.book[order_id] = {"side": -1.0, "price": float(price), "qty": float(qty), "submit_step": self.steps}
+            return 0
+
+        def wait_order_response(self, *_args: object) -> int:
+            return 0
+
+        def orders(self, _asset_no: int) -> _Orders:
+            rows: dict[int, dict[str, object]] = {}
+            for order_id, row in self.book.items():
+                filled = self._filled(order_id)
+                rows[order_id] = {
+                    "status": 3 if filled else 1,
+                    "qty": row["qty"],
+                    "leaves_qty": 0.0 if filled else row["qty"],
+                    "exec_qty": row["qty"] if filled else 0.0,
+                    "price": row["price"],
+                    "exec_price": row["price"] if filled else 0.0,
+                    "exch_timestamp": self.current_timestamp,
+                    "local_timestamp": self.current_timestamp,
+                }
+            return _Orders(rows)
+
+        def cancel(self, *_args: object) -> int:
+            return 0
+
+    fake_data = ModuleType("hftbacktest.data")
+    fake_data.validate_event_order = lambda _events: None  # type: ignore[attr-defined]
+    fake_types = ModuleType("hftbacktest.types")
+    fake_types.event_dtype = dtype  # type: ignore[attr-defined]
+    for key, value in constants.items():
+        setattr(fake_types, key, value)
+    fake_order = ModuleType("hftbacktest.order")
+    fake_order.GTC = 0  # type: ignore[attr-defined]
+    fake_order.LIMIT = 0  # type: ignore[attr-defined]
+    fake_pkg = ModuleType("hftbacktest")
+    fake_pkg.__path__ = []  # type: ignore[attr-defined]
+    fake_pkg.BacktestAsset = RecordingAsset  # type: ignore[attr-defined]
+    fake_pkg.HashMapMarketDepthBacktest = MultiTripBacktest  # type: ignore[attr-defined]
+    fake_pkg.data = fake_data  # type: ignore[attr-defined]
+    fake_pkg.types = fake_types  # type: ignore[attr-defined]
+    fake_pkg.order = fake_order  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "hftbacktest", fake_pkg)
+    monkeypatch.setitem(sys.modules, "hftbacktest.data", fake_data)
+    monkeypatch.setitem(sys.modules, "hftbacktest.types", fake_types)
+    monkeypatch.setitem(sys.modules, "hftbacktest.order", fake_order)
+
+
+def test_multi_round_trips_completes_two_trades(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Two full BUY round trips inside one entry-scan window: entry fills at
+    # the ask, mid rallies past take-profit, exit fills, entry scan re-arms.
+    mids = [5000.0, 5000.0, 5012.0, 5012.0, 5000.0, 5000.0, 5012.0, 5012.0, 5012.0, 5012.0, 5012.0, 5012.0]
+    _install_multi_trip_fake_hftbacktest(monkeypatch, mids=mids)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "multi_trip"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_params={
+            "side": "BUY",
+            "quantity": 1.0,
+            "take_profit_pct": 0.1,
+            "holding_period_bars": 50,
+            "max_round_trips": 2,
+        },
+        event_window={"cutoff_ts_ns": 1_000_000_000, "end_ts_ns": 13_000_000_000},
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed", result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["max_round_trips"] == 2
+    assert replay["strategy_surface_version"] == "smoke_limit_order_multi_trip_v3"
+    assert replay["round_trips_completed"] == 2
+    trips = replay["round_trips"]
+    assert [t["trip"] for t in trips] == [0, 1]
+    assert [t["entry_order_id"] for t in trips] == [9001, 9003]
+    assert [t["exit_order_id"] for t in trips] == [9002, 9004]
+    assert all(t["exit_reason"] == "take_profit" for t in trips)
+    assert all(t["closed_quantity"] == 1.0 for t in trips)
+    # Each trip: buy at ask 5000.125, sell at bid 5011.875 -> 11.75 points
+    # x qty 1 x contract multiplier 5.
+    assert trips[0]["gross_realized_pnl"] == pytest.approx(58.75)
+    assert trips[1]["gross_realized_pnl"] == pytest.approx(58.75)
+    assert replay["closed_quantity_total"] == 2.0
+    assert replay["realized_closed_trade_pnl"] == pytest.approx(117.5)
+    assert replay["orders_submitted"] == 2
+    assert replay["fill_rate"] == 1.0
+    assert replay["end_position"] == 0.0
+    stats = json.loads((out_dir / "stats_summary.json").read_text(encoding="utf-8"))
+    assert stats["round_trips_completed"] == 2
+    assert stats["closed_quantity_total"] == 2.0
+    assert stats["economic_gate_metric"] == "realized_closed_trade_pnl"
+
+
+def test_multi_round_trips_stops_at_max(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Same tape as the two-trip test but max_round_trips=1: exactly one trade,
+    # legacy single-trip receipt fields intact (v3 parity under the new code).
+    mids = [5000.0, 5000.0, 5012.0, 5012.0, 5000.0, 5000.0, 5012.0, 5012.0, 5012.0, 5012.0, 5012.0, 5012.0]
+    _install_multi_trip_fake_hftbacktest(monkeypatch, mids=mids)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "multi_trip_capped"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_params={
+            "side": "BUY",
+            "quantity": 1.0,
+            "take_profit_pct": 0.1,
+            "holding_period_bars": 50,
+            "max_round_trips": 1,
+        },
+        event_window={"cutoff_ts_ns": 1_000_000_000, "end_ts_ns": 13_000_000_000},
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed", result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["round_trips_completed"] == 1
+    assert replay["orders_submitted"] == 1
+    assert replay["exit_reason"] == "take_profit"
+    assert replay["closed_quantity"] == 1.0
+    assert replay["closed_quantity_total"] == 1.0
+    assert replay["realized_closed_trade_pnl"] == pytest.approx(58.75)
+    assert replay["strategy_surface_version"] == "smoke_limit_order_exit_leg_v2"
+
+
+def test_max_round_trips_without_exit_leg_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_multi_trip_fake_hftbacktest(monkeypatch, mids=[5000.0] * 6)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "multi_trip_no_exit"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_params={"side": "BUY", "quantity": 1.0, "max_round_trips": 3},
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] != "completed"
+    assert "max_round_trips_requires_exit_leg" in result["fail_closed_reasons"]
+    assert not (out_dir / "stats_summary.json").is_file()
+
+
+def test_surface_version_labels_multi_trip() -> None:
+    from backtest_pipeline.src.hftbacktest_only_pipeline import _strategy_surface_version
+
+    exit_params = {"exit_at_holding": True}
+    assert (
+        _strategy_surface_version("hypothesis_limit_order", {**exit_params, "max_round_trips": 3})
+        == "hypothesis_limit_order_event_scan_v4_multi_trip"
+    )
+    assert (
+        _strategy_surface_version("hypothesis_limit_order", {**exit_params, "max_round_trips": 1})
+        == "hypothesis_limit_order_event_scan_v3_exit_leg"
+    )
+    assert (
+        _strategy_surface_version("hypothesis_limit_order", exit_params)
+        == "hypothesis_limit_order_event_scan_v3_exit_leg"
+    )
+    assert (
+        _strategy_surface_version("smoke_limit_order", {**exit_params, "max_round_trips": 2})
+        == "smoke_limit_order_multi_trip_v3"
+    )
