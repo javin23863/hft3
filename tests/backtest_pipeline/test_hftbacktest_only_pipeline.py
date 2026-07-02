@@ -1935,3 +1935,59 @@ def test_divergence_model_names_both_missing_leaders(
 
     assert result["status"] != "completed"
     assert "pipeline_blocker:leader_tape_missing:ES+NQ" in result["fail_closed_reasons"]
+
+
+def test_required_feature_backend_mismatch_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The workstation resolves the python extractor; a run REQUIRING cpp
+    # must fail closed with a named blocker and no stats receipt — evidence
+    # can never silently carry a different feature implementation.
+    from dataclasses import replace
+
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "backend_mismatch"
+    config = replace(
+        _config(
+            tmp_path,
+            data_path,
+            snapshot_path,
+            strategy_id="hypothesis_limit_order",
+            strategy_params={
+                "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+                "quantity": 1.0,
+                "signal_threshold": 0.15,
+                "exit_at_holding": True,
+            },
+            event_window={"cutoff_ts_ns": 1_000_000_000, "end_ts_ns": 4_000_000_000},
+        ),
+        required_feature_backend="cpp",
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] != "completed"
+    assert any(
+        reason.startswith("pipeline_blocker:feature_backend_mismatch:required=cpp,got=")
+        for reason in result["fail_closed_reasons"]
+    )
+    assert not (out_dir / "stats_summary.json").is_file()
+    manifest = json.loads((out_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["required_feature_backend"] == "cpp"
+
+
+def test_empty_required_feature_backend_accepts_any(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "backend_any"
+
+    result = run_hftbacktest_only(_config(tmp_path, data_path, snapshot_path), out_dir=out_dir)
+
+    assert result["status"] == "completed", result["fail_closed_reasons"]

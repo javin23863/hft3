@@ -101,6 +101,13 @@ class HftBacktestOnlyRunConfig:
     queue_model: str = "L3FIFOQueueModel"
     fee_model: str = "trading_qty_fee_model"
     latency_model: str = "constant_order_latency"
+    # Feature-extractor backend this run REQUIRES for hypothesis models
+    # ("cpp" / "python"). Empty accepts whatever the environment provides
+    # (local smokes). Campaign runs default to "cpp" at the runner so no
+    # evidence receipt can silently carry python-path research numbers.
+    # Structural models compute signals without the 64-slot extractor, so
+    # the requirement does not apply to them.
+    required_feature_backend: str = ""
     roi_lower_bound: float | None = None
     roi_upper_bound: float | None = None
     event_window: Mapping[str, Any] = field(default_factory=dict)
@@ -133,6 +140,7 @@ class HftBacktestOnlyRunConfig:
             "maker_fee": self.maker_fee,
             "taker_fee": self.taker_fee,
             "latency_model": self.latency_model,
+            "required_feature_backend": self.required_feature_backend,
             "entry_latency_ns": self.entry_latency_ns,
             "response_latency_ns": self.response_latency_ns,
             "exchange_fill_model": self.exchange_fill_model,
@@ -1258,6 +1266,19 @@ def _build_model_signal_lookup(
             tick_size=float(config.tick_size),
             latency_ms=float(config.entry_latency_ns) / 1_000_000.0,
         )
+        required_backend = str(config.required_feature_backend or "")
+        actual_backend = getattr(pipeline, "feature_backend", "unknown")
+        if required_backend and actual_backend != required_backend:
+            # Evidence receipts must never silently carry a different
+            # feature implementation than the campaign declared.
+            return (
+                None,
+                {},
+                [
+                    "pipeline_blocker:feature_backend_mismatch:"
+                    f"required={required_backend},got={actual_backend}"
+                ],
+            )
         observations: list[tuple[int, float]] = []
         for event in iter_mbo_events(raw_events):
             state = pipeline.process_event(event)
