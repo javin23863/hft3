@@ -82,6 +82,9 @@ def _metrics_exclude_holdout(metrics: Mapping[str, Any], holdout_names: set[str]
 
 
 def _composite_score(row: Mapping[str, Any], *, holdout_names: set[str] | None = None) -> float:
+    hbt_score = _hbt_gate_aware_score(row)
+    if hbt_score is not None:
+        return hbt_score
     metrics = row.get("metrics") or {}
     holdout = holdout_names or set()
     discovery_metrics = _metrics_exclude_holdout(metrics, holdout) if holdout else dict(metrics)
@@ -99,6 +102,35 @@ def _composite_score(row: Mapping[str, Any], *, holdout_names: set[str] | None =
         - SCORE_WEIGHTS["instability_penalty"] * instability
         - SCORE_WEIGHTS["execution_cost_penalty"] * exec_cost
     )
+
+
+def _hbt_gate_aware_score(row: Mapping[str, Any]) -> float | None:
+    """Gate-aware fitness from HftBacktest campaign evidence, when present.
+
+    Once a candidate has execution-realism evidence, that evidence outranks
+    the VectorBT composite: fitness = mean per-event closed-trade realized
+    PnL (account currency), zeroed hard on a Gate-3 (microstructure
+    sensitivity) or Gate-4 (robustness) failure, and scaled by PSR/DSR when
+    Gate-4 computed them. Returns None when no HBT evidence exists so the
+    legacy VectorBT composite keeps working as the pre-screen prior.
+    """
+    hbt = row.get("hbt_results")
+    if not isinstance(hbt, Mapping):
+        return None
+    realized = hbt.get("realized_closed_trade_pnl_mean")
+    if not isinstance(realized, (int, float)):
+        return None
+    gate3 = str(hbt.get("gate3_status") or "")
+    gate4 = str(hbt.get("gate4_status") or "")
+    if gate3 == "fail" or gate4 == "fail":
+        return 0.0
+    score = float(realized)
+    if score > 0.0:
+        for key in ("psr", "dsr"):
+            value = hbt.get(key)
+            if isinstance(value, (int, float)):
+                score *= max(0.0, min(1.0, float(value)))
+    return score
 
 
 def _proposal_type(metadata: Mapping[str, Any] | None, manifest: Mapping[str, Any] | None) -> str:
