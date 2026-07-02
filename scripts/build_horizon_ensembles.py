@@ -137,6 +137,9 @@ def build_family_ensembles(
             ensemble_events,
             out_dir=gate_dir,
             performance_matrix=[[float(v) for v in row] for row in eval_matrix],
+            # Weight fitting searched every horizon variant; DSR must be
+            # deflated for that trial count, not judged as a single try.
+            n_trials=len(names),
         )
         receipts["families"][family_key] = {
             "variants": names,
