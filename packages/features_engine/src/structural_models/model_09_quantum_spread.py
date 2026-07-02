@@ -10,6 +10,9 @@ import numpy as np
 from .base import BaseStructuralModel, ModelOutput
 from .types import QuantumSpreadOutput
 
+# numpy 2.0 renamed trapz -> trapezoid; hasattr keeps numpy<2 compatibility.
+_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+
 
 def bessel_i0(x: float, n_steps: int = 64) -> float:
     """I_0(x) = (1/pi) integral_0^pi exp(x cos phi) dphi."""
@@ -19,7 +22,7 @@ def bessel_i0(x: float, n_steps: int = 64) -> float:
         return math.exp(x) / math.sqrt(2.0 * math.pi * x)
     phis = np.linspace(0.0, math.pi, n_steps)
     integrand = np.exp(x * np.cos(phis))
-    return float(np.trapz(integrand, phis) / math.pi)
+    return float(_trapezoid(integrand, phis) / math.pi)
 
 
 def spread_params(xi1: float, kappa1: float) -> tuple[float, float]:

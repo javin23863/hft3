@@ -88,6 +88,22 @@ class TestStructuralModelOutputTypes:
         assert result.payload.spread_probability >= 0.0
         assert isinstance(result.payload.cancel_all_quotes, bool)
 
+    def test_bessel_i0_known_values(self):
+        # Guards the numpy trapz/trapezoid rename shim: I_0(0) = 1, I_0(1) ~= 1.26607.
+        from features_engine.src.structural_models.model_09_quantum_spread import bessel_i0
+
+        assert abs(bessel_i0(0.0) - 1.0) < 1e-6
+        assert abs(bessel_i0(1.0) - 1.2660658) < 1e-3
+
+    def test_quantum_spread_probability_nonzero_for_sane_inputs(self):
+        # np.trapz vanished in numpy 2.0; a dead integrator zeroed spread_probability run-wide.
+        models = get_structural_models()
+        qs = next((m for m in models if getattr(m, "model_id", "") == "QUANTUM_SPREAD_DEFENSE"), None)
+        assert qs is not None
+        result = qs.evaluate(spread_ticks=1.0, xi1=1.0, kappa1=1.0)
+        assert result.payload.spread_probability > 0.0
+        assert 0.0 < result.payload.collapse_risk < 1.0
+
     def test_hawkes_toxic_produces_valid_output(self):
         models = get_structural_models()
         hk = next((m for m in models if getattr(m, "model_id", "") == "HAWKES_TOXIC_FLOW"), None)
