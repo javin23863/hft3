@@ -25,7 +25,7 @@ sys.path[:0] = [str(REPO), str(REPO / "packages"), str(REPO / "apps")]
 SCHEMA_VERSION = "hft3_meta_training_set_v1"
 
 
-def _signal_and_features(model_id: str, npz_path: str, tick_size: float) -> pd.DataFrame:
+def _signal_and_features(model_id: str, npz_path: str, tick_size: float, sensor_npz: str = "") -> "pd.DataFrame":
     import numpy as np
     import pandas as pd
     from backtest_pipeline.src.hftbacktest_only_pipeline import _canonical_signal_adapter
@@ -35,6 +35,11 @@ def _signal_and_features(model_id: str, npz_path: str, tick_size: float) -> pd.D
     adapter_kind, adapter, _class_name = _canonical_signal_adapter(model_id)
     if adapter_kind != "hypothesis":
         raise ValueError(f"meta_training_unsupported_adapter:{adapter_kind}:{model_id}")
+    sensor_adapter = None
+    if sensor_npz:
+        from replay.sensor_feature_adapter import PrecomputedFeatureAdapter
+
+        sensor_adapter = PrecomputedFeatureAdapter(sensor_npz)
     raw_events = load_npz_events(npz_path)
     pipeline = MarketStatePipeline(tick_size=tick_size, latency_ms=0.1)
     rows: list[dict[str, Any]] = []
@@ -48,6 +53,13 @@ def _signal_and_features(model_id: str, npz_path: str, tick_size: float) -> pd.D
         row["timestamp_ns"] = int(event.timestamp_ns)
         row["primary_signal"] = float(adapter.evaluate(state))
         row["mid_price"] = float(features.get("mid_price", np.nan))
+        if sensor_adapter is not None:
+            # Vol-regime conditioning columns (PIT: last sensor row at or
+            # before the event timestamp); absent coverage stays NaN.
+            sensor_adapter.sync_to_timestamp(int(event.timestamp_ns))
+            sensor_features = sensor_adapter.current_features() or {}
+            for key, value in sensor_features.items():
+                row[str(key)] = float(value)
         rows.append(row)
     frame = pd.DataFrame(rows)
     frame.attrs["feature_names"] = feature_names or []
@@ -93,7 +105,8 @@ def build_tables(
             seen.add(key)
             per_model_counts[model_id] = per_model_counts.get(model_id, 0) + 1
             spec = resolve_instrument_spec(str(row["symbol"]))
-            frame = _signal_and_features(model_id, npz_path, spec.tick_size)
+            sensor_npz = str((row.get("sensor_feature_npz") or {}).get("VIX") or "")
+            frame = _signal_and_features(model_id, npz_path, spec.tick_size, sensor_npz=sensor_npz)
             if frame.empty:
                 continue
             mids = frame["mid_price"].to_numpy(dtype=np.float64)
@@ -140,7 +153,8 @@ def build_tables(
             table_path = out_dir / f"meta_training_{model_id}.pkl"
             table.to_pickle(table_path)
         labeled = table["y_meta"].notna()
-        feature_names = feature_names_by_model[model_id]
+        non_feature = {"timestamp_ns", "primary_signal", "mid_price", "y_tb_outcome", "y_meta", "event_id", "symbol"}
+        feature_names = sorted(c for c in table.columns if c not in non_feature)
         receipt["models"][model_id] = {
             "table": str(table_path),
             "table_sha256": hashlib.sha256(table_path.read_bytes()).hexdigest(),
