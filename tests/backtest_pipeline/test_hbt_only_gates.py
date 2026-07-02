@@ -128,6 +128,62 @@ def test_robustness_gate_passes_with_events_and_dominant_config(tmp_path: Path) 
     assert report["cscv"]["pbo"] <= 0.20
 
 
+def test_robustness_gate_rejects_matrix_row_mismatch(tmp_path: Path) -> None:
+    # PBO must be computed on the SAME chronological events PSR/DSR certified:
+    # 8 events with a 4-row matrix fails closed instead of passing.
+    events = [
+        {"event_id": f"CPI_{i}", "realized_closed_trade_pnl": pnl}
+        for i, pnl in enumerate([10.0, 12.0, 11.0, 13.0, 12.0, 11.5, 12.5, 11.0])
+    ]
+    short_matrix = [[10.0, 5.0], [12.0, 6.0], [11.0, 5.5], [13.0, 6.5]]
+    report = run_robustness_gate(events, out_dir=tmp_path, performance_matrix=short_matrix)
+    assert report["status"] == "fail"
+    assert "cscv_matrix_row_mismatch:4!=8" in report["fail_closed_reasons"]
+
+
+def test_sensitivity_battery_scales_measured_latency_axis(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # Under chi404_measured, scenarios must resolve the measured base ONCE and
+    # replay with constant_order_latency at scaled ns — otherwise every
+    # lat0.5x/1x/2x label replays identical latencies.
+    captured_configs = []
+
+    def _capturing_runner(config):
+        captured_configs.append(config)
+        replay = {
+            "official_hftbacktest_replay_status": "pass",
+            "orders": [],
+            "fills": [{"order_id": 9001, "filled_quantity": 1.0}],
+            "orders_submitted": 1,
+            "fills_count": 1,
+            "fill_rate": 1.0,
+            "gross_pnl": 5.0,
+            "net_pnl": 5.0,
+            "realized_closed_trade_pnl": 5.0,
+            "fail_closed_reasons": [],
+        }
+        return replay, []
+
+    monkeypatch.setattr(pipeline, "_run_minimal_strategy", _capturing_runner)
+    monkeypatch.setattr(pipeline, "_resolve_latency_ns", lambda _cfg: (3_000_000, 4_000_000))
+
+    config = _config(latency_model="chi404_measured")
+    report = run_sensitivity_battery(config, out_dir=tmp_path, base_stats=_base_stats())
+
+    assert report["status"] == "pass", report["fail_closed_reasons"]
+    assert report["base_entry_latency_ns"] == 3_000_000
+    assert all(c.latency_model == "constant_order_latency" for c in captured_configs)
+    entry_by_mult = {}
+    for c in captured_configs:
+        mult = c.run_id.rsplit("lat", 1)[-1].split("x", 1)[0]
+        entry_by_mult.setdefault(mult, set()).add(c.entry_latency_ns)
+    assert entry_by_mult["0.5"] == {1_500_000}
+    assert entry_by_mult["1"] == {3_000_000}
+    assert entry_by_mult["2"] == {6_000_000}
+    assert all(c.response_latency_ns in (2_000_000, 4_000_000, 8_000_000) for c in captured_configs)
+
+
 def _write_minimal_outputs(out_dir: Path, *, economic: str = "pass") -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "recorder_result.npz").write_bytes(b"npz")

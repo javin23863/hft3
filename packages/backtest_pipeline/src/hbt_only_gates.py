@@ -111,14 +111,31 @@ def run_sensitivity_battery(
         }
     )
 
+    # Resolve the BASE latency once (constant or chi404-measured), then force
+    # every scenario onto constant_order_latency with scaled nanoseconds.
+    # Scaling the ns fields alone is inert under chi404_measured — the lane
+    # would reload the same measured model for every lat0.5x/1x/2x label and
+    # the latency axis would never actually be exercised.
+    from backtest_pipeline.src.hftbacktest_only_pipeline import _resolve_latency_ns
+
+    try:
+        base_entry_ns, base_response_ns = _resolve_latency_ns(config)
+    except Exception as exc:  # noqa: BLE001 - fail closed with an explicit reason
+        reasons.append(f"latency_axis_base_unresolved:{exc}")
+        base_entry_ns = base_response_ns = None
+
     for scenario in scenario_list:
         scenario_id = str(scenario["scenario_id"])
+        if base_entry_ns is None:
+            break
+        multiplier = float(scenario["latency_multiplier"])
         scenario_cfg = dataclasses.replace(
             config,
             run_id=f"{config.run_id}__{scenario_id}",
             exchange_fill_model=str(scenario["exchange_fill_model"]),
-            entry_latency_ns=int(config.entry_latency_ns * float(scenario["latency_multiplier"])),
-            response_latency_ns=int(config.response_latency_ns * float(scenario["latency_multiplier"])),
+            latency_model="constant_order_latency",
+            entry_latency_ns=max(1, int(base_entry_ns * multiplier)),
+            response_latency_ns=max(1, int(base_response_ns * multiplier)),
             maker_fee=float(scenario["maker_fee"]),
             taker_fee=float(scenario["taker_fee"]),
         )
@@ -133,6 +150,8 @@ def run_sensitivity_battery(
             "scenario_id": scenario_id,
             "exchange_fill_model": scenario["exchange_fill_model"],
             "latency_multiplier": scenario["latency_multiplier"],
+            "entry_latency_ns": scenario_cfg.entry_latency_ns,
+            "response_latency_ns": scenario_cfg.response_latency_ns,
             "fee_label": scenario["fee_label"],
             "maker_fee": scenario["maker_fee"],
             "taker_fee": scenario["taker_fee"],
@@ -167,6 +186,9 @@ def run_sensitivity_battery(
         "run_id": config.run_id,
         "status": "pass" if not reasons else "fail",
         "scenario_count": len(rows),
+        "base_latency_model": str(config.latency_model),
+        "base_entry_latency_ns": base_entry_ns,
+        "base_response_latency_ns": base_response_ns,
         "min_realized_closed_trade_pnl": min_realized,
         "scenarios": rows,
         "fail_closed_reasons": reasons,
@@ -231,6 +253,13 @@ def run_robustness_gate(
     cscv: dict[str, Any] = {}
     if performance_matrix is None:
         reasons.append("cscv_matrix_missing")
+    elif len(performance_matrix) != len(rows):
+        # The overfitting check must be computed on the SAME chronological
+        # event set that PSR/DSR certified — a shorter or unrelated surface
+        # would detach PBO from the certified events.
+        reasons.append(
+            f"cscv_matrix_row_mismatch:{len(performance_matrix)}!={len(rows)}"
+        )
     else:
         cscv = dict(combinatorially_symmetric_cv(performance_matrix))
         pbo = cscv.get("pbo")
