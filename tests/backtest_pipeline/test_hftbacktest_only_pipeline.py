@@ -2293,3 +2293,51 @@ def test_meta_gate_passthrough_when_scores_clear_threshold(
     assert passthrough["status"] == baseline["status"]
     replay = json.loads((gated_dir / "official_replay.json").read_text(encoding="utf-8"))
     assert replay["meta_gated_out"] == 0
+
+
+def test_toxicity_gate_blocks_unwarmed_steps_conservatively(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # On a tiny tape the VPIN producer never warms up: every step is
+    # UNAVAILABLE and the gate must block conservatively (no entry without a
+    # toxicity estimate), with the counts named in receipts — never a silent
+    # pass-through.
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "tox_unwarmed"
+    config = _meta_config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        toxicity_max_vpin=0.7,
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert "pipeline_blocker:no_hbt_order_submitted" in result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["toxicity_gate_enabled"] is True
+    assert replay["toxicity_unavailable_steps"] > 0
+    assert replay["toxicity_gated_out"] >= 0
+    assert replay["toxicity_config"]["max_vpin"] == 0.7
+
+
+def test_toxicity_gate_absent_keeps_baseline_behavior(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "tox_off"
+
+    result = run_hftbacktest_only(
+        _meta_config(tmp_path, data_path, snapshot_path), out_dir=out_dir
+    )
+
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["toxicity_gate_enabled"] is False
+    assert replay["toxicity_gated_out"] == 0
+    assert replay["toxicity_unavailable_steps"] == 0
