@@ -107,3 +107,24 @@ def test_non_run_dirs_and_corrupt_json_are_skipped(tmp_path: Path) -> None:
     assert len(rows) == 1
     assert rows[0]["run_id"] == "corrupt"
     assert rows[0]["mechanical_validity_status"] == "missing"
+
+
+def test_manifest_only_dirs_excluded_and_named(tmp_path: Path) -> None:
+    # Blocked/dry-run dirs write run_manifest.json but never stats_summary.json.
+    # They must not become result rows; the summary names them.
+    root = tmp_path / "hbt_runs"
+    _write_run_dir(root, "run_ok", realized=1.0)
+    blocked = root / "run_blocked"
+    blocked.mkdir()
+    (blocked / "run_manifest.json").write_text(
+        json.dumps({"run_id": "run_blocked", "canonical_model_id": "X"}), encoding="utf-8"
+    )
+    out = tmp_path / "index.jsonl"
+
+    summary = build_run_index([root], out)
+
+    assert summary["rows"] == 1
+    assert summary["run_dirs_incomplete_no_stats"] == ["run_blocked"]
+    lines = out.read_text(encoding="utf-8").splitlines()
+    rows = [json.loads(line) for line in lines[:-1]]
+    assert [r["run_id"] for r in rows] == ["run_ok"]

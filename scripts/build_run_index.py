@@ -46,9 +46,13 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _row_from_run_dir(run_dir: Path) -> dict[str, Any] | None:
     stats_path = run_dir / "stats_summary.json"
-    manifest = _load_json(run_dir / "run_manifest.json")
-    if not stats_path.is_file() and not manifest:
+    if not stats_path.is_file():
+        # Index contract: every row derives from a stats_summary.json
+        # receipt. Blocked/invalid/dry-run directories (manifest written,
+        # stats never produced) are counted as incomplete in the summary,
+        # never emitted as result rows for Gate-4/dashboard consumers.
         return None
+    manifest = _load_json(run_dir / "run_manifest.json")
     stats = _load_json(stats_path)
     gate3 = _load_json(run_dir / "gate3_sensitivity.json")
     gate4 = _load_json(run_dir / "robustness_report.json")
@@ -100,6 +104,7 @@ def _row_from_run_dir(run_dir: Path) -> dict[str, Any] | None:
 def build_run_index(roots: list[Path], out_path: Path) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     scanned = 0
+    incomplete: list[str] = []
     for root in roots:
         if not root.is_dir():
             continue
@@ -108,6 +113,9 @@ def build_run_index(roots: list[Path], out_path: Path) -> dict[str, Any]:
             row = _row_from_run_dir(run_dir)
             if row is not None:
                 rows.append(row)
+            elif (run_dir / "run_manifest.json").is_file():
+                # No silent truncation: name what was excluded and why.
+                incomplete.append(run_dir.name)
     rows.sort(key=lambda r: str(r["run_id"]))
 
     lines = [json.dumps(row, sort_keys=True, separators=(",", ":"), default=str) for row in rows]
@@ -117,6 +125,7 @@ def build_run_index(roots: list[Path], out_path: Path) -> dict[str, Any]:
         "row_kind": "index_summary",
         "rows": len(rows),
         "run_dirs_scanned": scanned,
+        "run_dirs_incomplete_no_stats": sorted(incomplete),
         "data_sha256": data_digest,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
