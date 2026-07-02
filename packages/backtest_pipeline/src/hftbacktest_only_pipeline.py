@@ -66,6 +66,7 @@ _STRUCTURAL_SIGNAL_FIELDS_BY_CLASS = {
 }
 HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION = "hypothesis_limit_order_event_scan_v2"
 HYPOTHESIS_LIMIT_ORDER_EXIT_LEG_SURFACE_VERSION = "hypothesis_limit_order_event_scan_v3_exit_leg"
+HYPOTHESIS_LIMIT_ORDER_MULTI_TRIP_SURFACE_VERSION = "hypothesis_limit_order_event_scan_v4_multi_trip"
 
 
 class HftBacktestOnlyPipelineError(ValueError):
@@ -657,6 +658,9 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         exit_fill_grace_steps = _positive_int(
             params.get("exit_fill_grace_steps", 10), "strategy_params.exit_fill_grace_steps"
         )
+        max_round_trips = _positive_int(
+            params.get("max_round_trips", 1), "strategy_params.max_round_trips"
+        )
     except HftBacktestOnlyPipelineError as exc:
         reason = str(exc)
         return _not_run_replay(reason, config), [reason]
@@ -669,6 +673,14 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     exit_leg_enabled = (
         stop_loss_pct is not None or take_profit_pct is not None or exit_at_holding
     )
+    # Re-entry only exists on top of a closed trade: without the exit leg the
+    # position can never go flat inside the window, so a multi-trip request
+    # would silently behave as a single trip — fail it closed instead.
+    if max_round_trips > 1 and not exit_leg_enabled:
+        return (
+            _not_run_replay("max_round_trips_requires_exit_leg", config),
+            ["max_round_trips_requires_exit_leg"],
+        )
     price_mode = str(params.get("price_mode", "passive_best_bid_or_ask"))
     if side not in {"BUY", "SELL"}:
         return _not_run_replay("invalid_strategy_side", config), ["invalid_strategy_side"]
@@ -732,6 +744,14 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     exit_reason = ""
     last_mid: float | None = None
     max_abs_position = 0.0
+    contract_multiplier = float(config.contract_size or 1.0)
+    # Round-trip bookkeeping: a trip is recorded when its exit order fully
+    # fills; per-trip state then resets so the entry scan can re-arm, up to
+    # max_round_trips. Fresh order ids per trip keep receipts unambiguous.
+    base_order_id = order_id
+    trip_index = 0
+    current_trip_recorded = False
+    completed_trades: list[dict[str, Any]] = []
 
     def record_order_state(event_type: str, state: Any, step: int) -> None:
         nonlocal last_recorded_exec_qty, order_snapshot
@@ -816,7 +836,55 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                     _maybe_call(hbt, "clear_inactive_orders", 0)
                     api_calls.append("HashMapMarketDepthBacktest.clear_inactive_orders")
                     if last_exit_exec_qty >= last_recorded_exec_qty - 1e-12:
-                        break
+                        trip_direction = 1.0 if side == "BUY" else -1.0
+                        trip_entry_px = float(order_snapshot.get("exec_price") or 0.0)
+                        trip_exit_px = float(exit_snapshot.get("exec_price") or 0.0)
+                        trip_closed_qty = min(last_recorded_exec_qty, last_exit_exec_qty)
+                        completed_trades.append(
+                            {
+                                "trip": trip_index,
+                                "side": side,
+                                "entry_order_id": order_id,
+                                "exit_order_id": exit_order_id,
+                                "entry_step": submitted_step,
+                                "entry_fill_step": entry_fill_step,
+                                "exit_step": exit_submitted_step,
+                                "exit_reason": exit_reason,
+                                "entry_avg_price": trip_entry_px,
+                                "exit_avg_price": trip_exit_px,
+                                "closed_quantity": trip_closed_qty,
+                                "gross_realized_pnl": trip_direction
+                                * (trip_exit_px - trip_entry_px)
+                                * trip_closed_qty
+                                * contract_multiplier,
+                            }
+                        )
+                        current_trip_recorded = True
+                        if len(completed_trades) >= max_round_trips or step + 1 >= entry_scan_steps:
+                            break
+                        # Flat with entry-scan window remaining: reset the
+                        # per-trip state so the entry scan re-arms.
+                        trip_index += 1
+                        order_id = base_order_id + 2 * trip_index
+                        exit_order_id = order_id + 1
+                        submitted = False
+                        submit_ret = None
+                        response_ret = None
+                        cancel_ret = None
+                        cancel_response_ret = None
+                        order_snapshot = {}
+                        last_recorded_exec_qty = 0.0
+                        submitted_step = None
+                        entry_fill_step = None
+                        exit_snapshot = {}
+                        last_exit_exec_qty = 0.0
+                        exit_submitted = False
+                        exit_submitted_step = None
+                        exit_submit_ret = None
+                        exit_response_ret = None
+                        exit_reason = ""
+                        current_trip_recorded = False
+                        continue
                     if (
                         exit_submitted_step is not None
                         and step - exit_submitted_step >= exit_fill_grace_steps
@@ -1034,30 +1102,45 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     net_pnl = _float_field(final_state, "balance")
     fills_count = len(fills)
     orders_intended = 1
-    orders_submitted = 1 if submitted and submit_ret == 0 else 0
-    orders_acknowledged = 1 if response_ret in (0, 3) else 0
+    # Entry counters: recorded round trips each carried one accepted entry;
+    # the in-flight (unrecorded) trip contributes the legacy single-order
+    # accounting, so max_round_trips=1 receipts are byte-identical to v3.
+    current_trip_live = not current_trip_recorded
+    orders_submitted = len(completed_trades) + (
+        1 if current_trip_live and submitted and submit_ret == 0 else 0
+    )
+    orders_acknowledged = len(completed_trades) + (
+        1 if current_trip_live and response_ret in (0, 3) else 0
+    )
     total_filled_qty = sum(float(row.get("filled_quantity") or 0.0) for row in fills)
-    filled_orders = 1 if total_filled_qty > 0 else 0
+    filled_orders = len(completed_trades) + (
+        1 if current_trip_live and last_recorded_exec_qty > 0 else 0
+    )
     fill_rate = filled_orders / orders_submitted if orders_submitted else 0.0
 
     # Exit-leg economics: closed-trade realized PnL in account currency
     # (price move x closed qty x contract multiplier, minus total fees), plus
     # any residual open inventory marked to the last observed two-sided mid.
+    # With round trips, gross realized PnL sums the recorded trips plus any
+    # partially-closed in-flight trip; fees come from the engine's total.
     direction = 1.0 if side == "BUY" else -1.0
-    contract_multiplier = float(config.contract_size)
     total_fees_currency = _float_field(final_state, "fee")
     entry_avg_price = float(order_snapshot.get("exec_price") or 0.0) if last_recorded_exec_qty > 0 else None
     exit_avg_price = float(exit_snapshot.get("exec_price") or 0.0) if last_exit_exec_qty > 0 else None
     closed_quantity = min(last_recorded_exec_qty, last_exit_exec_qty)
+    gross_realized_total = sum(float(t["gross_realized_pnl"]) for t in completed_trades)
+    closed_quantity_total = sum(float(t["closed_quantity"]) for t in completed_trades)
+    if current_trip_live and closed_quantity > 0 and entry_avg_price and exit_avg_price:
+        gross_realized_total += (
+            direction * (exit_avg_price - entry_avg_price) * closed_quantity * contract_multiplier
+        )
+        closed_quantity_total += closed_quantity
     realized_closed_trade_pnl = None
     unrealized_pnl_marked_to_mid: float | None = None
     residual_position = direction * (last_recorded_exec_qty - last_exit_exec_qty)
     if exit_leg_enabled:
-        if closed_quantity > 0 and entry_avg_price and exit_avg_price:
-            realized_closed_trade_pnl = (
-                direction * (exit_avg_price - entry_avg_price) * closed_quantity * contract_multiplier
-                - total_fees_currency
-            )
+        if closed_quantity_total > 0:
+            realized_closed_trade_pnl = gross_realized_total - total_fees_currency
         elif submitted and last_recorded_exec_qty <= 0:
             realized_closed_trade_pnl = 0.0 - total_fees_currency if total_fees_currency else 0.0
         if abs(residual_position) > 1e-12:
@@ -1096,6 +1179,10 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "entry_avg_price": entry_avg_price,
         "exit_avg_price": exit_avg_price,
         "closed_quantity": closed_quantity,
+        "max_round_trips": max_round_trips,
+        "round_trips_completed": len(completed_trades),
+        "round_trips": completed_trades,
+        "closed_quantity_total": closed_quantity_total,
         "realized_closed_trade_pnl": realized_closed_trade_pnl,
         "unrealized_pnl_marked_to_mid": unrealized_pnl_marked_to_mid,
         "mark_mid": last_mid,
@@ -1534,6 +1621,10 @@ def _stats_summary(config: HftBacktestOnlyRunConfig, replay: Mapping[str, Any], 
         "exit_leg_enabled": replay.get("exit_leg_enabled", False),
         "exit_reason": replay.get("exit_reason", ""),
         "exit_leg_observation": replay.get("exit_leg_observation", ""),
+        "max_round_trips": replay.get("max_round_trips", 1),
+        "round_trips_completed": replay.get("round_trips_completed", 0),
+        "round_trips": list(replay.get("round_trips") or []),
+        "closed_quantity_total": replay.get("closed_quantity_total", 0.0),
         "fail_closed_reasons": list(replay.get("fail_closed_reasons") or []),
     }
 
@@ -2035,10 +2126,20 @@ def _strategy_surface_version(strategy_id: str, params: Mapping[str, Any] | None
         or params.get("take_profit_pct") is not None
         or bool(params.get("exit_at_holding", False))
     )
+    try:
+        multi_trip = bool(params) and int(params.get("max_round_trips", 1) or 1) > 1
+    except (TypeError, ValueError):
+        # Invalid values fail closed in the strategy runner; the surface
+        # label must not crash manifest generation before that.
+        multi_trip = False
     if strategy_id == "hypothesis_limit_order":
+        if exit_leg and multi_trip:
+            return HYPOTHESIS_LIMIT_ORDER_MULTI_TRIP_SURFACE_VERSION
         if exit_leg:
             return HYPOTHESIS_LIMIT_ORDER_EXIT_LEG_SURFACE_VERSION
         return HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION
+    if exit_leg and multi_trip:
+        return "smoke_limit_order_multi_trip_v3"
     if exit_leg:
         return "smoke_limit_order_exit_leg_v2"
     return "smoke_limit_order_single_order_v1"

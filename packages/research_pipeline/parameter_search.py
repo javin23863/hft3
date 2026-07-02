@@ -88,6 +88,11 @@ def parameter_grid(
         grid["stop_loss_pct"] = stop_loss
     if take_profit:
         grid["take_profit_pct"] = take_profit
+    # Round trips per event window (requires the exit leg downstream); only
+    # models whose registry ranges opt in explore it — no silent grid blowup.
+    round_trips = _range_points(_param_range(parsed, "max_round_trips"), default=[])
+    if round_trips:
+        grid["max_round_trips"] = [int(value) for value in round_trips]
     if expand_for_vectorbt:
         grid["holding_period_bars"] = _holding_points(
             _param_range(parsed, "holding_period_bars", "holding_bars")
