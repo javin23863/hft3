@@ -88,13 +88,19 @@ void FeatureExtractorCpp::update_realized_vol(double mid) {
 
 void FeatureExtractorCpp::apply_book_event(const MBOEventCpp& event) {
     auto& book = (event.side == 'B') ? bids_ : asks_;
+    // Python-reference BBO semantics (mbo_features.py OrderBook): a removal
+    // of the cached best sets update_needed, and the refresh then recomputes
+    // the EVENT side's best - for TRADE events that is the AGGRESSOR side,
+    // so the resting side's cached best can go stale exactly as in the
+    // reference. Bug-for-bug parity is required: every model was fitted
+    // against the python behavior.
+    bool update_needed = false;
     if (event.action == 'A') {
         if (book.find(event.price) == book.end()) {
             book[event.price] = BookLevelCpp{};
             if ((event.side == 'B' && event.price > best_bid_) ||
                 (event.side == 'A' && event.price < best_ask_)) {
-                if (event.side == 'B') best_bid_ = event.price;
-                else best_ask_ = event.price;
+                update_needed = true;
             }
         }
         book[event.price].orders[event.order_id] = event.size;
@@ -135,15 +141,18 @@ void FeatureExtractorCpp::apply_book_event(const MBOEventCpp& event) {
                     if (lvl.total_qty <= 0) {
                         tb.erase(lit);
                         if ((side == 'B' && price == best_bid_) || (side == 'A' && price == best_ask_)) {
-                            if (side == 'B')
-                                best_bid_ = tb.empty() ? 0.0 : tb.rbegin()->first;
-                            else
-                                best_ask_ = tb.empty() ? 1e12 : tb.begin()->first;
+                            update_needed = true;
                         }
                     }
                 }
             }
         }
+    }
+    if (update_needed) {
+        if (event.side == 'B')
+            best_bid_ = bids_.empty() ? 0.0 : bids_.rbegin()->first;
+        else
+            best_ask_ = asks_.empty() ? 1e12 : asks_.begin()->first;
     }
 }
 
@@ -242,18 +251,27 @@ void FeatureExtractorCpp::extract() {
         vec_[17] = std::max(0.0, (prev_top10_depth_ - depth10) / prev_top10_depth_);
     prev_top10_depth_ = depth10;
 
-    if (best_bid_ > 0 && best_ask_ < 1e11) {
-        const double spread = best_ask_ - best_bid_;
+    // Python reference (mbo_features.py): the spread block runs on EVERY
+    // event — spread is 0.0 when the book is one-sided/empty, it still
+    // enters the 100-deep history, and the median is the EXACT even-average
+    // median. Mid/vol update only on a valid two-sided book.
+    const bool book_valid = (best_bid_ > 0 && best_ask_ < 1e11);
+    {
+        const double spread = book_valid ? best_ask_ - best_bid_ : 0.0;
         vec_[15] = spread;
         spread_history_.push_back(spread);
         if (spread_history_.size() > 100) spread_history_.erase(spread_history_.begin());
-        double median = spread;
+        double median = tick_size_;
         if (!spread_history_.empty()) {
             auto tmp = spread_history_;
             std::sort(tmp.begin(), tmp.end());
-            median = tmp[tmp.size() / 2];
+            const size_t n = tmp.size();
+            median = (n % 2 == 1) ? tmp[n / 2]
+                                  : (tmp[n / 2 - 1] + tmp[n / 2]) / 2.0;
         }
         vec_[16] = median > 1e-9 ? spread / median : 1.0;
+    }
+    if (book_valid) {
         const double mid = (best_bid_ + best_ask_) / 2.0;
         vec_[40] = mid;
         update_realized_vol(mid);
