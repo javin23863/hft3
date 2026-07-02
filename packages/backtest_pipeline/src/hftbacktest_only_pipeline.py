@@ -1220,6 +1220,12 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     return replay, reasons
 
 
+def _required_leader_symbols(model_id: str) -> tuple[str, ...]:
+    from replay.cross_asset_assembly import required_leaders_for_model
+
+    return required_leaders_for_model(model_id)
+
+
 def _build_model_signal_lookup(
     config: HftBacktestOnlyRunConfig,
     params: Mapping[str, Any],
@@ -1229,6 +1235,17 @@ def _build_model_signal_lookup(
         return None, {}, ["authority_missing:canonical_model_id_missing"]
     if config.canonical_model_id and model_id != config.canonical_model_id:
         return None, {}, ["authority_missing:canonical_model_id_mismatch"]
+    required_leaders = _required_leader_symbols(model_id)
+    if required_leaders:
+        # This lane has no leader-tape ingestion yet: a cross-asset hypothesis
+        # evaluated without its leader features returns a permanent 0.0, which
+        # the 2026-07-02 canary misreported as strategy_signal_below_threshold.
+        # Fail closed naming the missing leader tapes instead.
+        return (
+            None,
+            {},
+            [f"pipeline_blocker:leader_tape_missing:{'+'.join(required_leaders)}"],
+        )
     try:
         adapter_kind, adapter, class_name = _canonical_signal_adapter(model_id)
         if adapter_kind == "structural":

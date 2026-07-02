@@ -11,7 +11,28 @@ TARGET_DEFAULT_LEADERS: dict[str, tuple[str, ...]] = {
     "MNQ": ("NQ",),
     "ES": ("NQ", "ZN"),  # divergence / macro pairs
     "NQ": ("ES", "ZN"),
+    "RTY": ("ES",),  # Russell/Dow lanes follow broad-market flow
+    "YM": ("ES",),
+    "M2K": ("RTY",),
+    "MYM": ("YM",),
 }
+
+# Leader tapes each cross-asset hypothesis reads from
+# MarketState.cross_asset_features (features_engine hypotheses modules).
+# A run for one of these models without ALL of its leader features present
+# evaluates to a permanent 0.0 signal — callers must treat missing leaders
+# as an explicit blocker, never as "no signal".
+REQUIRED_LEADERS_BY_MODEL: dict[str, tuple[str, ...]] = {
+    "ES_MES_LEAD_LAG": ("ES",),
+    "NQ_MNQ_LEAD_LAG": ("NQ",),
+    "ES_NQ_DIVERGENCE_SNAPBACK": ("ES", "NQ"),
+    "ZN_ZB_ES_NQ_MACRO_IMPULSE": ("ZN",),
+    "MICRO_CONTRACT_RETAIL_LAG": ("ES",),
+}
+
+
+def required_leaders_for_model(model_id: str) -> tuple[str, ...]:
+    return REQUIRED_LEADERS_BY_MODEL.get(str(model_id or "").strip().upper(), ())
 
 PROVENANCE_SYMBOL = "_symbol"
 PROVENANCE_SOURCE_TS = "_source_timestamp_ns"

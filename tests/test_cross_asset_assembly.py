@@ -103,3 +103,24 @@ def test_es_to_mes_abstains_without_leader_leg() -> None:
         current_inventory=0,
     )
     assert hyp.evaluate(state) == 0.0
+
+
+def test_target_default_leaders_cover_russell_and_dow_lanes() -> None:
+    from replay.cross_asset_assembly import TARGET_DEFAULT_LEADERS
+
+    assert TARGET_DEFAULT_LEADERS["RTY"] == ("ES",)
+    assert TARGET_DEFAULT_LEADERS["YM"] == ("ES",)
+    assert TARGET_DEFAULT_LEADERS["M2K"] == ("RTY",)
+    assert TARGET_DEFAULT_LEADERS["MYM"] == ("YM",)
+
+
+def test_required_leaders_for_model_names_hypothesis_leader_tapes() -> None:
+    from replay.cross_asset_assembly import required_leaders_for_model
+
+    assert required_leaders_for_model("ES_MES_LEAD_LAG") == ("ES",)
+    assert required_leaders_for_model("NQ_MNQ_LEAD_LAG") == ("NQ",)
+    assert required_leaders_for_model("ES_NQ_DIVERGENCE_SNAPBACK") == ("ES", "NQ")
+    assert required_leaders_for_model("ZN_ZB_ES_NQ_MACRO_IMPULSE") == ("ZN",)
+    assert required_leaders_for_model("MICRO_CONTRACT_RETAIL_LAG") == ("ES",)
+    assert required_leaders_for_model("SPREAD_BLOWOUT_RECOMPRESSION") == ()
+    assert required_leaders_for_model("") == ()

@@ -1871,3 +1871,67 @@ def test_surface_version_labels_multi_trip() -> None:
         _strategy_surface_version("smoke_limit_order", {**exit_params, "max_round_trips": 2})
         == "smoke_limit_order_multi_trip_v3"
     )
+
+
+def test_cross_asset_model_without_leader_ingestion_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The lane cannot feed leader features yet; a cross-asset model must fail
+    # closed naming the missing leader tapes, never report a 0.0 signal as
+    # strategy_signal_below_threshold (the 2026-07-02 canary lie).
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "cross_asset_blocked"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={
+            "model_id": "ES_MES_LEAD_LAG",
+            "quantity": 1.0,
+            "signal_threshold": 0.15,
+            "exit_at_holding": True,
+        },
+        canonical_model_id="ES_MES_LEAD_LAG",
+        legacy_aliases=("HYP_16",),
+        event_window={"cutoff_ts_ns": 1_000_000_000, "end_ts_ns": 4_000_000_000},
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] != "completed"
+    assert "pipeline_blocker:leader_tape_missing:ES" in result["fail_closed_reasons"]
+    assert not (out_dir / "stats_summary.json").is_file()
+
+
+def test_divergence_model_names_both_missing_leaders(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "cross_asset_blocked_two"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={
+            "model_id": "ES_NQ_DIVERGENCE_SNAPBACK",
+            "quantity": 1.0,
+            "signal_threshold": 0.15,
+            "exit_at_holding": True,
+        },
+        canonical_model_id="ES_NQ_DIVERGENCE_SNAPBACK",
+        legacy_aliases=("HYP_18",),
+        event_window={"cutoff_ts_ns": 1_000_000_000, "end_ts_ns": 4_000_000_000},
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] != "completed"
+    assert "pipeline_blocker:leader_tape_missing:ES+NQ" in result["fail_closed_reasons"]
