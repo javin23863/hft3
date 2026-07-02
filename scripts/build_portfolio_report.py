@@ -173,23 +173,29 @@ def build_portfolio_report(run_index_path: Path, out_dir: Path) -> dict[str, Any
         (gross_total - net_total) / gross_total if gross_total > 0.0 else None
     )
 
-    # Equal-weight portfolio series: per-event sum over models present.
-    portfolio: dict[str, float] = {}
-    for events in model_events.values():
-        for event_id, pnl in events.items():
-            portfolio[event_id] = portfolio.get(event_id, 0.0) + pnl
+    # Equal-weight portfolio series: per-event MEAN over models present,
+    # so events with richer model coverage carry no extra notional weight.
+    def _equal_weight_series(
+        event_map: dict[str, dict[str, float]],
+    ) -> dict[str, float]:
+        sums: dict[str, float] = {}
+        counts: dict[str, int] = {}
+        for events in event_map.values():
+            for event_id, pnl in events.items():
+                sums[event_id] = sums.get(event_id, 0.0) + pnl
+                counts[event_id] = counts.get(event_id, 0) + 1
+        return {e: sums[e] / counts[e] for e in sums}
+
+    portfolio = _equal_weight_series(model_events)
     event_ids = sorted(portfolio)
     portfolio_values = np.array([portfolio[e] for e in event_ids])
     portfolio_psr = _series_psr(portfolio_values) if event_ids else None
 
     marginal_psr: dict[str, float | None] = {}
     for model_id in models:
-        without: dict[str, float] = {}
-        for other, events in model_events.items():
-            if other == model_id:
-                continue
-            for event_id, pnl in events.items():
-                without[event_id] = without.get(event_id, 0.0) + pnl
+        without = _equal_weight_series(
+            {m: ev for m, ev in model_events.items() if m != model_id}
+        )
         psr_without = _series_psr(np.array([without[e] for e in sorted(without)]))
         if portfolio_psr is None or psr_without is None:
             marginal_psr[model_id] = None
@@ -207,6 +213,13 @@ def build_portfolio_report(run_index_path: Path, out_dir: Path) -> dict[str, Any
                 for e in event_ids
             ],
             out_dir=out_dir,
+            # CSCV/PBO needs the per-model performance matrix; a model
+            # absent from an event held no position there, an honest 0.
+            performance_matrix=[
+                [model_events[m].get(e, 0.0) for m in models] for e in event_ids
+            ],
+            # DSR deflated for the number of models composing the book.
+            n_trials=len(models),
         )
 
     report: dict[str, Any] = {
