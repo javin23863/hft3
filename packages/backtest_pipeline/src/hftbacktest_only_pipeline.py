@@ -1218,6 +1218,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "signal_field": signal_meta.get("signal_field", ""),
         "feature_backend": signal_meta.get("feature_backend", "none"),
         "leader_symbols": list(signal_meta.get("leader_symbols") or []),
+        "leader_observations": dict(signal_meta.get("leader_observations") or {}),
         "sensor_ids": list(signal_meta.get("sensor_ids") or []),
         "leader_alignment_gaps": signal_meta.get("leader_alignment_gaps", 0),
         "no_order_observation": no_order_observation,
@@ -1389,13 +1390,21 @@ def _build_model_signal_lookup(
                 for sensor_id, sensor_adapter in sensor_adapters.items():
                     sensor_adapter.sync_to_timestamp(max(0, feature_ts))
                     sensor_features = sensor_adapter.current_features()
-                    if not sensor_features:
+                    sensor_source_ts = sensor_adapter.current_timestamp_ns()
+                    if (
+                        not sensor_features
+                        or sensor_source_ts is None
+                        or feature_ts - sensor_source_ts > staleness_cap_ns
+                    ):
+                        # Absent or stale sensor rows are withheld; provenance
+                        # must carry the ACTUAL sample timestamp, never the
+                        # decision time.
                         leader_alignment_gaps += 1
                         continue
                     cross[sensor_id] = enrich_sensor_leg(
                         sensor_features,
                         sensor_id=sensor_id,
-                        source_timestamp_ns=max(0, feature_ts),
+                        source_timestamp_ns=sensor_source_ts,
                         sensor_kind="vix_options" if sensor_id.upper() == "VIX" else "sensor",
                     )
                 pipeline.cross_asset_features = cross

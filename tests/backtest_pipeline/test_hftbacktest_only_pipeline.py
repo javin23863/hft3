@@ -2127,3 +2127,49 @@ def test_vix_model_without_sensor_tape_fails_closed(
 
     assert "pipeline_blocker:sensor_tape_missing:VIX" in result["fail_closed_reasons"]
     assert not (out_dir / "stats_summary.json").is_file()
+
+
+def _write_sensor_npz(path: Path, *, ts: list[int]) -> Path:
+    payload = {
+        "ts": np.asarray(ts, dtype=np.int64),
+        "vix_opt_bipower_var": np.linspace(0.1, 0.9, len(ts)),
+        "_attrs_json": np.asarray([str({"columns": ["vix_opt_bipower_var"]})], dtype=object),
+    }
+    np.savez_compressed(path, **payload)
+    return path
+
+
+def test_stale_sensor_rows_withheld_with_honest_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Sensor samples exist only ~3s before the window with a 1ms staleness
+    # cap: every step must withhold the leg and count a gap — never inject
+    # old data stamped with the decision time.
+    from dataclasses import replace
+
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    sensor_path = _write_sensor_npz(tmp_path / "vix.npz", ts=[1_000, 2_000])
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "vix_stale"
+    config = replace(
+        _cross_asset_config(
+            tmp_path,
+            data_path,
+            snapshot_path,
+            model_id="VIX_SPIKE_EVENT_FADE",
+            aliases=("HYP_46",),
+        ),
+        sensor_feature_npz={"VIX": str(sensor_path)},
+        max_leader_staleness_ns=1_000_000,
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert not any(
+        "sensor_tape_missing" in reason for reason in result["fail_closed_reasons"]
+    )
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["leader_alignment_gaps"] > 0
+    assert replay["sensor_ids"] == ["VIX"]
