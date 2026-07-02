@@ -153,6 +153,7 @@ def build_campaign_manifest_rows(
     registry_path: Path = DEFAULT_REGISTRY_PATH,
     adapter_status_by_model: Mapping[str, str] | None = None,
     authority_refs: Iterable[str] = DEFAULT_AUTHORITY_REFS,
+    required_replay_mode: str | None = None,
 ) -> list[dict[str, Any]]:
     """Build deterministic rows from canonical models x prepared HBT units."""
     inputs = _campaign_manifest_inputs(
@@ -161,6 +162,7 @@ def build_campaign_manifest_rows(
         registry_path=registry_path,
         adapter_status_by_model=adapter_status_by_model,
         authority_refs=authority_refs,
+        required_replay_mode=required_replay_mode,
     )
     rows = list(_iter_campaign_rows_from_inputs(inputs))
     validate_campaign_manifest_rows(
@@ -177,6 +179,7 @@ def iter_campaign_manifest_rows(
     registry_path: Path = DEFAULT_REGISTRY_PATH,
     adapter_status_by_model: Mapping[str, str] | None = None,
     authority_refs: Iterable[str] = DEFAULT_AUTHORITY_REFS,
+    required_replay_mode: str | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Yield deterministic rows without materializing the campaign universe."""
     inputs = _campaign_manifest_inputs(
@@ -185,6 +188,7 @@ def iter_campaign_manifest_rows(
         registry_path=registry_path,
         adapter_status_by_model=adapter_status_by_model,
         authority_refs=authority_refs,
+        required_replay_mode=required_replay_mode,
     )
     yield from _iter_campaign_rows_from_inputs(inputs)
 
@@ -204,11 +208,15 @@ def stream_campaign_manifest(
     parameter_surface_config_status: str = "",
     parameter_sets_json: Path | None = None,
     sensor_units: Mapping[str, Mapping[str, str]] | None = None,
+    required_replay_mode: str | None = None,
 ) -> dict[str, Any]:
     """Stream the base campaign manifest to JSONL and write pre-execution proof.
 
     sensor_units maps event_id -> {sensor_id: feature npz path}; rows for
     sensor-requiring models attach their coverage or block explicitly.
+    required_replay_mode fail-closes the prepared-unit scan to a single
+    prepare replay mode (mixed-mode caches otherwise silently feed the
+    campaign tapes with different replay semantics).
     """
     inputs = _campaign_manifest_inputs(
         campaign_id=campaign_id,
@@ -216,6 +224,7 @@ def stream_campaign_manifest(
         registry_path=registry_path,
         adapter_status_by_model=adapter_status_by_model,
         authority_refs=authority_refs,
+        required_replay_mode=required_replay_mode,
     )
     return write_campaign_manifest(
         _iter_campaign_rows_from_inputs(inputs, sensor_units=sensor_units),
@@ -236,6 +245,10 @@ def stream_campaign_manifest(
         checkpoint_every_rows=checkpoint_every_rows,
         parameter_surface_status=parameter_surface_status,
         parameter_surface_config_status=parameter_surface_config_status,
+        extra_summary_fields={
+            "required_replay_mode": inputs["required_replay_mode"],
+            "prepared_units_skipped_by_replay_mode": inputs["replay_mode_skipped_counts"],
+        },
         parameter_sets_json=parameter_sets_json,
     )
 
@@ -256,6 +269,7 @@ def write_campaign_manifest(
     parameter_surface_status: str = "base_only",
     parameter_surface_config_status: str = "",
     parameter_sets_json: Path | None = None,
+    extra_summary_fields: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Write manifest JSONL plus a compact count summary without row materialization."""
     if checkpoint_every_rows < 0:
@@ -307,6 +321,8 @@ def write_campaign_manifest(
     os.replace(tmp, out_path)
 
     summary = summary_builder.summary(partial=False)
+    if extra_summary_fields:
+        summary.update(dict(extra_summary_fields))
     if summary_path is not None:
         summary_path = Path(summary_path)
         _write_json_atomic(summary_path, summary)
@@ -1019,14 +1035,22 @@ def _campaign_manifest_inputs(
     registry_path: Path,
     adapter_status_by_model: Mapping[str, str] | None,
     authority_refs: Iterable[str],
+    required_replay_mode: str | None = None,
 ) -> dict[str, Any]:
     registry_path = Path(registry_path)
     registry_hash = _sha256_file(registry_path)
     models = _load_canonical_models(registry_path)
-    prepared_units = _load_prepared_units(Path(prepared_root))
+    prepared_units, replay_mode_skipped = _load_prepared_units(
+        Path(prepared_root), required_replay_mode=required_replay_mode
+    )
     if not models:
         raise HftBacktestOnlyCampaignManifestError("authority_missing:model_registry_empty")
     if not prepared_units:
+        if replay_mode_skipped:
+            raise HftBacktestOnlyCampaignManifestError(
+                "data_blocker:no_units_with_replay_mode:"
+                f"{required_replay_mode}:skipped={dict(sorted(replay_mode_skipped.items()))}"
+            )
         raise HftBacktestOnlyCampaignManifestError(
             f"data_blocker:no_hbt_normalized_units:{prepared_root}"
         )
@@ -1044,6 +1068,8 @@ def _campaign_manifest_inputs(
         "prepared_units": prepared_units,
         "adapter_statuses": adapter_statuses,
         "authority_refs": tuple(authority_refs),
+        "required_replay_mode": required_replay_mode,
+        "replay_mode_skipped_counts": replay_mode_skipped,
     }
 
 
@@ -1585,11 +1611,24 @@ def _load_canonical_models(registry_path: Path) -> list[tuple[str, Mapping[str, 
     return out
 
 
-def _load_prepared_units(prepared_root: Path) -> list[dict[str, Any]]:
+def _load_prepared_units(
+    prepared_root: Path,
+    required_replay_mode: str | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Load prepared-unit manifests; when required_replay_mode is set, drop
+    units prepared under any other replay mode (fail-closed: a missing
+    replay_mode field counts as a mismatch). Returns (units, skipped counts
+    keyed by the offending replay_mode value, "" for absent)."""
     paths = sorted(Path(prepared_root).glob("**/*_manifest.json"), key=lambda path: path.as_posix())
     units: list[dict[str, Any]] = []
+    skipped_by_mode: dict[str, int] = {}
     for manifest_path in paths:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if required_replay_mode is not None:
+            unit_mode = str(manifest.get("replay_mode") or "")
+            if unit_mode != required_replay_mode:
+                skipped_by_mode[unit_mode] = skipped_by_mode.get(unit_mode, 0) + 1
+                continue
         normalized_npz = _resolve_manifest_path(manifest_path, manifest.get("normalized_npz"))
         initial_snapshot = _resolve_manifest_path(manifest_path, manifest.get("initial_snapshot"))
         units.append(
@@ -1603,7 +1642,7 @@ def _load_prepared_units(prepared_root: Path) -> list[dict[str, Any]]:
                 "initial_snapshot": str(initial_snapshot) if initial_snapshot else "",
             }
         )
-    return units
+    return units, skipped_by_mode
 
 
 def _resolve_manifest_path(manifest_path: Path, value: Any) -> Path | None:

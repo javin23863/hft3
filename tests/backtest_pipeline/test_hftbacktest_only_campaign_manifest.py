@@ -1705,3 +1705,72 @@ def test_build_row_attaches_sensor_tapes_and_blocks_missing() -> None:
     )
     assert uncovered["sensor_feature_npz"] == {}
     assert "missing_sensor_tapes=VIX" in uncovered["blocker_detail"]
+
+
+def _stamp_replay_mode(manifest_path: Path, replay_mode: str) -> None:
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["replay_mode"] = replay_mode
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_required_replay_mode_filters_mismatched_prepared_units(tmp_path: Path) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _stamp_replay_mode(_write_prepared_unit(prepared_root), "full_l3_event_replay")
+    _stamp_replay_mode(_write_second_prepared_unit(prepared_root), "added_orders_only")
+
+    rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+        required_replay_mode="added_orders_only",
+    )
+    assert {row["event_id"] for row in rows} == {"PPI_2024_09_12_TIGHT"}
+
+    summary = stream_campaign_manifest(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+        out_path=tmp_path / "campaign_manifest.jsonl",
+        summary_path=tmp_path / "campaign_pre_execution_summary.json",
+        required_replay_mode="added_orders_only",
+    )
+    assert summary["prepared_unit_count"] == 1
+    assert summary["required_replay_mode"] == "added_orders_only"
+    assert summary["prepared_units_skipped_by_replay_mode"] == {"full_l3_event_replay": 1}
+
+
+def test_required_replay_mode_treats_missing_field_as_mismatch(tmp_path: Path) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)  # fixture manifest has no replay_mode field
+
+    with pytest.raises(HftBacktestOnlyCampaignManifestError) as excinfo:
+        build_campaign_manifest_rows(
+            campaign_id="hbt_campaign_test",
+            prepared_root=prepared_root,
+            registry_path=registry,
+            adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+            required_replay_mode="added_orders_only",
+        )
+    assert "no_units_with_replay_mode:added_orders_only" in str(excinfo.value)
+
+
+def test_no_required_replay_mode_keeps_all_units(tmp_path: Path) -> None:
+    registry = _write_registry(tmp_path / "model_registry.yaml")
+    prepared_root = tmp_path / "prepared"
+    _stamp_replay_mode(_write_prepared_unit(prepared_root), "full_l3_event_replay")
+    _stamp_replay_mode(_write_second_prepared_unit(prepared_root), "added_orders_only")
+
+    rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry,
+        adapter_status_by_model=_TEST_ADAPTERS_AVAILABLE,
+    )
+    assert {row["event_id"] for row in rows} == {
+        "CPI_2024_09_11_TIGHT",
+        "PPI_2024_09_12_TIGHT",
+    }
