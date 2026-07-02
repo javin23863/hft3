@@ -884,3 +884,53 @@ def test_campaign_runner_config_resolves_economics_from_instrument_specs(
     assert config.contract_size is None
     assert config.maker_fee is None
     assert config.taker_fee is None
+def test_campaign_runner_cli_workers_auto_uses_85_percent_of_cores(tmp_path: Path, monkeypatch) -> None:
+    module = _load_runner_module()
+    captured: dict[str, object] = {}
+
+    def fake_run_campaign(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"failed_count": 0}
+
+    monkeypatch.setattr(module, "run_campaign", fake_run_campaign)
+    import os as _os
+
+    monkeypatch.setattr(_os, "cpu_count", lambda: 192)
+
+    exit_code = module.main(
+        [
+            "--campaign-manifest",
+            str(tmp_path / "campaign.jsonl"),
+            "--out-root",
+            str(tmp_path / "runs"),
+            "--workers",
+            "auto",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["workers"] == 163  # floor(0.85 * 192)
+
+
+def test_campaign_runner_cli_workers_numeric_and_invalid(tmp_path: Path, monkeypatch) -> None:
+    module = _load_runner_module()
+    captured: dict[str, object] = {}
+
+    def fake_run_campaign(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"failed_count": 0}
+
+    monkeypatch.setattr(module, "run_campaign", fake_run_campaign)
+    argv = [
+        "--campaign-manifest",
+        str(tmp_path / "campaign.jsonl"),
+        "--out-root",
+        str(tmp_path / "runs"),
+    ]
+
+    assert module.main([*argv, "--workers", "8"]) == 0
+    assert captured["workers"] == 8
+    with pytest.raises(SystemExit):
+        module.main([*argv, "--workers", "0"])
+    with pytest.raises(SystemExit):
+        module.main([*argv, "--workers", "some"])
