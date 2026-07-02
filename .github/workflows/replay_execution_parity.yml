@@ -32,7 +32,10 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install deps
-        run: pip install pytest numpy hftbacktest
+        # pytz/pyyaml/pandas: pulled transitively before, now explicit — the
+        # replay import chain reaches data_system.events_parser (pytz) and
+        # features_engine.model_registry (yaml).
+        run: pip install pytest numpy pandas pyyaml pytz hftbacktest
       - name: Replay execution parity tests
         run: |
           pytest tests/test_replay_must_emit_order_intents.py \
