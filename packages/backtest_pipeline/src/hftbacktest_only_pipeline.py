@@ -654,12 +654,20 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             }
         )
 
+    advance_error: int | None = None
     try:
         total_loop_steps = max_loop_steps + (exit_fill_grace_steps + 1 if exit_leg_enabled else 0)
         for step in range(total_loop_steps):
             ret, api_name = _advance_hbt(hbt, interval_ns)
             api_calls.append(api_name)
             if ret != 0:
+                # hftbacktest advance codes: 0 = ok, 1 = end of data; anything
+                # else is an ENGINE ERROR (e.g. 12 = action on unknown L3
+                # order id from an orphaned event). Breaking silently here
+                # misreports data errors as strategy no-orders — the exact
+                # failure mode that poisoned earlier campaign receipts.
+                if int(ret) != 1:
+                    advance_error = int(ret)
                 break
             state = _state_values(hbt)
             api_calls.append("HashMapMarketDepthBacktest.state_values")
@@ -850,7 +858,11 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
 
     reasons: list[str] = []
     no_order_observation = ""
-    if not submitted:
+    if advance_error is not None:
+        # Engine/data error, NOT a strategy decision — must never be
+        # misreported as no_hbt_order_submitted.
+        reasons.append(f"hftbacktest_advance_error:{advance_error}")
+    if not submitted and advance_error is None:
         if signal_lookup is not None and signal_meta.get("adapter_status") == "available":
             no_order_observation = "strategy_signal_below_threshold_or_no_directional_order"
             reasons.append("pipeline_blocker:no_hbt_order_submitted")
@@ -945,6 +957,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "signal_field": signal_meta.get("signal_field", ""),
         "feature_backend": signal_meta.get("feature_backend", "none"),
         "no_order_observation": no_order_observation,
+        "advance_error": advance_error,
         "orders": orders,
         "fills": fills,
         "position_timeseries": positions,
