@@ -15,9 +15,14 @@ def derive(event_id):
         return {"event_id": event_id, "ok": False, "error": f"{type(exc).__name__}:{exc}"[:200]}
 
 if __name__ == "__main__":
-    raw_events = {p.split(os.sep)[-3] for p in glob.glob(r"C:\hft3-lake\mbo_release\*\VIX.OPT\raw.dbn.zst")}
-    quotes = {re.search(r"VIX\.OPT_(.+?)_quotes", os.path.basename(p)).group(1)
-              for p in glob.glob(r"C:\hft3-lake\npz\VIX.OPT_*_quotes.npz")}
+    lake_root = os.environ.get("HFT3_NPZ_ROOT", "")
+    if not lake_root:
+        sys.exit("HFT3_NPZ_ROOT is not set; refusing to guess the lake root (fail-closed)")
+    lake = Path(lake_root)
+    raw_events = {p.parent.parent.name for p in lake.glob("mbo_release/*/VIX.OPT/raw.dbn.zst")}
+    quotes = {m.group(1)
+              for p in lake.glob("npz/VIX.OPT_*_quotes.npz")
+              for m in [re.search(r"VIX\.OPT_(.+?)_quotes", p.name)] if m}
     missing = sorted(raw_events - quotes)
     print("deriving", len(missing))
     results = []
