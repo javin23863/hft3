@@ -15,12 +15,21 @@ _spec.loader.exec_module(_mod)
 build_run_index = _mod.build_run_index
 
 
-def _write_run_dir(root: Path, run_id: str, *, realized: float, gate3: str = "", gate4: str = "") -> None:
+def _write_run_dir(
+    root: Path,
+    run_id: str,
+    *,
+    realized: float,
+    gate3: str = "",
+    gate4: str = "",
+    created_at_utc: str = "2026-07-02T10:00:00+00:00",
+) -> None:
     run_dir = root / run_id
     run_dir.mkdir(parents=True)
     (run_dir / "run_manifest.json").write_text(
         json.dumps({"run_id": run_id, "canonical_model_id": "SECOND_WAVE_CONTINUATION",
                     "symbol": "MES", "event_id": "CPI_2024_09_11_TIGHT",
+                    "created_at_utc": created_at_utc,
                     "strategy_params": {"signal_threshold": 0.05}}),
         encoding="utf-8",
     )
@@ -128,3 +137,21 @@ def test_manifest_only_dirs_excluded_and_named(tmp_path: Path) -> None:
     lines = out.read_text(encoding="utf-8").splitlines()
     rows = [json.loads(line) for line in lines[:-1]]
     assert [r["run_id"] for r in rows] == ["run_ok"]
+
+
+def test_rows_ordered_chronologically_not_lexicographically(tmp_path: Path) -> None:
+    # Gate-4 groups per-event runs chronologically; run ids are not
+    # guaranteed time-ordered, so the index must sort by created_at_utc.
+    root = tmp_path / "hbt_runs"
+    _write_run_dir(root, "run_z_early", realized=1.0,
+                   created_at_utc="2026-07-01T09:00:00+00:00")
+    _write_run_dir(root, "run_a_late", realized=2.0,
+                   created_at_utc="2026-07-02T09:00:00+00:00")
+    out = tmp_path / "index.jsonl"
+
+    build_run_index([root], out)
+
+    lines = out.read_text(encoding="utf-8").splitlines()
+    rows = [json.loads(line) for line in lines[:-1]]
+    assert [r["run_id"] for r in rows] == ["run_z_early", "run_a_late"]
+    assert rows[0]["created_at_utc"] == "2026-07-01T09:00:00+00:00"

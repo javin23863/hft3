@@ -71,6 +71,8 @@ def _row_from_run_dir(run_dir: Path) -> dict[str, Any] | None:
         "symbol": stats.get("symbol") or manifest.get("symbol") or "",
         "contract": stats.get("contract") or manifest.get("contract") or "",
         "event_id": stats.get("event_id") or manifest.get("event_id") or "",
+        "created_at_utc": manifest.get("created_at_utc") or stats.get("created_at_utc") or "",
+        "event_window": manifest.get("event_window") or {},
         "strategy_params": manifest.get("strategy_params") or {},
         "data_validation_status": audit.get("data_validation_status") or "missing",
         "mechanical_validity_status": stats.get("mechanical_validity_status") or "missing",
@@ -116,7 +118,9 @@ def build_run_index(roots: list[Path], out_path: Path) -> dict[str, Any]:
             elif (run_dir / "run_manifest.json").is_file():
                 # No silent truncation: name what was excluded and why.
                 incomplete.append(run_dir.name)
-    rows.sort(key=lambda r: str(r["run_id"]))
+    # Chronological first (Gate-4 groups per-event runs by time), run_id as
+    # the deterministic tiebreak; rows without a timestamp sort first.
+    rows.sort(key=lambda r: (str(r["created_at_utc"]), str(r["run_id"])))
 
     lines = [json.dumps(row, sort_keys=True, separators=(",", ":"), default=str) for row in rows]
     data_digest = hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
