@@ -22,13 +22,12 @@ from typing import Any
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages"), str(REPO / "apps")]
 
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-
 SCHEMA_VERSION = "hft3_meta_training_set_v1"
 
 
 def _signal_and_features(model_id: str, npz_path: str, tick_size: float) -> pd.DataFrame:
+    import numpy as np
+    import pandas as pd
     from backtest_pipeline.src.hftbacktest_only_pipeline import _canonical_signal_adapter
     from features_engine.src.features.npz_feed import iter_mbo_events, load_npz_events
     from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
@@ -65,6 +64,8 @@ def build_tables(
     max_holding_ms: int,
     max_tapes_per_model: int = 0,
 ) -> dict[str, Any]:
+    import numpy as np
+    import pandas as pd
     from backtest_pipeline.src.instrument_specs import resolve_instrument_spec
     from decision_engine.python.src.targets import build_triple_barrier_labels
 

@@ -1247,7 +1247,10 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     return replay, reasons
 
 
-def _load_meta_model(path: str) -> tuple[Callable[[Any], Any], list[str], str]:
+def _load_meta_model(
+    path: str,
+    expected_model_id: str = "",
+) -> tuple[Callable[[Any], Any], list[str], str]:
     """Load a trained meta-label filter: (predict, feature_names, sha256).
 
     Artifact = LightGBM booster text (`.lgb.txt`) with a `.meta.json`
@@ -1268,6 +1271,14 @@ def _load_meta_model(path: str) -> tuple[Callable[[Any], Any], list[str], str]:
             f"meta_model_unavailable:lightgbm_missing:{type(exc).__name__}"
         ) from exc
     meta = _load_json(sidecar)
+    sidecar_model_id = str(meta.get("model_id") or "")
+    if expected_model_id and sidecar_model_id and sidecar_model_id != expected_model_id:
+        # A filter trained for one model must never score another model's
+        # signals, even when the feature columns happen to overlap.
+        raise HftBacktestOnlyPipelineError(
+            "meta_model_unavailable:model_id_mismatch:"
+            f"{sidecar_model_id}!={expected_model_id}"
+        )
     feature_names = [str(name) for name in meta.get("feature_names") or []]
     if not feature_names:
         raise HftBacktestOnlyPipelineError("meta_model_unavailable:feature_schema_missing")
@@ -1361,7 +1372,8 @@ def _build_model_signal_lookup(
         meta_model_sha256 = ""
         if meta_model_path:
             meta_predict, meta_feature_names, meta_model_sha256 = _load_meta_model(
-                meta_model_path
+                meta_model_path,
+                expected_model_id=model_id,
             )
         raw_events = load_npz_events(str(config.normalized_npz))
         pipeline = MarketStatePipeline(

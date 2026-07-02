@@ -2226,7 +2226,7 @@ def test_meta_gate_blocks_entries_and_records_provenance(
 
     _install_fake_hftbacktest(monkeypatch)
 
-    def fake_loader(path: str):
+    def fake_loader(path: str, expected_model_id: str = ""):
         def predict(matrix):
             return _np.zeros(len(matrix))
 
@@ -2264,7 +2264,7 @@ def test_meta_gate_passthrough_when_scores_clear_threshold(
 
     _install_fake_hftbacktest(monkeypatch)
 
-    def fake_loader(path: str):
+    def fake_loader(path: str, expected_model_id: str = ""):
         def predict(matrix):
             return _np.ones(len(matrix))
 

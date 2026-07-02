@@ -23,9 +23,6 @@ from typing import Any
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages")]
 
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-
 SCHEMA_VERSION = "hft3_meta_model_training_v1"
 _EVENT_DATE_RE = re.compile(r"(\d{4})_(\d{2})_(\d{2})")
 
@@ -37,7 +34,7 @@ def _event_date(event_id: str) -> str:
     return "-".join(match.groups())
 
 
-def _auc(y_true: np.ndarray, scores: np.ndarray) -> float | None:
+def _auc(y_true: "np.ndarray", scores: "np.ndarray") -> float | None:
     positives = scores[y_true == 1.0]
     negatives = scores[y_true == 0.0]
     if len(positives) == 0 or len(negatives) == 0:
@@ -57,6 +54,8 @@ def train_model(
     embargo_days: int,
     lightgbm_params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    import numpy as np
+    import pandas as pd
     import lightgbm
 
     table = (
