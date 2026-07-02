@@ -45,6 +45,7 @@ def run_campaign(
     resume: bool = False,
     maker_fee: float | None = None,
     taker_fee: float | None = None,
+    required_feature_backend: str = "cpp",
     entry_latency_ns: int = 100_000,
     response_latency_ns: int = 100_000,
 ) -> dict[str, Any]:
@@ -61,7 +62,8 @@ def run_campaign(
         "resume": resume,
         "maker_fee": maker_fee,
         "taker_fee": taker_fee,
-        "economics_stamp": _economics_stamp(maker_fee, taker_fee),
+        "required_feature_backend": str(required_feature_backend or ""),
+        "economics_stamp": _economics_stamp(maker_fee, taker_fee, required_feature_backend),
         "entry_latency_ns": entry_latency_ns,
         "response_latency_ns": response_latency_ns,
     }
@@ -204,6 +206,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
         contract_size=None,
         maker_fee=None if settings.get("maker_fee") is None else float(settings["maker_fee"]),
         taker_fee=None if settings.get("taker_fee") is None else float(settings["taker_fee"]),
+        required_feature_backend=str(settings.get("required_feature_backend") or ""),
         entry_latency_ns=int(settings.get("entry_latency_ns") or 100_000),
         response_latency_ns=int(settings.get("response_latency_ns") or 100_000),
         event_window=dict(row.get("event_window") or {}),
@@ -273,13 +276,19 @@ def _metadata_blocker(row: Mapping[str, Any]) -> str:
 INSTRUMENT_ECONOMICS_VERSION = "instrument_specs_v1"
 
 
-def _economics_stamp(maker_fee: float | None, taker_fee: float | None) -> str:
+def _economics_stamp(
+    maker_fee: float | None,
+    taker_fee: float | None,
+    required_feature_backend: str = "",
+) -> str:
     """Cache key for row receipts. Receipts priced under different fee or
-    tick/multiplier resolution rules must never satisfy --resume; receipts
-    written before this stamp existed always mismatch and re-run."""
+    tick/multiplier resolution rules — or produced by a different feature
+    backend — must never satisfy --resume; receipts written before this
+    stamp existed always mismatch and re-run."""
     maker = "resolved" if maker_fee is None else f"{float(maker_fee):g}"
     taker = "resolved" if taker_fee is None else f"{float(taker_fee):g}"
-    return f"{INSTRUMENT_ECONOMICS_VERSION}:maker={maker}:taker={taker}"
+    backend = str(required_feature_backend or "") or "any"
+    return f"{INSTRUMENT_ECONOMICS_VERSION}:maker={maker}:taker={taker}:backend={backend}"
 
 
 def _cached_receipt_matches_run(cached: Mapping[str, Any], settings: Mapping[str, Any]) -> bool:
@@ -469,6 +478,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Explicit per-side taker fee override; unset resolves the product's real fee",
     )
+    parser.add_argument(
+        "--required-feature-backend",
+        default="cpp",
+        help="Feature backend evidence receipts must carry (cpp/python); "
+        "empty string accepts any (local smokes only).",
+    )
     parser.add_argument("--entry-latency-ns", type=int, default=100_000)
     parser.add_argument("--response-latency-ns", type=int, default=100_000)
     args = parser.parse_args(argv)
@@ -488,6 +503,7 @@ def main(argv: list[str] | None = None) -> int:
         resume=args.resume,
         maker_fee=args.maker_fee,
         taker_fee=args.taker_fee,
+        required_feature_backend=args.required_feature_backend,
         entry_latency_ns=args.entry_latency_ns,
         response_latency_ns=args.response_latency_ns,
     )
