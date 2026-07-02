@@ -283,3 +283,44 @@ def test_promotion_decision_surfaces_unavailable_axes(tmp_path: Path) -> None:
         "PartialFillExchange__lat1x__fee_declared"
     ]
     assert any("upstream-unavailable sensitivity axes" in n for n in decision["notes"])
+
+
+def test_sensitivity_battery_resolves_unresolved_base_economics(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # Scenario configs are derived from the base via dataclasses.replace; an
+    # unresolved base (tick_size/contract_size None) must be resolved ONCE at
+    # the top of the battery, not left to crash float(None) in the runner.
+    captured_configs = []
+
+    def _capturing_runner(config):
+        captured_configs.append(config)
+        replay = {
+            "official_hftbacktest_replay_status": "pass",
+            "orders": [],
+            "fills": [{"order_id": 9001, "filled_quantity": 1.0}],
+            "orders_submitted": 1,
+            "fills_count": 1,
+            "fill_rate": 1.0,
+            "gross_pnl": 5.0,
+            "net_pnl": 5.0,
+            "realized_closed_trade_pnl": 5.0,
+            "fail_closed_reasons": [],
+        }
+        return replay, []
+
+    monkeypatch.setattr(pipeline, "_run_minimal_strategy", _capturing_runner)
+
+    # _config() leaves tick_size/contract_size/maker_fee/taker_fee unset (None).
+    report = run_sensitivity_battery(_config(), out_dir=tmp_path, base_stats=_base_stats())
+
+    assert report["status"] == "pass", report["fail_closed_reasons"]
+    assert len(captured_configs) == 11
+    for scenario_cfg in captured_configs:
+        assert scenario_cfg.tick_size == 0.25
+        assert scenario_cfg.contract_size == 5.0
+        assert scenario_cfg.maker_fee is not None
+        # declared scenarios carry the resolved MES fee, conservative 2x it
+        assert min(
+            abs(scenario_cfg.maker_fee - 0.52), abs(scenario_cfg.maker_fee - 1.04)
+        ) < 1e-9

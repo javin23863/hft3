@@ -91,11 +91,21 @@ def run_sensitivity_battery(
     closed-trade realized PnL across base + scenarios stays positive.
     """
     from backtest_pipeline.src.hftbacktest_only_pipeline import (
+        HftBacktestOnlyPipelineError,
         _run_minimal_strategy,
         _stats_summary,
         _write_json,
         _write_recorder_result,
+        resolve_instrument_execution,
     )
+
+    # Resolve execution economics ONCE for the whole battery: every scenario
+    # config is derived from this base via dataclasses.replace, so an
+    # unresolved base (tick_size/contract_size None) would crash or misprice
+    # every scenario even though the base run resolved internally.
+    config, _, resolution_reasons = resolve_instrument_execution(config)
+    if resolution_reasons:
+        raise HftBacktestOnlyPipelineError(";".join(resolution_reasons))
 
     out_dir = Path(out_dir)
     scenario_list = list(scenarios) if scenarios is not None else default_sensitivity_scenarios(config)

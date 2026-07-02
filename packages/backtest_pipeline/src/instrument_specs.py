@@ -63,8 +63,12 @@ for _spec in INSTRUMENT_SPECS.values():
 
 
 def normalize_product(symbol: str) -> str:
-    """`MES.v.0` / `MES.c.0` / `MESH6`-style research symbols -> product code."""
-    product = str(symbol or "").split(".")[0].strip().upper()
+    """Research/vendor symbols -> product code.
+
+    Accepts `MES.v.0` / `MES.c.0` (Databento research symbols) and
+    `@MES#C`-style continuous notation (leading `@`, `#`-suffixed roll tag).
+    """
+    product = str(symbol or "").split(".")[0].split("#")[0].strip().upper().lstrip("@")
     if not product:
         raise InstrumentSpecError("instrument_spec_missing:empty_symbol")
     return product

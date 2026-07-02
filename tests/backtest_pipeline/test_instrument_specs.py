@@ -138,3 +138,9 @@ def test_registry_yaml_agrees_with_instrument_specs() -> None:
         assert float(merged["contract_multiplier"]) == pytest.approx(
             spec.contract_multiplier
         ), symbol
+
+
+def test_normalize_product_accepts_continuous_notation() -> None:
+    assert resolve_instrument_spec("@RTY#C").symbol == "RTY"
+    assert resolve_instrument_spec("@mes#c").symbol == "MES"
+    assert normalize_product("@ZN#C") == "ZN"
