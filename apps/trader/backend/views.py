@@ -200,6 +200,10 @@ def build_campaign() -> dict[str, Any]:
 
 def build_lifecycle() -> dict[str, Any]:
     registry, transitions = load_lifecycle()
+    if registry.payload is None and registry.evidence.status != "missing":
+        # Registry exists but is unreadable (corrupt/parse failure): fail
+        # closed. Only a genuinely absent file is the pre-promotion empty state.
+        return _blocked(registry.evidence)
     if registry.payload is None:
         return {
             "blocked": False,

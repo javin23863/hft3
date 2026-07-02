@@ -131,3 +131,13 @@ def test_lifecycle_empty_state_honest(monkeypatch, tmp_path: Path) -> None:
     assert payload["blocked"] is False
     assert payload["empty_state"] is True
     assert "not created yet" in payload["note"]
+
+
+def test_lifecycle_corrupt_registry_blocks(monkeypatch, tmp_path: Path) -> None:
+    registry = tmp_path / "model_lifecycle.json"
+    registry.write_text("{not valid json", encoding="utf-8")
+    monkeypatch.setattr(data, "LIFECYCLE_REGISTRY", registry)
+    monkeypatch.setattr(data, "LIFECYCLE_TRANSITIONS", tmp_path / "absent.jsonl")
+    payload = views.build_lifecycle()
+    assert payload["blocked"] is True
+    assert payload["evidence"]["status"] == "corrupt"
