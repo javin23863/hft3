@@ -34,6 +34,60 @@ def _event_date(event_id: str) -> str:
     return "-".join(match.groups())
 
 
+def _fit_isotonic(scores, labels):
+    """Pool-adjacent-violators isotonic regression: score -> calibrated P(win).
+
+    Fitted on TRAINING rows only; returned as monotone curve points for
+    interpolation at inference. No external dependencies.
+    """
+    import numpy as np
+
+    x = np.asarray(scores, dtype=np.float64)
+    y = np.asarray(labels, dtype=np.float64)
+    # Coalesce tied scores into one weighted point first: identical
+    # inputs must map to one empirical probability, never to separate
+    # breakpoints whose interpolation depends on sort order.
+    unique_x, inverse = np.unique(x, return_inverse=True)
+    sums = np.zeros(len(unique_x))
+    counts = np.zeros(len(unique_x))
+    np.add.at(sums, inverse, y)
+    np.add.at(counts, inverse, 1.0)
+    block_sum = [float(v) for v in sums]
+    block_cnt = [float(v) for v in counts]
+    block_x_last = [float(v) for v in unique_x]
+    i = 0
+    while i < len(block_sum) - 1:
+        if block_sum[i] / block_cnt[i] > block_sum[i + 1] / block_cnt[i + 1] + 1e-15:
+            block_sum[i] += block_sum.pop(i + 1)
+            block_cnt[i] += block_cnt.pop(i + 1)
+            block_x_last[i] = block_x_last.pop(i + 1)
+            if i > 0:
+                i -= 1
+        else:
+            i += 1
+    xs = [float(v) for v in block_x_last]
+    ys = [float(s / c) for s, c in zip(block_sum, block_cnt)]
+    return xs, ys
+
+
+def _apply_isotonic(xs, ys, scores):
+    import numpy as np
+
+    if not ys:
+        return np.full(len(scores), 0.5)
+    return np.interp(
+        np.asarray(scores, dtype=np.float64), xs, ys, left=ys[0], right=ys[-1]
+    )
+
+
+def _brier(y_true, p):
+    import numpy as np
+
+    y = np.asarray(y_true, dtype=np.float64)
+    q = np.asarray(p, dtype=np.float64)
+    return float(np.mean((q - y) ** 2)) if len(y) else None
+
+
 def _auc(y_true: "np.ndarray", scores: "np.ndarray") -> float | None:
     positives = scores[y_true == 1.0]
     negatives = scores[y_true == 0.0]
@@ -102,6 +156,13 @@ def train_model(
     artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
     train_scores = booster.predict(train_rows[feature_names].to_numpy(dtype=np.float64))
     eval_scores = booster.predict(eval_rows[feature_names].to_numpy(dtype=np.float64))
+    # Probability calibration (isotonic/PAV) fitted on TRAINING rows only;
+    # inference sizes bets from these curve points (AFML ch.10 bet sizing).
+    calib_x, calib_y = _fit_isotonic(
+        train_scores, train_rows["y_meta"].to_numpy(dtype=np.float64)
+    )
+    train_cal = _apply_isotonic(calib_x, calib_y, train_scores)
+    eval_cal = _apply_isotonic(calib_x, calib_y, eval_scores)
     receipt = {
         "schema_version": SCHEMA_VERSION,
         "model_id": model_id,
@@ -120,6 +181,11 @@ def train_model(
             eval_rows["y_meta"].to_numpy(dtype=np.float64), np.asarray(eval_scores)
         ),
         "lightgbm_params": params,
+        "calibration": {"method": "isotonic_pav_train_only", "x": calib_x, "y": calib_y},
+        "brier_train_raw": _brier(train_rows["y_meta"].to_numpy(dtype=np.float64), train_scores),
+        "brier_train_calibrated": _brier(train_rows["y_meta"].to_numpy(dtype=np.float64), train_cal),
+        "brier_eval_raw": _brier(eval_rows["y_meta"].to_numpy(dtype=np.float64), eval_scores),
+        "brier_eval_calibrated": _brier(eval_rows["y_meta"].to_numpy(dtype=np.float64), eval_cal),
     }
     sidecar = artifact.with_suffix(artifact.suffix + ".meta.json")
     sidecar.write_text(json.dumps(receipt, indent=1, sort_keys=True), encoding="utf-8")

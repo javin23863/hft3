@@ -773,7 +773,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     completed_trades: list[dict[str, Any]] = []
 
     def record_order_state(event_type: str, state: Any, step: int) -> None:
-        nonlocal last_recorded_exec_qty, order_snapshot
+        nonlocal last_recorded_exec_qty, order_snapshot, entry_fill_ts_ns
         active_orders = hbt.orders(0)
         api_calls.append("HashMapMarketDepthBacktest.orders")
         order_obj = _get_order(active_orders, order_id)
@@ -787,6 +787,11 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             return
         fill_delta = exec_qty - last_recorded_exec_qty
         last_recorded_exec_qty = exec_qty
+        if entry_fill_ts_ns is None:
+            # First entry fill: exchange execution time, not the polling
+            # step's observation time; poll time only as fallback.
+            exch_ts = int(snapshot.get("exch_timestamp") or 0)
+            entry_fill_ts_ns = exch_ts if exch_ts > 0 else current_ts_ns
         fills.append(
             {
                 "order_id": order_id,
@@ -799,7 +804,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         )
 
     def record_exit_order_state(event_type: str, state: Any, step: int) -> None:
-        nonlocal last_exit_exec_qty, exit_snapshot
+        nonlocal last_exit_exec_qty, exit_snapshot, exit_fill_ts_ns
         active_orders = hbt.orders(0)
         api_calls.append("HashMapMarketDepthBacktest.orders")
         order_obj = _get_order(active_orders, exit_order_id)
@@ -813,6 +818,9 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             return
         fill_delta = exec_qty - last_exit_exec_qty
         last_exit_exec_qty = exec_qty
+        # Last exit fill closes the trip: exchange execution time wins.
+        exch_ts = int(snapshot.get("exch_timestamp") or 0)
+        exit_fill_ts_ns = exch_ts if exch_ts > 0 else current_ts_ns
         fills.append(
             {
                 "order_id": exit_order_id,
@@ -828,9 +836,14 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     advance_error: int | None = None
     try:
         total_loop_steps = max_loop_steps + (exit_fill_grace_steps + 1 if exit_leg_enabled else 0)
+        size_lookup = signal_meta.get("size_lookup") if signal_lookup is not None else None
+        current_ts_ns: int | None = None
+        entry_fill_ts_ns: int | None = None
+        exit_fill_ts_ns: int | None = None
         for step in range(total_loop_steps):
             ret, api_name = _advance_hbt(hbt, interval_ns)
             api_calls.append(api_name)
+            current_ts_ns = _hbt_current_timestamp(hbt)
             if ret != 0:
                 # hftbacktest advance codes: 0 = ok, 1 = end of data; anything
                 # else is an ENGINE ERROR (e.g. 12 = action on unknown L3
@@ -867,6 +880,12 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                                 "exit_order_id": exit_order_id,
                                 "entry_step": submitted_step,
                                 "entry_fill_step": entry_fill_step,
+                                "entry_ts_ns": entry_fill_ts_ns,
+                                "exit_ts_ns": (
+                                    exit_fill_ts_ns
+                                    if exit_fill_ts_ns is not None
+                                    else current_ts_ns
+                                ),
                                 "exit_step": exit_submitted_step,
                                 "exit_reason": exit_reason,
                                 "entry_avg_price": trip_entry_px,
@@ -895,6 +914,8 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                         last_recorded_exec_qty = 0.0
                         submitted_step = None
                         entry_fill_step = None
+                        entry_fill_ts_ns = None
+                        exit_fill_ts_ns = None
                         exit_snapshot = {}
                         last_exit_exec_qty = 0.0
                         exit_submitted = False
@@ -1022,11 +1043,25 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             price = _price_from_depth(depth, side, price_mode)
             if price is None:
                 continue
+            entry_quantity = quantity
+            if size_lookup is not None:
+                # Probability-calibrated bet sizing: fractional size from the
+                # calibrated win probability at this entry timestamp; zero or
+                # negative size means no entry at this signal.
+                size_factor = float(size_lookup(current_ts_ns))
+                if size_factor <= 0.0:
+                    continue
+                lot = float(config.lot_size or 1.0)
+                entry_quantity = round(quantity * size_factor / lot) * lot
+                if entry_quantity <= 0.0:
+                    # Sized below half a lot: conviction too weak to
+                    # justify the minimum tradable size — no entry.
+                    continue
             if side == "BUY":
-                submit_ret = int(hbt.submit_buy_order(0, order_id, price, quantity, GTC, LIMIT, False))
+                submit_ret = int(hbt.submit_buy_order(0, order_id, price, entry_quantity, GTC, LIMIT, False))
                 api_calls.append("HashMapMarketDepthBacktest.submit_buy_order")
             else:
-                submit_ret = int(hbt.submit_sell_order(0, order_id, price, quantity, GTC, LIMIT, False))
+                submit_ret = int(hbt.submit_sell_order(0, order_id, price, entry_quantity, GTC, LIMIT, False))
                 api_calls.append("HashMapMarketDepthBacktest.submit_sell_order")
             response_ret = int(hbt.wait_order_response(0, order_id, interval_ns))
             api_calls.append("HashMapMarketDepthBacktest.wait_order_response")
@@ -1039,7 +1074,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                     "step": step,
                     "side": side,
                     "price": price,
-                    "quantity": quantity,
+                    "quantity": entry_quantity,
                     "signal": signal_value,
                     "submit_return_code": submit_ret,
                     "response_return_code": response_ret,
@@ -1229,6 +1264,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "toxicity_gated_out": signal_meta.get("toxicity_gated_out", 0),
         "toxicity_unavailable_steps": signal_meta.get("toxicity_unavailable_steps", 0),
         "toxicity_config": signal_meta.get("toxicity_config") or {},
+        "meta_sizing_mode": signal_meta.get("meta_sizing_mode", "binary"),
         "no_order_observation": no_order_observation,
         "advance_error": advance_error,
         "orders": orders,
@@ -1254,7 +1290,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
 def _load_meta_model(
     path: str,
     expected_model_id: str = "",
-) -> tuple[Callable[[Any], Any], list[str], str]:
+) -> tuple[Callable[[Any], Any], list[str], str, dict[str, Any] | None]:
     """Load a trained meta-label filter: (predict, feature_names, sha256).
 
     Artifact = LightGBM booster text (`.lgb.txt`) with a `.meta.json`
@@ -1287,7 +1323,8 @@ def _load_meta_model(
     if not feature_names:
         raise HftBacktestOnlyPipelineError("meta_model_unavailable:feature_schema_missing")
     booster = lightgbm.Booster(model_str=artifact.read_text(encoding="utf-8"))
-    return booster.predict, feature_names, _sha256_file(artifact)
+    calibration = meta.get("calibration") if isinstance(meta.get("calibration"), dict) else None
+    return booster.predict, feature_names, _sha256_file(artifact), calibration
 
 
 def _required_leader_symbols(model_id: str) -> tuple[str, ...]:
@@ -1371,14 +1408,25 @@ def _build_model_signal_lookup(
 
         meta_model_path = str(params.get("meta_model_path") or "")
         meta_threshold = float(params.get("meta_threshold", 0.5))
+        meta_sizing_mode = str(params.get("meta_sizing_mode") or "binary")
+        size_floor = float(params.get("size_floor", 0.0))
+        size_cap = float(params.get("size_cap", 2.0))
+        if meta_sizing_mode not in ("binary", "calibrated"):
+            return None, {}, [f"meta_sizing_mode_invalid:{meta_sizing_mode}"]
+        if meta_sizing_mode == "calibrated" and not meta_model_path:
+            return None, {}, ["meta_sizing_requires_meta_model"]
         meta_predict = None
         meta_feature_names: list[str] = []
         meta_model_sha256 = ""
+        meta_calibration: dict[str, Any] | None = None
         if meta_model_path:
-            meta_predict, meta_feature_names, meta_model_sha256 = _load_meta_model(
-                meta_model_path,
-                expected_model_id=model_id,
+            meta_predict, meta_feature_names, meta_model_sha256, meta_calibration = (
+                _load_meta_model(meta_model_path, expected_model_id=model_id)
             )
+        if meta_sizing_mode == "calibrated" and not meta_calibration:
+            # Sizing from uncalibrated scores is not probability-based bet
+            # sizing; a sizing request without a fitted curve fails closed.
+            return None, {}, ["meta_sizing_calibration_missing"]
         toxicity_max_vpin = (
             float(params["toxicity_max_vpin"]) if params.get("toxicity_max_vpin") is not None else None
         )
@@ -1546,6 +1594,7 @@ def _build_model_signal_lookup(
                 else:
                     gated_observations.append((ts, signal_value))
             observations = gated_observations
+        size_pairs = None
         meta_gated_out = 0
         meta_score_min: float | None = None
         meta_score_max: float | None = None
@@ -1553,6 +1602,25 @@ def _build_model_signal_lookup(
             scores = meta_predict(np.asarray(meta_feature_rows, dtype=np.float64))
             meta_score_min = float(np.min(scores))
             meta_score_max = float(np.max(scores))
+            if meta_sizing_mode == "calibrated":
+                calib_x = [float(v) for v in meta_calibration.get("x") or []]
+                calib_y = [float(v) for v in meta_calibration.get("y") or []]
+                if not calib_y:
+                    return None, {}, ["meta_sizing_calibration_missing"]
+                p_cal = np.interp(
+                    np.asarray(scores, dtype=np.float64),
+                    calib_x,
+                    calib_y,
+                    left=calib_y[0],
+                    right=calib_y[-1],
+                )
+                size_factors = np.clip(2.0 * p_cal - 1.0, size_floor, size_cap)
+                # Pair with timestamps NOW, while index correspondence with
+                # observations is guaranteed (before any gating/sorting).
+                size_pairs = [
+                    (observations[i][0], float(size_factors[i]))
+                    for i in range(len(observations))
+                ]
             gated: list[tuple[int, float]] = []
             for (ts, signal_value), score in zip(observations, scores):
                 if signal_value != 0.0 and float(score) < meta_threshold:
@@ -1570,6 +1638,24 @@ def _build_model_signal_lookup(
         return None, {}, ["pipeline_blocker:feature_surface_mismatch:no_signal_observations"]
 
     observations.sort(key=lambda item: item[0])
+    size_lookup = None
+    if meta_sizing_mode == "calibrated" and size_pairs is not None:
+        size_by_ts = sorted(size_pairs)
+        size_cursor = {"index": 0, "last": 1.0}
+
+        def size_lookup(timestamp_ns: int | None) -> float:  # noqa: F811
+            index = int(size_cursor["index"])
+            if timestamp_ns is None:
+                if index < len(size_by_ts):
+                    size_cursor["last"] = float(size_by_ts[index][1])
+                    size_cursor["index"] = index + 1
+                return float(size_cursor["last"])
+            while index < len(size_by_ts) and size_by_ts[index][0] <= int(timestamp_ns):
+                size_cursor["last"] = float(size_by_ts[index][1])
+                index += 1
+            size_cursor["index"] = index
+            return float(size_cursor["last"])
+
     cursor = {"index": 0, "last_signal": 0.0}
 
     def lookup(timestamp_ns: int | None) -> float:
@@ -1611,6 +1697,10 @@ def _build_model_signal_lookup(
             "max_cascade": toxicity_max_cascade,
             "block_regime": toxicity_block_regime,
         },
+        "meta_sizing_mode": meta_sizing_mode,
+        "size_floor": size_floor,
+        "size_cap": size_cap,
+        "size_lookup": size_lookup,
     }, []
 
 
