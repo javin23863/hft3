@@ -71,7 +71,11 @@ def load_json_document(path: Path) -> LoadedDocument:
         )
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
+        sha256 = _sha256_file(path)
+        age_seconds = _age_seconds(path)
     except (OSError, json.JSONDecodeError) as exc:
+        # OSError can also fire on the hash/stat re-open (permission race
+        # after is_file()); either way the document is unverifiable.
         return LoadedDocument(
             payload=None,
             evidence=Evidence(
@@ -80,9 +84,7 @@ def load_json_document(path: Path) -> LoadedDocument:
         )
     return LoadedDocument(
         payload=payload,
-        evidence=Evidence(
-            path=str(path), sha256=_sha256_file(path), age_seconds=_age_seconds(path)
-        ),
+        evidence=Evidence(path=str(path), sha256=sha256, age_seconds=age_seconds),
     )
 
 
@@ -146,10 +148,15 @@ def load_lifecycle() -> tuple[LoadedDocument, LoadedDocument]:
     if LIFECYCLE_TRANSITIONS.is_file():
         rows: list[dict[str, Any]] = []
         status, reason = "ok", ""
+        sha256, age_seconds = "", None
         try:
             for line in LIFECYCLE_TRANSITIONS.read_text(encoding="utf-8").splitlines():
                 if line.strip():
                     rows.append(json.loads(line))
+            # Hash/stat inside the try: the re-open can OSError on a
+            # permission race after is_file(); that is corrupt, not a 500.
+            sha256 = _sha256_file(LIFECYCLE_TRANSITIONS)
+            age_seconds = _age_seconds(LIFECYCLE_TRANSITIONS)
         except (OSError, json.JSONDecodeError) as exc:
             status, reason = "corrupt", type(exc).__name__
         transitions = LoadedDocument(
@@ -157,8 +164,8 @@ def load_lifecycle() -> tuple[LoadedDocument, LoadedDocument]:
             rows=rows,
             evidence=Evidence(
                 path=str(LIFECYCLE_TRANSITIONS),
-                sha256=_sha256_file(LIFECYCLE_TRANSITIONS),
-                age_seconds=_age_seconds(LIFECYCLE_TRANSITIONS),
+                sha256=sha256,
+                age_seconds=age_seconds,
                 status=status,
                 reason=reason,
             ),

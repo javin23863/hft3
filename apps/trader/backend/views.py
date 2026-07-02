@@ -164,6 +164,14 @@ def build_model_detail(model_id: str) -> dict[str, Any]:
 
 def build_campaign() -> dict[str, Any]:
     docs = find_campaign_monitor_documents()
+    # An unreadable receipt means campaign state cannot be verified: fail
+    # closed instead of silently omitting it and rendering the rest as ok.
+    corrupt = [doc for doc in docs if doc.evidence.status == "corrupt"]
+    if corrupt:
+        return _blocked(
+            corrupt[0].evidence,
+            extra=f"unreadable_campaign_receipts={len(corrupt)}",
+        )
     receipts = []
     for doc in docs:
         if doc.payload is None:
