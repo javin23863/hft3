@@ -1221,6 +1221,10 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "leader_observations": dict(signal_meta.get("leader_observations") or {}),
         "sensor_ids": list(signal_meta.get("sensor_ids") or []),
         "leader_alignment_gaps": signal_meta.get("leader_alignment_gaps", 0),
+        "meta_model_path": signal_meta.get("meta_model_path", ""),
+        "meta_model_sha256": signal_meta.get("meta_model_sha256", ""),
+        "meta_threshold": signal_meta.get("meta_threshold"),
+        "meta_gated_out": signal_meta.get("meta_gated_out", 0),
         "no_order_observation": no_order_observation,
         "advance_error": advance_error,
         "orders": orders,
@@ -1241,6 +1245,34 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "fail_closed_reasons": reasons,
     }
     return replay, reasons
+
+
+def _load_meta_model(path: str) -> tuple[Callable[[Any], Any], list[str], str]:
+    """Load a trained meta-label filter: (predict, feature_names, sha256).
+
+    Artifact = LightGBM booster text (`.lgb.txt`) with a `.meta.json`
+    sidecar carrying the ordered training feature schema. Anything missing
+    or unreadable fails the run closed — a meta-gated surface must never
+    silently run unfiltered.
+    """
+    artifact = Path(path)
+    sidecar = artifact.with_suffix(artifact.suffix + ".meta.json")
+    if not artifact.is_file():
+        raise HftBacktestOnlyPipelineError(f"meta_model_unavailable:artifact_missing:{artifact}")
+    if not sidecar.is_file():
+        raise HftBacktestOnlyPipelineError(f"meta_model_unavailable:sidecar_missing:{sidecar}")
+    try:
+        import lightgbm
+    except Exception as exc:
+        raise HftBacktestOnlyPipelineError(
+            f"meta_model_unavailable:lightgbm_missing:{type(exc).__name__}"
+        ) from exc
+    meta = _load_json(sidecar)
+    feature_names = [str(name) for name in meta.get("feature_names") or []]
+    if not feature_names:
+        raise HftBacktestOnlyPipelineError("meta_model_unavailable:feature_schema_missing")
+    booster = lightgbm.Booster(model_str=artifact.read_text(encoding="utf-8"))
+    return booster.predict, feature_names, _sha256_file(artifact)
 
 
 def _required_leader_symbols(model_id: str) -> tuple[str, ...]:
@@ -1322,6 +1354,15 @@ def _build_model_signal_lookup(
 
         from replay.cross_asset_assembly import enrich_cross_leg
 
+        meta_model_path = str(params.get("meta_model_path") or "")
+        meta_threshold = float(params.get("meta_threshold", 0.5))
+        meta_predict = None
+        meta_feature_names: list[str] = []
+        meta_model_sha256 = ""
+        if meta_model_path:
+            meta_predict, meta_feature_names, meta_model_sha256 = _load_meta_model(
+                meta_model_path
+            )
         raw_events = load_npz_events(str(config.normalized_npz))
         pipeline = MarketStatePipeline(
             tick_size=float(config.tick_size),
@@ -1362,6 +1403,7 @@ def _build_model_signal_lookup(
         leader_cursors = {sym: -1 for sym in leader_timelines}
         leader_alignment_gaps = 0
         observations: list[tuple[int, float]] = []
+        meta_feature_rows: list[list[float]] = []
         for event in iter_mbo_events(raw_events):
             event_ts = int(event.timestamp_ns)
             if leader_timelines or sensor_adapters:
@@ -1410,6 +1452,36 @@ def _build_model_signal_lookup(
                 pipeline.cross_asset_features = cross
             state = pipeline.process_event(event)
             observations.append((event_ts, float(adapter.evaluate(state))))
+            if meta_predict is not None:
+                features = state.primary_features
+                missing = [name for name in meta_feature_names if name not in features]
+                if missing:
+                    return (
+                        None,
+                        {},
+                        [
+                            "pipeline_blocker:meta_feature_schema_mismatch:"
+                            + ",".join(missing[:5])
+                        ],
+                    )
+                meta_feature_rows.append(
+                    [float(features[name]) for name in meta_feature_names]
+                )
+        meta_gated_out = 0
+        meta_score_min: float | None = None
+        meta_score_max: float | None = None
+        if meta_predict is not None and observations:
+            scores = meta_predict(np.asarray(meta_feature_rows, dtype=np.float64))
+            meta_score_min = float(np.min(scores))
+            meta_score_max = float(np.max(scores))
+            gated: list[tuple[int, float]] = []
+            for (ts, signal_value), score in zip(observations, scores):
+                if signal_value != 0.0 and float(score) < meta_threshold:
+                    meta_gated_out += 1
+                    gated.append((ts, 0.0))
+                else:
+                    gated.append((ts, signal_value))
+            observations = gated
     except HftBacktestOnlyPipelineError as exc:
         return None, {}, [str(exc)]
     except Exception as exc:
@@ -1446,6 +1518,12 @@ def _build_model_signal_lookup(
         "leader_observations": {sym: len(t) for sym, t in leader_timelines.items()},
         "sensor_ids": sorted(sensor_adapters),
         "leader_alignment_gaps": leader_alignment_gaps,
+        "meta_model_path": meta_model_path,
+        "meta_model_sha256": meta_model_sha256,
+        "meta_threshold": meta_threshold if meta_model_path else None,
+        "meta_gated_out": meta_gated_out,
+        "meta_score_min": meta_score_min,
+        "meta_score_max": meta_score_max,
     }, []
 
 

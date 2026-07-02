@@ -2173,3 +2173,123 @@ def test_stale_sensor_rows_withheld_with_honest_provenance(
     replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
     assert replay["leader_alignment_gaps"] > 0
     assert replay["sensor_ids"] == ["VIX"]
+
+
+def _meta_config(tmp_path: Path, data_path: Path, snapshot_path: Path, **meta_params) -> HftBacktestOnlyRunConfig:
+    return _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={
+            "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+            "quantity": 1.0,
+            "signal_threshold": 0.0001,
+            "exit_at_holding": True,
+            **meta_params,
+        },
+        canonical_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        legacy_aliases=("HYP_5",),
+        event_window={"cutoff_ts_ns": 1_000_000_000, "end_ts_ns": 4_000_000_000},
+    )
+
+
+def test_meta_model_missing_artifact_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "meta_missing"
+    config = _meta_config(
+        tmp_path, data_path, snapshot_path, meta_model_path=str(tmp_path / "absent.lgb.txt")
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] != "completed"
+    assert any(
+        reason.startswith("meta_model_unavailable:artifact_missing")
+        for reason in result["fail_closed_reasons"]
+    )
+    assert not (out_dir / "stats_summary.json").is_file()
+
+
+def test_meta_gate_blocks_entries_and_records_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import numpy as _np
+
+    import backtest_pipeline.src.hftbacktest_only_pipeline as pl
+
+    _install_fake_hftbacktest(monkeypatch)
+
+    def fake_loader(path: str):
+        def predict(matrix):
+            return _np.zeros(len(matrix))
+
+        return predict, ["spread_stress"], "f" * 64
+
+    monkeypatch.setattr(pl, "_load_meta_model", fake_loader)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "meta_gated"
+    config = _meta_config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        meta_model_path=str(tmp_path / "meta.lgb.txt"),
+        meta_threshold=0.5,
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    # every fired signal scores 0.0 < 0.5 -> gated to no entries
+    assert "pipeline_blocker:no_hbt_order_submitted" in result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["meta_model_sha256"] == "f" * 64
+    assert replay["meta_threshold"] == 0.5
+    assert replay["meta_gated_out"] >= 0
+
+
+def test_meta_gate_passthrough_when_scores_clear_threshold(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import numpy as _np
+
+    import backtest_pipeline.src.hftbacktest_only_pipeline as pl
+
+    _install_fake_hftbacktest(monkeypatch)
+
+    def fake_loader(path: str):
+        def predict(matrix):
+            return _np.ones(len(matrix))
+
+        return predict, ["spread_stress"], "a" * 64
+
+    monkeypatch.setattr(pl, "_load_meta_model", fake_loader)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    baseline_dir = tmp_path / "artifacts" / "hbt_runs" / "meta_baseline"
+    gated_dir = tmp_path / "artifacts" / "hbt_runs" / "meta_passthrough"
+
+    baseline = run_hftbacktest_only(
+        _meta_config(tmp_path, data_path, snapshot_path), out_dir=baseline_dir
+    )
+    passthrough = run_hftbacktest_only(
+        _meta_config(
+            tmp_path,
+            data_path,
+            snapshot_path,
+            meta_model_path=str(tmp_path / "meta.lgb.txt"),
+            meta_threshold=0.5,
+        ),
+        out_dir=gated_dir,
+    )
+
+    assert passthrough["status"] == baseline["status"]
+    replay = json.loads((gated_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["meta_gated_out"] == 0
