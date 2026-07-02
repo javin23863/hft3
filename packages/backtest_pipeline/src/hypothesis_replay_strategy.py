@@ -48,7 +48,18 @@ class ToyAlwaysLongStrategy:
 
 
 class HypothesisReplayStrategy:
-    """Single-hypothesis wrapper for ReplaySession-backed backtesting."""
+    """Single-hypothesis wrapper for ReplaySession-backed backtesting.
+
+    Exit semantics mirror the VectorBT screening lane so parameter surfaces
+    mean the same thing in both engines: ``stop_loss_pct``/``take_profit_pct``
+    are percentages of entry price, ``holding_period_bars`` counts bars of
+    ``bar_duration_ns`` (default 1 minute, matching the screen's freq="1min").
+    All exits are optional; with none configured the behavior is unchanged
+    (entries + signal-flip only).
+    """
+
+    #: Re-emit an unfilled exit intent at most once per this many nanoseconds.
+    EXIT_REEMIT_NS = 1_000_000_000
 
     def __init__(
         self,
@@ -56,21 +67,129 @@ class HypothesisReplayStrategy:
         *,
         signal_threshold: float = 0.15,
         order_qty: float = 1.0,
+        stop_loss_pct: float | None = None,
+        take_profit_pct: float | None = None,
+        holding_period_bars: int | None = None,
+        bar_duration_ns: int = 60_000_000_000,
+        max_holding_ns: int | None = None,
     ) -> None:
         self.hypothesis = hypothesis
         self.signal_threshold = signal_threshold
         self.order_qty = order_qty
+        self.stop_loss_pct = stop_loss_pct
+        self.take_profit_pct = take_profit_pct
+        if max_holding_ns is not None:
+            self.max_holding_ns: int | None = int(max_holding_ns)
+        elif holding_period_bars is not None:
+            self.max_holding_ns = int(holding_period_bars) * int(bar_duration_ns)
+        else:
+            self.max_holding_ns = None
         self._entered = False
+        self._entry_price: float | None = None
+        self._entry_ts: int | None = None
+        self._last_exit_emit_ns: int | None = None
+
+    def _track_entry(self, ctx: ReplayStepContext) -> None:
+        """Maintain entry price/timestamp from observed fills and position."""
+        if ctx.position == 0:
+            self._entry_price = None
+            self._entry_ts = None
+            self._last_exit_emit_ns = None
+            return
+        if self._entry_price is not None:
+            return
+        fill_price = None
+        for ev in ctx.order_events:
+            if ev.event_type.value in ("ORDER_FILLED", "ORDER_PARTIALLY_FILLED"):
+                fill_price = float(ev.avg_fill_price)
+        if fill_price is None or fill_price <= 0.0:
+            if ctx.best_bid <= 0 or ctx.best_ask <= 0:
+                # One-sided book and no fill price observed: defer entry
+                # anchoring until a fill event or a two-sided book appears.
+                return
+            fill_price = (ctx.best_bid + ctx.best_ask) / 2.0
+        self._entry_price = fill_price
+        self._entry_ts = ctx.clock.now_ns
+
+    def _exit_reason(self, ctx: ReplayStepContext) -> str:
+        """Return exit reason_code, or empty string when no exit triggers.
+
+        Stop/take-profit need a mid (both book sides); the holding-expiry
+        exit is time-based and fires even on a one-sided book, so a position
+        can still flatten while one side is in a liquidity vacuum.
+        """
+        if ctx.position == 0 or self._entry_price is None or self._entry_price <= 0.0:
+            return ""
+        if ctx.best_bid > 0 and ctx.best_ask > 0:
+            mid = (ctx.best_bid + ctx.best_ask) / 2.0
+            direction = 1.0 if ctx.position > 0 else -1.0
+            pnl_frac = direction * (mid - self._entry_price) / self._entry_price
+            if self.stop_loss_pct is not None and pnl_frac <= -self.stop_loss_pct / 100.0:
+                return "stop_loss"
+            if self.take_profit_pct is not None and pnl_frac >= self.take_profit_pct / 100.0:
+                return "take_profit"
+        if (
+            self.max_holding_ns is not None
+            and self._entry_ts is not None
+            and ctx.clock.now_ns - self._entry_ts >= self.max_holding_ns
+        ):
+            return "max_holding"
+        return ""
+
+    def _exit_intent(self, ctx: ReplayStepContext, reason: str, model_id: str) -> OrderIntent | None:
+        # Marketable exit at the touch: sell into the bid / buy from the ask.
+        # Returns None when the side needed to close has no price (that side
+        # of the book is empty) — retry next step.
+        exiting_long = ctx.position > 0
+        price = ctx.best_bid if exiting_long else ctx.best_ask
+        if price <= 0:
+            return None
+        return OrderIntent(
+            intent_id=new_intent_id(),
+            run_id=ctx.run_id,
+            timestamp_ns=ctx.clock.now_ns,
+            strategy_id="hypothesis_replay",
+            model_id=model_id,
+            symbol=ctx.symbol,
+            side="SELL" if exiting_long else "BUY",
+            order_type="LIMIT",
+            price=price,
+            quantity=abs(ctx.position),
+            reduce_only=True,
+            latency_budget_ms=1.0,
+            reason_code=reason,
+        )
 
     def on_step(self, ctx: ReplayStepContext) -> List[OrderIntent]:
+        # Exit paths run BEFORE the one-sided/no-state suppression: the whole
+        # point of stepping strategies on one-sided books is that they can
+        # still flatten. A short position only needs the ask side to close.
+        self._track_entry(ctx)
+        model_id = f"HYP_{self.hypothesis.hyp_id}"
+
+        exit_reason = self._exit_reason(ctx)
+        if exit_reason:
+            intent = self._exit_intent(ctx, exit_reason, model_id)
+            if intent is None:
+                return []
+            now = ctx.clock.now_ns
+            if (
+                self._last_exit_emit_ns is not None
+                and now - self._last_exit_emit_ns < self.EXIT_REEMIT_NS
+            ):
+                return []
+            self._last_exit_emit_ns = now
+            return [intent]
+
+        # New entries need market state and a two-sided book.
         if ctx.market_state is None:
             return []
         if ctx.book_one_sided:
             return []
+
         sig = float(self.hypothesis.evaluate(ctx.market_state))
         pos = ctx.position
         intents: List[OrderIntent] = []
-        model_id = f"HYP_{self.hypothesis.hyp_id}"
 
         if sig > self.signal_threshold and pos <= 0:
             intents.append(
