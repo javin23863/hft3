@@ -1480,3 +1480,138 @@ def test_exit_leg_rejected_exit_submit_fails_closed(
     # Fail-closed: no stats receipt is produced, so the run can never be
     # indexed as strategy evidence.
     assert not (out_dir / "stats_summary.json").is_file()
+
+
+def test_instrument_resolution_fills_unset_fields_from_specs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dataclasses import replace
+
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "hbt_resolved"
+    config = replace(
+        _config(tmp_path, data_path, snapshot_path),
+        symbol="MES.v.0",
+        tick_size=None,
+        contract_size=None,
+        maker_fee=None,
+        taker_fee=None,
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed"
+    manifest = json.loads((out_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["tick_size"] == 0.25
+    assert manifest["contract_size"] == 5.0
+    # MES all-in non-member per side: 0.25 exchange + 0.25 broker + 0.02 NFA
+    assert manifest["maker_fee"] == pytest.approx(0.52)
+    assert manifest["taker_fee"] == pytest.approx(0.52)
+    assert manifest["instrument_resolution"] == {
+        "tick_size": "instrument_specs",
+        "contract_size": "instrument_specs",
+        "maker_fee": "fee_model",
+        "taker_fee": "fee_model",
+    }
+
+
+def test_instrument_resolution_explicit_values_win(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "hbt_explicit"
+
+    result = run_hftbacktest_only(_config(tmp_path, data_path, snapshot_path), out_dir=out_dir)
+
+    assert result["status"] == "completed"
+    manifest = json.loads((out_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["contract_size"] == 5.0
+    assert manifest["maker_fee"] == 0.47
+    assert manifest["instrument_resolution"] == {
+        "tick_size": "explicit",
+        "contract_size": "explicit",
+        "maker_fee": "explicit",
+        "taker_fee": "explicit",
+    }
+
+
+def test_instrument_resolution_unknown_symbol_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dataclasses import replace
+
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "hbt_unknown_symbol"
+    config = replace(
+        _config(tmp_path, data_path, snapshot_path),
+        symbol="6E.v.0",
+        contract_size=None,
+        maker_fee=None,
+        taker_fee=None,
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "instrument_spec_missing"
+    assert result["fail_closed_reasons"] == ["instrument_spec_missing:6E"]
+    assert (out_dir / "run_manifest.json").is_file()
+    assert not (out_dir / "stats_summary.json").is_file()
+    assert not (out_dir / "promotion_decision.json").is_file()
+
+
+def test_prepare_resolves_economics_from_instrument_spec(tmp_path: Path) -> None:
+    dtype, constants = _event_contract()
+    base_ns = int(datetime(2024, 9, 11, 12, 29, tzinfo=timezone.utc).timestamp() * 1_000_000_000)
+    rows = []
+    for index, offset in enumerate((0, 100, 1_500_000_000)):
+        ev = constants["ADD_ORDER_EVENT"] | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"]
+        ev |= constants["BUY_EVENT"] if index % 2 else constants["SELL_EVENT"]
+        rows.append((ev, base_ns + offset, base_ns + offset + 100, 5000.0 + index * 0.25, 1.0, 1001 + index, 0, 0.0))
+    events = np.array(rows, dtype=dtype)
+    source = tmp_path / "lake_source.npz"
+    np.savez_compressed(source, data=events)
+
+    prepared = prepare_hftbacktest_only_l3_from_lake(
+        HftBacktestOnlyPrepareConfig(
+            source_npz=source,
+            symbol="MES.v.0",
+            contract="MESU4",
+            event_id="CPI_2024_09_11_TIGHT",
+            trade_date="2024-09-11",
+            out_root=tmp_path / "hbt",
+            warmup_seconds=1,
+        )
+    )
+
+    assert prepared["tick_size"] == 0.25
+    assert prepared["contract_size"] == 5.0
+
+
+def test_prepare_unknown_symbol_fails_closed(tmp_path: Path) -> None:
+    dtype, constants = _event_contract()
+    ev = constants["ADD_ORDER_EVENT"] | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"] | constants["BUY_EVENT"]
+    events = np.array([(ev, 1_000_000_000, 1_000_000_100, 5000.0, 1.0, 1001, 0, 0.0)], dtype=dtype)
+    source = tmp_path / "lake_source.npz"
+    np.savez_compressed(source, data=events)
+
+    with pytest.raises(HftBacktestOnlyPipelineError, match="instrument_spec_missing:6E"):
+        prepare_hftbacktest_only_l3_from_lake(
+            HftBacktestOnlyPrepareConfig(
+                source_npz=source,
+                symbol="6E.v.0",
+                contract="6EU4",
+                event_id="CPI_2024_09_11_TIGHT",
+                trade_date="2024-09-11",
+                out_root=tmp_path / "hbt",
+                warmup_seconds=1,
+            )
+        )

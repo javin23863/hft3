@@ -45,9 +45,12 @@ def test_default_scenarios_cover_fill_latency_fee_axes() -> None:
     assert any("lat0.5x" in i for i in ids)
     assert any("lat2x" in i for i in ids)
     assert any("fee_conservative" in i for i in ids)
-    # Conservative fee bump = MES all-in per side (0.25 + 0.25 + 0.02).
+    # Base fees resolve to MES all-in per side (0.25 + 0.25 + 0.02 = 0.52);
+    # the conservative scenario bumps by another full per-side fee on top.
+    declared = next(s for s in scenarios if s["fee_label"] == "declared")
+    assert abs(declared["maker_fee"] - 0.52) < 1e-9
     conservative = next(s for s in scenarios if s["fee_label"] == "conservative")
-    assert abs(conservative["maker_fee"] - 0.52) < 1e-9
+    assert abs(conservative["maker_fee"] - 1.04) < 1e-9
 
 
 def _fake_strategy_runner(realized_by_scenario: dict[str, float]):
@@ -280,3 +283,54 @@ def test_promotion_decision_surfaces_unavailable_axes(tmp_path: Path) -> None:
         "PartialFillExchange__lat1x__fee_declared"
     ]
     assert any("upstream-unavailable sensitivity axes" in n for n in decision["notes"])
+
+
+def test_sensitivity_battery_resolves_unresolved_base_economics(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # Scenario configs are derived from the base via dataclasses.replace; an
+    # unresolved base (tick_size/contract_size None) must be resolved ONCE at
+    # the top of the battery, not left to crash float(None) in the runner.
+    captured_configs = []
+
+    def _capturing_runner(config):
+        captured_configs.append(config)
+        replay = {
+            "official_hftbacktest_replay_status": "pass",
+            "orders": [],
+            "fills": [{"order_id": 9001, "filled_quantity": 1.0}],
+            "orders_submitted": 1,
+            "fills_count": 1,
+            "fill_rate": 1.0,
+            "gross_pnl": 5.0,
+            "net_pnl": 5.0,
+            "realized_closed_trade_pnl": 5.0,
+            "fail_closed_reasons": [],
+        }
+        return replay, []
+
+    monkeypatch.setattr(pipeline, "_run_minimal_strategy", _capturing_runner)
+
+    # _config() leaves tick_size/contract_size/maker_fee/taker_fee unset (None).
+    report = run_sensitivity_battery(_config(), out_dir=tmp_path, base_stats=_base_stats())
+
+    assert report["status"] == "pass", report["fail_closed_reasons"]
+    assert len(captured_configs) == 11
+    for scenario_cfg in captured_configs:
+        assert scenario_cfg.tick_size == 0.25
+        assert scenario_cfg.contract_size == 5.0
+        assert scenario_cfg.maker_fee is not None
+        # declared scenarios carry the resolved MES fee, conservative 2x it
+        assert min(
+            abs(scenario_cfg.maker_fee - 0.52), abs(scenario_cfg.maker_fee - 1.04)
+        ) < 1e-9
+
+
+def test_default_scenarios_accept_continuous_symbol_notation() -> None:
+    # resolve_instrument_execution keeps the original research symbol on the
+    # config; the gate-level fee lookup must normalize it the same way the
+    # spec resolution does, or `@SYM#C` passes resolution then crashes here.
+    scenarios = default_sensitivity_scenarios(_config(symbol="@MES#C"))
+    assert len(scenarios) == 11
+    declared = next(s for s in scenarios if s["fee_label"] == "declared")
+    assert abs(declared["maker_fee"] - 0.52) < 1e-9

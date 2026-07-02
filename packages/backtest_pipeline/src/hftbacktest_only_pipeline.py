@@ -12,12 +12,18 @@ import math
 import os
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
 import numpy as np
+
+from backtest_pipeline.src.fee_model import FeeModel, FeeModelError
+from backtest_pipeline.src.instrument_specs import (
+    InstrumentSpecError,
+    resolve_instrument_spec,
+)
 
 
 PLAN_PATH = "docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md"
@@ -79,11 +85,15 @@ class HftBacktestOnlyRunConfig:
     canonical_model_id: str = ""
     legacy_aliases: tuple[str, ...] = field(default_factory=tuple)
     authority_refs: tuple[str, ...] = field(default_factory=tuple)
-    tick_size: float = 0.25
+    # Execution economics: None means "resolve from the instrument spec for
+    # config.symbol". Explicit values win (Gate-3 sensitivity axes override
+    # per-scenario). A symbol without a spec fails the run closed — it must
+    # never inherit another product's tick/multiplier/fee schedule.
+    tick_size: float | None = None
     lot_size: float = 1.0
-    contract_size: float = 1.0
-    maker_fee: float = 0.0
-    taker_fee: float = 0.0
+    contract_size: float | None = None
+    maker_fee: float | None = None
+    taker_fee: float | None = None
     entry_latency_ns: int = 100_000
     response_latency_ns: int = 100_000
     exchange_fill_model: str = "NoPartialFillExchange"
@@ -133,6 +143,54 @@ class HftBacktestOnlyRunConfig:
         }
 
 
+_RESOLVED_EXECUTION_FIELDS = ("tick_size", "contract_size", "maker_fee", "taker_fee")
+
+
+def resolve_instrument_execution(
+    config: HftBacktestOnlyRunConfig,
+) -> tuple[HftBacktestOnlyRunConfig, dict[str, str], list[str]]:
+    """Fill unset execution-economics fields from the instrument spec.
+
+    Returns (resolved_config, provenance_by_field, fail_closed_reasons).
+    Explicit config values always win; fields left as None resolve from
+    the authoritative spec / fee model for config.symbol, and a symbol
+    they cannot be resolved for fails the run closed.
+    """
+    provenance: dict[str, str] = {
+        name: "explicit"
+        for name in _RESOLVED_EXECUTION_FIELDS
+        if getattr(config, name) is not None
+    }
+    unresolved = [
+        name for name in _RESOLVED_EXECUTION_FIELDS if getattr(config, name) is None
+    ]
+    if not unresolved:
+        return config, provenance, []
+
+    try:
+        spec = resolve_instrument_spec(config.symbol)
+    except InstrumentSpecError as exc:
+        return config, provenance, [str(exc)]
+
+    updates: dict[str, float] = {}
+    if "tick_size" in unresolved:
+        updates["tick_size"] = spec.tick_size
+        provenance["tick_size"] = "instrument_specs"
+    if "contract_size" in unresolved:
+        updates["contract_size"] = spec.contract_multiplier
+        provenance["contract_size"] = "instrument_specs"
+    if "maker_fee" in unresolved or "taker_fee" in unresolved:
+        try:
+            per_side_fee = FeeModel(product=spec.symbol).get_fee_per_contract()
+        except FeeModelError as exc:
+            return config, provenance, [str(exc)]
+        for name in ("maker_fee", "taker_fee"):
+            if name in unresolved:
+                updates[name] = per_side_fee
+                provenance[name] = "fee_model"
+    return replace(config, **updates), provenance, []
+
+
 @dataclass(frozen=True)
 class HftBacktestOnlyPrepareConfig:
     source_npz: Path
@@ -144,9 +202,12 @@ class HftBacktestOnlyPrepareConfig:
     warmup_seconds: int = 30
     output_stem: str | None = None
     source: str = "databento_cme_mbo"
-    tick_size: float = 0.25
+    # None resolves from the instrument spec for `symbol`; unknown symbols
+    # fail the prepare closed rather than stamping wrong economics into the
+    # prepared-unit manifest (pre-2026-07 every unit was stamped 1.0/0.25).
+    tick_size: float | None = None
     lot_size: float = 1.0
-    contract_size: float = 1.0
+    contract_size: float | None = None
     replay_mode: str = "full_l3_event_replay"
     force_rebuild: bool = False
 
@@ -160,6 +221,19 @@ def prepare_hftbacktest_only_l3_from_lake(config: HftBacktestOnlyPrepareConfig) 
         raise HftBacktestOnlyPipelineError("warmup_seconds_must_be_positive")
     if config.replay_mode not in {"full_l3_event_replay", "added_orders_only"}:
         raise HftBacktestOnlyPipelineError(f"unknown_prepare_replay_mode:{config.replay_mode}")
+
+    if config.tick_size is None or config.contract_size is None:
+        try:
+            spec = resolve_instrument_spec(config.symbol)
+        except InstrumentSpecError as exc:
+            raise HftBacktestOnlyPipelineError(str(exc)) from exc
+        prepared_tick_size = spec.tick_size if config.tick_size is None else float(config.tick_size)
+        prepared_contract_size = (
+            spec.contract_multiplier if config.contract_size is None else float(config.contract_size)
+        )
+    else:
+        prepared_tick_size = float(config.tick_size)
+        prepared_contract_size = float(config.contract_size)
 
     stem = config.output_stem or f"{_safe_stem(config.event_id)}_warmup_{config.warmup_seconds}s_{config.replay_mode}"
     out_dir = Path(config.out_root) / "prepared" / _safe_stem(config.symbol) / config.trade_date
@@ -249,9 +323,9 @@ def prepare_hftbacktest_only_l3_from_lake(config: HftBacktestOnlyPrepareConfig) 
         "normalized_npz_sha256": _sha256_file(normalized_npz),
         "initial_snapshot": str(initial_snapshot),
         "initial_snapshot_sha256": _sha256_file(initial_snapshot),
-        "tick_size": config.tick_size,
+        "tick_size": prepared_tick_size,
         "lot_size": config.lot_size,
-        "contract_size": config.contract_size,
+        "contract_size": prepared_contract_size,
         "feed_type": "L3_MBO",
         "timezone": "UTC",
         "validation_status": "pending_hftbacktest_only_validation",
@@ -403,7 +477,13 @@ def run_hftbacktest_only(
     """Run the active HftBacktest-only slice and write plan-shaped artifacts."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    config, instrument_resolution, instrument_reasons = resolve_instrument_execution(config)
     manifest = config.run_manifest()
+    manifest["instrument_resolution"] = instrument_resolution
+    if instrument_reasons:
+        _write_json(out_dir / "run_manifest.json", manifest)
+        _write_audit(out_dir, "instrument_spec_missing", instrument_reasons)
+        return _result(config, out_dir, "instrument_spec_missing", instrument_reasons)
     data_validation = validate_hftbacktest_only_input(config)
 
     _write_json(out_dir / "run_manifest.json", manifest)
@@ -964,7 +1044,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     # (price move x closed qty x contract multiplier, minus total fees), plus
     # any residual open inventory marked to the last observed two-sided mid.
     direction = 1.0 if side == "BUY" else -1.0
-    contract_multiplier = float(config.contract_size or 1.0)
+    contract_multiplier = float(config.contract_size)
     total_fees_currency = _float_field(final_state, "fee")
     entry_avg_price = float(order_snapshot.get("exec_price") or 0.0) if last_recorded_exec_qty > 0 else None
     exit_avg_price = float(exit_snapshot.get("exec_price") or 0.0) if last_exit_exec_qty > 0 else None

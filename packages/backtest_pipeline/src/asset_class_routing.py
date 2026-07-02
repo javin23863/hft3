@@ -61,7 +61,9 @@ def resolve_asset_class(candidate: CandidateModel) -> str:
 
 
 def resolve_symbol(candidate: CandidateModel) -> str:
-    return candidate.metadata.get("symbol", "MES")
+    # No default symbol: a candidate without one routes to
+    # NO_EXECUTION_VALIDATION downstream instead of silently validating as MES.
+    return str(candidate.metadata.get("symbol") or "")
 
 
 def _read_replay_meta_data_class(npz_path: Path) -> str | None:

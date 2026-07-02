@@ -47,6 +47,8 @@ instruments:
     exchange: CME
     venue: GLBX
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 20
+    tick_value: 5.00
   - canonical_internal_symbol: MNQ
     research_symbol: MNQ.v.0
     data_vendor_symbol: MNQ.c.0
@@ -63,6 +65,9 @@ instruments:
     exchange: CME
     venue: GLBX
     hot_memory_tier: HOT_EXECUTABLE
+    tick_size: 0.10
+    min_price_increment: 0.10
+    tick_value: 5.00
   - canonical_internal_symbol: M2K
     research_symbol: M2K.v.0
     data_vendor_symbol: M2K.c.0
@@ -71,6 +76,9 @@ instruments:
     venue: GLBX
     hot_memory_tier: HOT_EXECUTABLE
     contract_multiplier: 5
+    tick_size: 0.10
+    min_price_increment: 0.10
+    tick_value: 0.50
   - canonical_internal_symbol: YM
     research_symbol: YM.v.0
     data_vendor_symbol: YM.c.0
@@ -78,6 +86,10 @@ instruments:
     exchange: CBOT
     venue: GLBX
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 5
+    tick_size: 1.00
+    min_price_increment: 1.00
+    tick_value: 5.00
   - canonical_internal_symbol: MYM
     research_symbol: MYM.v.0
     data_vendor_symbol: MYM.c.0
@@ -86,6 +98,9 @@ instruments:
     venue: GLBX
     hot_memory_tier: HOT_EXECUTABLE
     contract_multiplier: 0.5
+    tick_size: 1.00
+    min_price_increment: 1.00
+    tick_value: 0.50
 
   # --- HOT_EXECUTABLE rates ---
   - canonical_internal_symbol: ZT
@@ -95,6 +110,10 @@ instruments:
     venue: GLBX
     asset_class: rates
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 2000
+    tick_size: 0.00390625
+    min_price_increment: 0.00390625
+    tick_value: 7.8125
   - canonical_internal_symbol: ZF
     research_symbol: ZF.v.0
     data_vendor_symbol: ZF.c.0
@@ -102,6 +121,10 @@ instruments:
     venue: GLBX
     asset_class: rates
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 1000
+    tick_size: 0.0078125
+    min_price_increment: 0.0078125
+    tick_value: 7.8125
   - canonical_internal_symbol: ZN
     research_symbol: ZN.v.0
     data_vendor_symbol: ZN.c.0
@@ -109,6 +132,10 @@ instruments:
     venue: GLBX
     asset_class: rates
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 1000
+    tick_size: 0.015625
+    min_price_increment: 0.015625
+    tick_value: 15.625
   - canonical_internal_symbol: ZB
     research_symbol: ZB.v.0
     data_vendor_symbol: ZB.c.0
@@ -116,6 +143,10 @@ instruments:
     venue: GLBX
     asset_class: rates
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 1000
+    tick_size: 0.03125
+    min_price_increment: 0.03125
+    tick_value: 31.25
   - canonical_internal_symbol: UB
     research_symbol: UB.v.0
     data_vendor_symbol: UB.c.0
@@ -123,6 +154,10 @@ instruments:
     venue: GLBX
     asset_class: rates
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 1000
+    tick_size: 0.03125
+    min_price_increment: 0.03125
+    tick_value: 31.25
   - canonical_internal_symbol: SR3
     research_symbol: SR3.v.0
     data_vendor_symbol: SR3.c.0
@@ -130,6 +165,10 @@ instruments:
     venue: GLBX
     asset_class: rates
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 2500
+    tick_size: 0.0025
+    min_price_increment: 0.0025
+    tick_value: 6.25
   - canonical_internal_symbol: ZQ
     research_symbol: ZQ.v.0
     data_vendor_symbol: ZQ.c.0
@@ -137,6 +176,10 @@ instruments:
     venue: GLBX
     asset_class: rates
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 4167
+    tick_size: 0.0025
+    min_price_increment: 0.0025
+    tick_value: 10.4175
 
   # --- HOT_EXECUTABLE energy / metals / FX ---
   - canonical_internal_symbol: CL
@@ -146,6 +189,10 @@ instruments:
     venue: GLBX
     asset_class: energy
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 1000
+    tick_size: 0.01
+    min_price_increment: 0.01
+    tick_value: 10.00
   - canonical_internal_symbol: MCL
     research_symbol: MCL.v.0
     data_vendor_symbol: MCL.c.0
@@ -154,6 +201,9 @@ instruments:
     asset_class: energy
     hot_memory_tier: HOT_EXECUTABLE
     contract_multiplier: 100
+    tick_size: 0.01
+    min_price_increment: 0.01
+    tick_value: 1.00
   - canonical_internal_symbol: NG
     research_symbol: NG.v.0
     data_vendor_symbol: NG.c.0
@@ -161,6 +211,10 @@ instruments:
     venue: GLBX
     asset_class: energy
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 10000
+    tick_size: 0.001
+    min_price_increment: 0.001
+    tick_value: 10.00
   - canonical_internal_symbol: GC
     research_symbol: GC.v.0
     data_vendor_symbol: GC.c.0
@@ -168,6 +222,10 @@ instruments:
     venue: GLBX
     asset_class: metals
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 100
+    tick_size: 0.10
+    min_price_increment: 0.10
+    tick_value: 10.00
   - canonical_internal_symbol: MGC
     research_symbol: MGC.v.0
     data_vendor_symbol: MGC.c.0
@@ -176,6 +234,9 @@ instruments:
     asset_class: metals
     hot_memory_tier: HOT_EXECUTABLE
     contract_multiplier: 10
+    tick_size: 0.10
+    min_price_increment: 0.10
+    tick_value: 1.00
   - canonical_internal_symbol: HG
     research_symbol: HG.v.0
     data_vendor_symbol: HG.c.0
@@ -183,6 +244,10 @@ instruments:
     venue: GLBX
     asset_class: metals
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 25000
+    tick_size: 0.0005
+    min_price_increment: 0.0005
+    tick_value: 12.50
   - canonical_internal_symbol: "6E"
     research_symbol: 6E.v.0
     data_vendor_symbol: 6E.c.0
@@ -190,6 +255,10 @@ instruments:
     venue: GLBX
     asset_class: fx
     hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 125000
+    tick_size: 0.00005
+    min_price_increment: 0.00005
+    tick_value: 6.25
 
   # --- HOT_SENSOR volatility ---
   - canonical_internal_symbol: VIX

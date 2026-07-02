@@ -43,8 +43,8 @@ def run_campaign(
     workers: int = 1,
     max_tasks_per_child: int = 0,
     resume: bool = False,
-    maker_fee: float = 0.0,
-    taker_fee: float = 0.0,
+    maker_fee: float | None = None,
+    taker_fee: float | None = None,
     entry_latency_ns: int = 100_000,
     response_latency_ns: int = 100_000,
 ) -> dict[str, Any]:
@@ -61,6 +61,7 @@ def run_campaign(
         "resume": resume,
         "maker_fee": maker_fee,
         "taker_fee": taker_fee,
+        "economics_stamp": _economics_stamp(maker_fee, taker_fee),
         "entry_latency_ns": entry_latency_ns,
         "response_latency_ns": response_latency_ns,
     }
@@ -164,6 +165,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
             blocker_detail=_join_blocker_details(row.get("blocker_detail"), metadata_blocker),
             hbt_run_id="",
             dry_run=bool(settings.get("dry_run")),
+            economics_stamp=str(settings.get("economics_stamp") or ""),
         )
 
     if metadata_blocker:
@@ -175,6 +177,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
             blocker_detail=metadata_blocker,
             hbt_run_id="",
             dry_run=bool(settings.get("dry_run")),
+            economics_stamp=str(settings.get("economics_stamp") or ""),
         )
 
     run_id = safe_stem(row_key)
@@ -192,11 +195,15 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
         canonical_model_id=str(row["canonical_model_id"]),
         legacy_aliases=tuple(str(alias) for alias in row.get("legacy_aliases") or ()),
         authority_refs=tuple(str(ref) for ref in row.get("authority_refs") or ()),
-        tick_size=float(row["tick_size"]),
+        # tick/contract/fees resolve from the authoritative instrument spec
+        # for row["symbol"] inside the runner; row-declared values stay in the
+        # row receipt for audit but are never trusted for economics (prepared
+        # units built before 2026-07 carry contract_size=1.0 stamps).
+        tick_size=None,
         lot_size=float(row["lot_size"]),
-        contract_size=float(row["contract_size"]),
-        maker_fee=float(settings.get("maker_fee") or 0.0),
-        taker_fee=float(settings.get("taker_fee") or 0.0),
+        contract_size=None,
+        maker_fee=None if settings.get("maker_fee") is None else float(settings["maker_fee"]),
+        taker_fee=None if settings.get("taker_fee") is None else float(settings["taker_fee"]),
         entry_latency_ns=int(settings.get("entry_latency_ns") or 100_000),
         response_latency_ns=int(settings.get("response_latency_ns") or 100_000),
         event_window=dict(row.get("event_window") or {}),
@@ -216,6 +223,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
             blocker_detail=f"{type(exc).__name__}:{exc}",
             hbt_run_id=run_id,
             dry_run=bool(settings.get("dry_run")),
+            economics_stamp=str(settings.get("economics_stamp") or ""),
         )
     status = str(result.get("status") or "unknown")
     fail_closed_reasons = [str(reason) for reason in result.get("fail_closed_reasons") or ()]
@@ -228,6 +236,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
         blocker_detail=";".join(fail_closed_reasons),
         hbt_run_id=run_id,
         dry_run=bool(settings.get("dry_run")),
+            economics_stamp=str(settings.get("economics_stamp") or ""),
     )
 
 
@@ -261,8 +270,22 @@ def _metadata_blocker(row: Mapping[str, Any]) -> str:
     return "missing_hbt_run_metadata:" + ",".join(missing) if missing else ""
 
 
+INSTRUMENT_ECONOMICS_VERSION = "instrument_specs_v1"
+
+
+def _economics_stamp(maker_fee: float | None, taker_fee: float | None) -> str:
+    """Cache key for row receipts. Receipts priced under different fee or
+    tick/multiplier resolution rules must never satisfy --resume; receipts
+    written before this stamp existed always mismatch and re-run."""
+    maker = "resolved" if maker_fee is None else f"{float(maker_fee):g}"
+    taker = "resolved" if taker_fee is None else f"{float(taker_fee):g}"
+    return f"{INSTRUMENT_ECONOMICS_VERSION}:maker={maker}:taker={taker}"
+
+
 def _cached_receipt_matches_run(cached: Mapping[str, Any], settings: Mapping[str, Any]) -> bool:
     if str(cached.get("strategy_id") or "") != MODEL_SPECIFIC_STRATEGY_ID:
+        return False
+    if str(cached.get("economics_stamp") or "") != str(settings.get("economics_stamp") or ""):
         return False
     if str(cached.get("strategy_surface_version") or "") != MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION:
         return False
@@ -312,6 +335,7 @@ def _write_row_result(
     blocker_detail: str,
     hbt_run_id: str,
     dry_run: bool,
+    economics_stamp: str = "",
 ) -> dict[str, Any]:
     payload = {
         "schema_version": ROW_RESULT_SCHEMA_VERSION,
@@ -334,6 +358,7 @@ def _write_row_result(
         "strategy_id": MODEL_SPECIFIC_STRATEGY_ID,
         "strategy_surface_version": MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
         "data_contract_version": HBT_DATA_CONTRACT_VERSION,
+        "economics_stamp": economics_stamp,
         "strategy_params": row.get("strategy_params", {}),
         "parameter_proposal_status": row.get("parameter_proposal_status", ""),
         "objective_evaluations": row.get("objective_evaluations", ""),
@@ -410,8 +435,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--maker-fee", type=float, default=0.0)
-    parser.add_argument("--taker-fee", type=float, default=0.0)
+    parser.add_argument(
+        "--maker-fee",
+        type=float,
+        default=None,
+        help="Explicit per-side maker fee override; unset resolves the product's real fee",
+    )
+    parser.add_argument(
+        "--taker-fee",
+        type=float,
+        default=None,
+        help="Explicit per-side taker fee override; unset resolves the product's real fee",
+    )
     parser.add_argument("--entry-latency-ns", type=int, default=100_000)
     parser.add_argument("--response-latency-ns", type=int, default=100_000)
     args = parser.parse_args(argv)

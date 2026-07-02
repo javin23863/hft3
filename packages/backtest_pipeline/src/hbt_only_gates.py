@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from backtest_pipeline.src.fee_model import FeeModel
+from backtest_pipeline.src.instrument_specs import normalize_product
 
 GATE3_SCHEMA = "hft3_hbt_only_gate3_sensitivity_v1"
 GATE4_SCHEMA = "hft3_hbt_only_gate4_robustness_v1"
@@ -43,7 +44,21 @@ def default_sensitivity_scenarios(config: Any) -> list[dict[str, Any]]:
     The base configuration itself (declared fill model, 1.0x latency,
     declared fees) is excluded — its stats come from the base run.
     """
-    product = str(config.symbol).split(".")[0].upper()
+    from backtest_pipeline.src.hftbacktest_only_pipeline import (
+        HftBacktestOnlyPipelineError,
+        resolve_instrument_execution,
+    )
+
+    # The battery must bump from the same resolved base fees the base run
+    # used; unresolved economics would battery fee scenarios off None/0.
+    config, _, resolution_reasons = resolve_instrument_execution(config)
+    if resolution_reasons:
+        raise HftBacktestOnlyPipelineError(";".join(resolution_reasons))
+    # normalize_product, not a bare split: resolve_instrument_execution keeps
+    # the original research symbol on the config, so `@SYM#C`-style notation
+    # must be normalized here too or the fee lookup fails for symbols the
+    # spec resolution just accepted.
+    product = normalize_product(config.symbol)
     conservative_fee_bump = FeeModel(product=product).get_fee_per_contract()
     scenarios: list[dict[str, Any]] = []
     for fill_model in ("NoPartialFillExchange", "PartialFillExchange"):
@@ -81,11 +96,21 @@ def run_sensitivity_battery(
     closed-trade realized PnL across base + scenarios stays positive.
     """
     from backtest_pipeline.src.hftbacktest_only_pipeline import (
+        HftBacktestOnlyPipelineError,
         _run_minimal_strategy,
         _stats_summary,
         _write_json,
         _write_recorder_result,
+        resolve_instrument_execution,
     )
+
+    # Resolve execution economics ONCE for the whole battery: every scenario
+    # config is derived from this base via dataclasses.replace, so an
+    # unresolved base (tick_size/contract_size None) would crash or misprice
+    # every scenario even though the base run resolved internally.
+    config, _, resolution_reasons = resolve_instrument_execution(config)
+    if resolution_reasons:
+        raise HftBacktestOnlyPipelineError(";".join(resolution_reasons))
 
     out_dir = Path(out_dir)
     scenario_list = list(scenarios) if scenarios is not None else default_sensitivity_scenarios(config)

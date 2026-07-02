@@ -170,12 +170,15 @@ def generate_scenario_manifest(cfg: ManifestGenerationConfig) -> tuple[list[HftR
     for candidate_id in selected_ids:
         row = promoted_by_id.get(candidate_id, {})
         recipe_hash = extract_feature_recipe_hash_from_promoted_row(row) or ""
+        symbol = str(row.get("symbol") or "")
+        if not symbol:
+            raise ValueError(f"campaign_manifest_symbol_missing:{candidate_id}")
         variants = _stress_variants(cfg.stress_dimensions)
         for stress_label, stress_seed in variants:
             payload = {
                 "candidate_id": candidate_id,
                 "model_id": str(row.get("model_id", "UNKNOWN")),
-                "symbol": str(row.get("symbol", "MES.v.0")),
+                "symbol": symbol,
                 "event_id": cfg.event_id,
                 "event_type": str(row.get("opportunity_type_or_event_type", "screen")),
                 "prepared_data_hash": prepared.prepared_data_hash,
@@ -246,8 +249,11 @@ def generate_scenario_manifest(cfg: ManifestGenerationConfig) -> tuple[list[HftR
 def _infer_symbol(screening: Mapping[str, Any], candidate_id: str) -> str:
     for row in screening.get("promoted") or []:
         if isinstance(row, Mapping) and str(row.get("candidate_id")) == candidate_id:
-            return str(row.get("symbol", "MES.v.0")).split(".")[0]
-    return "MES"
+            symbol = str(row.get("symbol") or "").split(".")[0]
+            if symbol:
+                return symbol
+            break
+    raise ValueError(f"campaign_manifest_symbol_missing:{candidate_id}")
 
 
 def write_scenario_manifest(path: Path, scenarios: list[HftReplayScenario], *, reasons: list[str] | None = None) -> None:
