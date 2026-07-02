@@ -377,3 +377,25 @@ def test_orphan_event_filter(tmp_path) -> None:
     # Valid ADD and valid CANCEL on order 100 must remain
     assert 100 in order_ids
     assert len(filtered) == 2  # ADD order 100 + valid CANCEL order 100
+
+
+def test_one_sided_fee_override_falls_back_to_product_default() -> None:
+    from backtest_pipeline.src.fee_model import FeeModel
+    from backtest_pipeline.src.hft_backtest_builder import _resolve_fee_pair
+
+    fee_model = FeeModel(product="MES")
+    default_fee = fee_model.get_fee_per_contract()
+    assert default_fee > 0
+
+    maker, taker = _resolve_fee_pair(fee_model, maker_fee=1.75, taker_fee=None)
+    assert (maker, taker) == (1.75, default_fee)
+
+    maker, taker = _resolve_fee_pair(fee_model, maker_fee=None, taker_fee=2.5)
+    assert (maker, taker) == (default_fee, 2.5)
+
+    maker, taker = _resolve_fee_pair(fee_model, maker_fee=None, taker_fee=None)
+    assert (maker, taker) == (default_fee, default_fee)
+
+    # Explicit zero is respected (declared free side), only None falls back.
+    maker, taker = _resolve_fee_pair(fee_model, maker_fee=0.0, taker_fee=None)
+    assert (maker, taker) == (0.0, default_fee)

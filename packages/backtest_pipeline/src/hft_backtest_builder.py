@@ -158,6 +158,22 @@ def _apply_latency_model(
     _apply_constant_latency(asset, entry_ns, resp_ns)
 
 
+def _resolve_fee_pair(
+    fee_model: FeeModel,
+    *,
+    maker_fee: Optional[float],
+    taker_fee: Optional[float],
+) -> tuple[float, float]:
+    """Resolve per-side fees: explicit override wins, an unset side falls back
+    to the product default — never a silent zero, which would make that side's
+    fills free and overstate net PnL."""
+    default_fee = fee_model.get_fee_per_contract()
+    return (
+        default_fee if maker_fee is None else float(maker_fee),
+        default_fee if taker_fee is None else float(taker_fee),
+    )
+
+
 def build_hftbacktest(
     data_path: str,
     *,
@@ -270,11 +286,10 @@ def build_hftbacktest(
 
     # Explicit fee overrides (declared run economics) win over the FeeModel
     # product default so executed fees always match the emitted config.
-    if maker_fee is not None or taker_fee is not None:
-        asset.trading_qty_fee_model(float(maker_fee or 0.0), float(taker_fee or 0.0))
-    else:
-        fee = fee_model.get_fee_per_contract()
-        asset.trading_qty_fee_model(fee, fee)
+    resolved_maker_fee, resolved_taker_fee = _resolve_fee_pair(
+        fee_model, maker_fee=maker_fee, taker_fee=taker_fee
+    )
+    asset.trading_qty_fee_model(resolved_maker_fee, resolved_taker_fee)
 
     if use_l3:
         # L3FIFOQueueModel: exact FIFO queue position tracked by order_id.
