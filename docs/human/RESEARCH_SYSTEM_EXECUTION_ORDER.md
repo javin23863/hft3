@@ -165,7 +165,7 @@ python scripts/run_hftbacktest_only.py \
   --symbol MES \
   --contract MESH6 \
   --event-id CPI_2024_09_11_TIGHT \
-  --normalized-npz data/hbt/normalized/MES/2024-09-11/CPI_2024_09_11_TIGHT_l3.npz \
+  --data-npz data/hbt/normalized/MES/2024-09-11/CPI_2024_09_11_TIGHT_l3.npz \
   --initial-snapshot data/hbt/snapshots/MES/2024-09-11/CPI_2024_09_11_TIGHT_initial_snapshot.npz
 ```
 
@@ -338,7 +338,7 @@ python scripts/run_hftbacktest_only.py \
   --symbol MES \
   --contract MESH6 \
   --event-id CPI_2024_09_11_TIGHT \
-  --normalized-npz <validated_hftbacktest_l3_npz> \
+  --data-npz <validated_hftbacktest_l3_npz> \
   --initial-snapshot <matching_initial_snapshot_npz>
 
 # 4. Inspect active artifact

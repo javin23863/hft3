@@ -1634,3 +1634,41 @@ def test_crypto_pipeline_coverage_rejects_unknown_status() -> None:
         assert "unknown coverage status" in str(exc)
     else:  # pragma: no cover - defensive assertion
         raise AssertionError("coverage row accepted an unknown status")
+
+
+def test_hbt_runs_snapshot_blocks_when_data_validation_missing(tmp_path: Path) -> None:
+    """Fail closed: outputs without admissibility proof must not display as observed."""
+    run_dir = tmp_path / "artifacts" / "hbt_runs" / "hbt_missing_validation"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_manifest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "hbt_missing_validation",
+                "active_path": "hftbacktest_only",
+                "symbol": "MES",
+                "contract": "MESH6",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "strategy_id": "smoke_limit_order",
+            }
+        ),
+        encoding="utf-8",
+    )
+    # No data_validation.json and no validation_status fallbacks.
+    (run_dir / "recorder_result.npz").write_bytes(b"npz")
+    (run_dir / "stats_summary.json").write_text(
+        '{"run_id":"hbt_missing_validation","mechanical_validity_status":"pass"}',
+        encoding="utf-8",
+    )
+    (run_dir / "promotion_decision.json").write_text(
+        '{"run_id":"hbt_missing_validation","decision":"observe","promotion_allowed":false}',
+        encoding="utf-8",
+    )
+
+    snapshot = load_run_evidence(tmp_path, "hbt_runs")
+
+    assert snapshot.state == "blocked"
+    gates = snapshot.decision["blocking_gates"]
+    validation_gates = [g for g in gates if g["gate"] == "hbt_data_validation"]
+    assert validation_gates, gates
+    assert "admissibility unproven" in validation_gates[0]["reason"]
+    assert validation_gates[0]["data_validation_status"] == "missing"

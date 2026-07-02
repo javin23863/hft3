@@ -1193,12 +1193,15 @@ def build_robustness_raw_inputs_from_screening(
     min_packaged: int,
     fee_per_rt: float | None,
     tick_value: float | None,
+    fees_from_model: bool = False,
     diagnostics_out: Path | None = None,
     surface_policy: str = "current_first_event",
     sensitivity_report_out: Path | None = None,
 ) -> dict[str, Any]:
     if surface_policy not in SURFACE_POLICIES:
         raise ValueError(f"unsupported_surface_policy:{surface_policy}")
+    if fees_from_model and (fee_per_rt is not None or tick_value is not None):
+        raise ValueError("fees_from_model_conflicts_with_explicit_fee_args")
     diagnostic_only_policy = surface_policy != "current_first_event"
     diagnostic_only_source = screening_artifact_dir is not None
     if (diagnostic_only_policy or diagnostic_only_source) and sensitivity_report_out is None:
@@ -1260,7 +1263,7 @@ def build_robustness_raw_inputs_from_screening(
 
     candidates: dict[str, Any] = {}
     candidate_skips: dict[str, str] = {}
-    stress_ready = fee_per_rt is not None and tick_value is not None
+    explicit_stress = fee_per_rt is not None and tick_value is not None
     for candidate_id, measured in sorted(promoted_measured.items()):
         if candidate_id not in promoted_by_id:
             continue
@@ -1274,7 +1277,21 @@ def build_robustness_raw_inputs_from_screening(
                     f"diagnostic_only_surface_policy:{surface_policy}"
                 )
             continue
-        if not stress_ready:
+        if explicit_stress:
+            row_fee = float(fee_per_rt)
+            row_tick = float(tick_value)
+            stress_input_source = "cli_explicit"
+        elif fees_from_model:
+            derived = _fee_model_stress_inputs(measured.family_key_map.get("symbol", ""))
+            if derived is None:
+                candidate_skips[candidate_id] = (
+                    "stress_decomposition_missing:fee_model_has_no_product:"
+                    f"{measured.family_key_map.get('symbol', '')}"
+                )
+                continue
+            row_fee, row_tick, product = derived
+            stress_input_source = f"fee_model_derived:{product}"
+        else:
             candidate_skips[candidate_id] = "stress_decomposition_missing"
             continue
         family = family_payloads.get(measured.family_key)
@@ -1318,14 +1335,15 @@ def build_robustness_raw_inputs_from_screening(
                     "outlier_winsor_pct": 0.01,
                 },
                 "per_event_n_trades": [row.trade_count for row in param_rows],
-                "per_event_fee_per_rt": [float(fee_per_rt)] * n_events,
-                "per_event_tick_value": [float(tick_value)] * n_events,
+                "per_event_fee_per_rt": [row_fee] * n_events,
+                "per_event_tick_value": [row_tick] * n_events,
                 "p_values": family["p_values"],
             },
             "diagnostics": {
                 "event_count": n_events,
                 "parameter_combination_count": family["n_trials"],
                 "missing_profit_factor_count": family["missing_profit_factor_count"],
+                "stress_input_source": stress_input_source,
             },
         }
 
@@ -1421,6 +1439,23 @@ def build_robustness_raw_inputs_from_screening(
     }
 
 
+def _fee_model_stress_inputs(symbol: str) -> tuple[float, float, str] | None:
+    """Derive (fee_per_round_trip, tick_value, product) from FeeModel.
+
+    Returns None when the product is not explicitly covered by both the fee
+    schedule and the tick-value table — FeeModel's silent 1.25/12.50 fallbacks
+    for unknown products must not leak into stress evidence.
+    """
+    from backtest_pipeline.src.fee_model import FeeModel
+
+    product = str(symbol).split(".")[0].upper()
+    model = FeeModel(product=product)
+    if product not in model.fees or product not in FeeModel.TICK_VALUES:
+        return None
+    # Round trip = 2 sides, all-in (exchange + clearing + broker + NFA).
+    return 2.0 * model.get_fee_per_contract(), FeeModel.TICK_VALUES[product], product
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Build hft3 raw robustness inputs from complete VectorBT screening surfaces.",
@@ -1444,6 +1479,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-packaged", type=int, default=1)
     parser.add_argument("--fee-per-rt", type=float, default=None)
     parser.add_argument("--tick-value", type=float, default=None)
+    parser.add_argument(
+        "--fees-from-model",
+        action="store_true",
+        help=(
+            "Derive fee-per-round-trip and tick value per candidate from "
+            "FeeModel using the candidate family's product symbol. Fails "
+            "closed for products outside the explicit fee/tick tables. "
+            "Mutually exclusive with --fee-per-rt/--tick-value."
+        ),
+    )
     parser.add_argument("--diagnostics-out", type=Path, default=None)
     parser.add_argument(
         "--surface-policy",
@@ -1475,6 +1520,7 @@ def main(argv: list[str] | None = None) -> int:
             min_packaged=args.min_packaged,
             fee_per_rt=args.fee_per_rt,
             tick_value=args.tick_value,
+            fees_from_model=args.fees_from_model,
             diagnostics_out=args.diagnostics_out,
             surface_policy=args.surface_policy,
             sensitivity_report_out=args.sensitivity_report_out,
