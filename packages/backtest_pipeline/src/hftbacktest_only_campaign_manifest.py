@@ -18,6 +18,11 @@ from typing import Any, Iterable, Iterator, Mapping
 
 import yaml
 
+from replay.cross_asset_assembly import (
+    required_leaders_for_model,
+    required_sensors_for_model,
+)
+
 from hft3.hbt_parameter_sets import (
     HBT_PARAMETER_SET_PRE_HBT_STATUS as _PRE_HBT_PROPOSAL_STATUS,
     HBT_PARAMETER_SET_SCHEMA_VERSION as HBT_SELF_LEARNING_PARAMETER_SET_SCHEMA_VERSION,
@@ -198,8 +203,13 @@ def stream_campaign_manifest(
     parameter_surface_status: str = "base_only",
     parameter_surface_config_status: str = "",
     parameter_sets_json: Path | None = None,
+    sensor_units: Mapping[str, Mapping[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Stream the base campaign manifest to JSONL and write pre-execution proof."""
+    """Stream the base campaign manifest to JSONL and write pre-execution proof.
+
+    sensor_units maps event_id -> {sensor_id: feature npz path}; rows for
+    sensor-requiring models attach their coverage or block explicitly.
+    """
     inputs = _campaign_manifest_inputs(
         campaign_id=campaign_id,
         prepared_root=prepared_root,
@@ -208,7 +218,7 @@ def stream_campaign_manifest(
         authority_refs=authority_refs,
     )
     return write_campaign_manifest(
-        _iter_campaign_rows_from_inputs(inputs),
+        _iter_campaign_rows_from_inputs(inputs, sensor_units=sensor_units),
         out_path=out_path,
         summary_path=summary_path,
         expected_canonical_model_ids=inputs["canonical_model_ids"],
@@ -1037,7 +1047,24 @@ def _campaign_manifest_inputs(
     }
 
 
-def _iter_campaign_rows_from_inputs(inputs: Mapping[str, Any]) -> Iterator[dict[str, Any]]:
+def _leader_unit_index(prepared_units: Iterable[Mapping[str, Any]]) -> dict[tuple[str, str], str]:
+    """(product, event_id) -> normalized npz for leader-tape lookups."""
+    index: dict[tuple[str, str], str] = {}
+    for prepared in prepared_units:
+        product = str(prepared.get("symbol") or "").split(".")[0].upper()
+        event_id = str(prepared.get("event_id") or "")
+        npz = str(prepared.get("normalized_npz") or prepared.get("source_npz") or "")
+        if product and event_id and npz:
+            index.setdefault((product, event_id), npz)
+    return index
+
+
+def _iter_campaign_rows_from_inputs(
+    inputs: Mapping[str, Any],
+    *,
+    sensor_units: Mapping[str, Mapping[str, str]] | None = None,
+) -> Iterator[dict[str, Any]]:
+    leader_units = _leader_unit_index(inputs["prepared_units"])
     for canonical_model_id, entry in inputs["models"]:
         aliases = _legacy_aliases(entry)
         adapter_status = _adapter_status(
@@ -1053,6 +1080,8 @@ def _iter_campaign_rows_from_inputs(inputs: Mapping[str, Any]) -> Iterator[dict[
                 prepared=prepared,
                 adapter_status=adapter_status,
                 authority_refs=tuple(inputs["authority_refs"]),
+                leader_units=leader_units,
+                sensor_units=sensor_units,
             )
 
 
@@ -1133,6 +1162,8 @@ def _build_parameter_surface_row(
         "initial_snapshot": campaign_row["initial_snapshot"],
         "initial_snapshot_sha256": campaign_row["initial_snapshot_sha256"],
         "prepared_manifest": campaign_row.get("prepared_manifest", ""),
+        "cross_asset_npz": dict(campaign_row.get("cross_asset_npz") or {}),
+        "sensor_feature_npz": dict(campaign_row.get("sensor_feature_npz") or {}),
         "tick_size": campaign_row.get("tick_size"),
         "lot_size": campaign_row.get("lot_size"),
         "contract_size": campaign_row.get("contract_size"),
@@ -1167,6 +1198,8 @@ def _build_row(
     prepared: Mapping[str, Any],
     adapter_status: str,
     authority_refs: tuple[str, ...],
+    leader_units: Mapping[tuple[str, str], str] | None = None,
+    sensor_units: Mapping[str, Mapping[str, str]] | None = None,
 ) -> dict[str, Any]:
     source_npz = str(prepared.get("normalized_npz") or prepared.get("source_npz") or "")
     initial_snapshot = str(prepared.get("initial_snapshot") or "")
@@ -1217,6 +1250,46 @@ def _build_row(
     }:
         blocker_code = f"pipeline_blocker:{adapter_status}"
         blocker_details.append(f"canonical_model_id={canonical_model_id}")
+
+    # Leader-requiring models carry their leader tapes on the row; a leader
+    # without a prepared unit for the SAME event is an explicit blocker at
+    # manifest build, never a silent 0.0 signal downstream.
+    cross_asset_npz: dict[str, str] = {}
+    required_leaders = required_leaders_for_model(canonical_model_id)
+    if required_leaders:
+        row_event_id = str(prepared.get("event_id") or "")
+        missing_leaders: list[str] = []
+        for leader in required_leaders:
+            npz = (leader_units or {}).get((leader, row_event_id), "")
+            if npz:
+                cross_asset_npz[leader] = npz
+            else:
+                missing_leaders.append(leader)
+        if missing_leaders:
+            blocker_details.append("missing_leader_tapes=" + ",".join(missing_leaders))
+            if not blocker_code:
+                blocker_code = (
+                    "pipeline_blocker:leader_tape_missing:" + "+".join(missing_leaders)
+                )
+
+    sensor_feature_npz: dict[str, str] = {}
+    required_sensors = required_sensors_for_model(canonical_model_id)
+    if required_sensors:
+        row_event_id = str(prepared.get("event_id") or "")
+        event_sensors = (sensor_units or {}).get(row_event_id) or {}
+        missing_sensors: list[str] = []
+        for sensor_id in required_sensors:
+            npz = str(event_sensors.get(sensor_id) or "")
+            if npz:
+                sensor_feature_npz[sensor_id] = npz
+            else:
+                missing_sensors.append(sensor_id)
+        if missing_sensors:
+            blocker_details.append("missing_sensor_tapes=" + ",".join(missing_sensors))
+            if not blocker_code:
+                blocker_code = (
+                    "pipeline_blocker:sensor_tape_missing:" + "+".join(missing_sensors)
+                )
 
     if blocker_code:
         admissibility_status = blocker_code.split(":", 1)[0]
@@ -1271,6 +1344,8 @@ def _build_row(
         "blocker_detail": "; ".join(blocker_details),
         "authority_refs": list(combined_authority_refs),
         "adapter_status": adapter_status,
+        "cross_asset_npz": cross_asset_npz,
+        "sensor_feature_npz": sensor_feature_npz,
         "hbt_run_status": "not_started",
         "hbt_run_id": "",
         "promotion_decision_path": "",

@@ -62,6 +62,12 @@ class PrecomputedFeatureAdapter:
         """Set internal cursor to the latest row whose ts <= ts_ns."""
         self._row = int(np.searchsorted(self._ts, ts_ns, side="right")) - 1
 
+    def current_timestamp_ns(self) -> int | None:
+        """Availability timestamp of the current row, or None before first sample."""
+        if self._row < 0:
+            return None
+        return int(self._ts[self._row])
+
     def current_features(self) -> Dict[str, float] | None:
         """Return {column: value} at current row, or None before first sample."""
         if self._row < 0:

@@ -1618,3 +1618,90 @@ def _write_adapter_status_json(tmp_path: Path) -> Path:
     path = tmp_path / "adapter_status.json"
     path.write_text(json.dumps(_TEST_ADAPTERS_AVAILABLE), encoding="utf-8")
     return path
+
+
+def test_build_row_attaches_leader_tapes_and_blocks_missing() -> None:
+    from backtest_pipeline.src.hftbacktest_only_campaign_manifest import (
+        _build_row,
+        _leader_unit_index,
+    )
+
+    prepared_units = [
+        {"symbol": "MES.v.0", "event_id": "CPI_2024_09_11_TIGHT", "normalized_npz": "/p/mes.npz"},
+        {"symbol": "ES.v.0", "event_id": "CPI_2024_09_11_TIGHT", "normalized_npz": "/p/es.npz"},
+    ]
+    leader_units = _leader_unit_index(prepared_units)
+    assert leader_units[("ES", "CPI_2024_09_11_TIGHT")] == "/p/es.npz"
+
+    covered = _build_row(
+        campaign_id="c",
+        canonical_model_id="ES_MES_LEAD_LAG",
+        legacy_aliases=["HYP_16"],
+        registry_hash="r" * 64,
+        prepared=prepared_units[0],
+        adapter_status="available",
+        authority_refs=("docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md",),
+        leader_units=leader_units,
+    )
+    assert covered["cross_asset_npz"] == {"ES": "/p/es.npz"}
+    assert "missing_leader_tapes" not in covered["blocker_detail"]
+
+    uncovered = _build_row(
+        campaign_id="c",
+        canonical_model_id="ES_NQ_DIVERGENCE_SNAPBACK",
+        legacy_aliases=["HYP_18"],
+        registry_hash="r" * 64,
+        prepared=prepared_units[0],
+        adapter_status="available",
+        authority_refs=("docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md",),
+        leader_units=leader_units,
+    )
+    assert uncovered["cross_asset_npz"] == {"ES": "/p/es.npz"}
+    assert "missing_leader_tapes=NQ" in uncovered["blocker_detail"]
+
+    non_cross_asset = _build_row(
+        campaign_id="c",
+        canonical_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        legacy_aliases=["HYP_5"],
+        registry_hash="r" * 64,
+        prepared=prepared_units[0],
+        adapter_status="available",
+        authority_refs=("docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md",),
+        leader_units=leader_units,
+    )
+    assert non_cross_asset["cross_asset_npz"] == {}
+
+
+def test_build_row_attaches_sensor_tapes_and_blocks_missing() -> None:
+    from backtest_pipeline.src.hftbacktest_only_campaign_manifest import _build_row
+
+    prepared = {
+        "symbol": "MES.v.0",
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "normalized_npz": "/p/mes.npz",
+    }
+    covered = _build_row(
+        campaign_id="c",
+        canonical_model_id="VIX_SPIKE_EVENT_FADE",
+        legacy_aliases=["HYP_46"],
+        registry_hash="r" * 64,
+        prepared=prepared,
+        adapter_status="available",
+        authority_refs=("docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md",),
+        sensor_units={"CPI_2024_09_11_TIGHT": {"VIX": "/p/vix.npz"}},
+    )
+    assert covered["sensor_feature_npz"] == {"VIX": "/p/vix.npz"}
+    assert "missing_sensor_tapes" not in covered["blocker_detail"]
+
+    uncovered = _build_row(
+        campaign_id="c",
+        canonical_model_id="VIX_SPIKE_EVENT_FADE",
+        legacy_aliases=["HYP_46"],
+        registry_hash="r" * 64,
+        prepared=prepared,
+        adapter_status="available",
+        authority_refs=("docs/project/HFTBACKTEST_ONLY_PIPELINE_PLAN.md",),
+        sensor_units=None,
+    )
+    assert uncovered["sensor_feature_npz"] == {}
+    assert "missing_sensor_tapes=VIX" in uncovered["blocker_detail"]

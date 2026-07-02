@@ -1942,7 +1942,7 @@ def test_required_feature_backend_mismatch_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # The workstation resolves the python extractor; a run REQUIRING cpp
-    # must fail closed with a named blocker and no stats receipt — evidence
+    # must fail closed with a named blocker and no stats receipt â€” evidence
     # can never silently carry a different feature implementation.
     from dataclasses import replace
 
@@ -1991,3 +1991,185 @@ def test_empty_required_feature_backend_accepts_any(
     result = run_hftbacktest_only(_config(tmp_path, data_path, snapshot_path), out_dir=out_dir)
 
     assert result["status"] == "completed", result["fail_closed_reasons"]
+
+
+def _cross_asset_config(
+    tmp_path: Path,
+    data_path: Path,
+    snapshot_path: Path,
+    *,
+    model_id: str,
+    aliases: tuple[str, ...],
+    cross_asset_npz: dict[str, str] | None = None,
+) -> HftBacktestOnlyRunConfig:
+    from dataclasses import replace
+
+    base = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={
+            "model_id": model_id,
+            "quantity": 1.0,
+            "signal_threshold": 0.15,
+            "exit_at_holding": True,
+        },
+        canonical_model_id=model_id,
+        legacy_aliases=aliases,
+        event_window={"cutoff_ts_ns": 1_000_000_000, "end_ts_ns": 4_000_000_000},
+    )
+    return replace(base, cross_asset_npz=cross_asset_npz or {})
+
+
+def test_leader_tape_coverage_unblocks_cross_asset_model(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ES leader tape staged ~1s BEFORE the primary window so its features are
+    # PIT-visible at every primary step; the run must not raise
+    # leader_tape_missing and receipts must carry leader provenance.
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    leader_path = _write_valid_l3_npz(tmp_path / "es_leader.npz", base_exch_ts=1_000)
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "cross_asset_covered"
+    config = _cross_asset_config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        model_id="ES_MES_LEAD_LAG",
+        aliases=("HYP_16",),
+        cross_asset_npz={"ES": str(leader_path)},
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert not any(
+        "leader_tape_missing" in reason for reason in result["fail_closed_reasons"]
+    ), result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["leader_symbols"] == ["ES"]
+    manifest = json.loads((out_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["cross_asset_npz"] == {"ES": str(leader_path)}
+
+
+def test_partial_leader_coverage_names_only_missing_leaders(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    leader_path = _write_valid_l3_npz(tmp_path / "es_leader.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "cross_asset_partial"
+    config = _cross_asset_config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        model_id="ES_NQ_DIVERGENCE_SNAPBACK",
+        aliases=("HYP_18",),
+        cross_asset_npz={"ES": str(leader_path)},
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert "pipeline_blocker:leader_tape_missing:NQ" in result["fail_closed_reasons"]
+    assert not (out_dir / "stats_summary.json").is_file()
+
+
+def test_leader_tape_after_window_counts_alignment_gaps(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Leader events timestamped AFTER the primary window are never PIT-visible:
+    # every primary step records an alignment gap and the leg stays withheld.
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    leader_path = _write_valid_l3_npz(tmp_path / "es_leader.npz", base_exch_ts=9_000_000_000)
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "cross_asset_future_leader"
+    config = _cross_asset_config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        model_id="ES_MES_LEAD_LAG",
+        aliases=("HYP_16",),
+        cross_asset_npz={"ES": str(leader_path)},
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert not any(
+        "leader_tape_missing" in reason for reason in result["fail_closed_reasons"]
+    )
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["leader_alignment_gaps"] > 0
+
+
+def test_vix_model_without_sensor_tape_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "vix_blocked"
+    config = _cross_asset_config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        model_id="VIX_SPIKE_EVENT_FADE",
+        aliases=("HYP_46",),
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert "pipeline_blocker:sensor_tape_missing:VIX" in result["fail_closed_reasons"]
+    assert not (out_dir / "stats_summary.json").is_file()
+
+
+def _write_sensor_npz(path: Path, *, ts: list[int]) -> Path:
+    payload = {
+        "ts": np.asarray(ts, dtype=np.int64),
+        "vix_opt_bipower_var": np.linspace(0.1, 0.9, len(ts)),
+        "_attrs_json": np.asarray([str({"columns": ["vix_opt_bipower_var"]})], dtype=object),
+    }
+    np.savez_compressed(path, **payload)
+    return path
+
+
+def test_stale_sensor_rows_withheld_with_honest_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Sensor samples exist only ~3s before the window with a 1ms staleness
+    # cap: every step must withhold the leg and count a gap — never inject
+    # old data stamped with the decision time.
+    from dataclasses import replace
+
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    sensor_path = _write_sensor_npz(tmp_path / "vix.npz", ts=[1_000, 2_000])
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "vix_stale"
+    config = replace(
+        _cross_asset_config(
+            tmp_path,
+            data_path,
+            snapshot_path,
+            model_id="VIX_SPIKE_EVENT_FADE",
+            aliases=("HYP_46",),
+        ),
+        sensor_feature_npz={"VIX": str(sensor_path)},
+        max_leader_staleness_ns=1_000_000,
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert not any(
+        "sensor_tape_missing" in reason for reason in result["fail_closed_reasons"]
+    )
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["leader_alignment_gaps"] > 0
+    assert replay["sensor_ids"] == ["VIX"]
