@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from backtest_pipeline.src.instrument_specs import INSTRUMENT_SPECS
 
 
@@ -23,7 +25,10 @@ class FeeModel:
 
     TICK_VALUES = {symbol: spec.tick_value for symbol, spec in INSTRUMENT_SPECS.items()}
 
-    # Exchange + clearing fees per side, USD per contract.
+    # Exchange + clearing fees per side, USD per contract (CME fee schedule,
+    # https://www.cmegroup.com/company/clearing-fees.html). Tick values come
+    # from instrument_specs, parity-tested against the campaign prepare
+    # authority config/hftbacktest/cme_lake_product_metadata.yaml.
     FEES = {
         # equity index e-minis
         "ES": {"member": 0.35, "non_member": 1.25},
@@ -68,7 +73,7 @@ class FeeModel:
             raise FeeModelError(f"fee_model_unknown_tier:{self.product}:{self.tier}")
         return exchange + self.broker_commission + self.nfa_fee
 
-    def calculate_trade_cost(self, contracts: int, is_market_order: bool = False, slippage_ticks: int = 0, tick_value: float = None) -> float:
+    def calculate_trade_cost(self, contracts: int, is_market_order: bool = False, slippage_ticks: int = 0, tick_value: float | None = None) -> float:
         """
         Calculates total cost including fees and slippage (adverse selection is separate).
         """
