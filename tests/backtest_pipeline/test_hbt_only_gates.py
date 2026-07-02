@@ -45,9 +45,12 @@ def test_default_scenarios_cover_fill_latency_fee_axes() -> None:
     assert any("lat0.5x" in i for i in ids)
     assert any("lat2x" in i for i in ids)
     assert any("fee_conservative" in i for i in ids)
-    # Conservative fee bump = MES all-in per side (0.25 + 0.25 + 0.02).
+    # Base fees resolve to MES all-in per side (0.25 + 0.25 + 0.02 = 0.52);
+    # the conservative scenario bumps by another full per-side fee on top.
+    declared = next(s for s in scenarios if s["fee_label"] == "declared")
+    assert abs(declared["maker_fee"] - 0.52) < 1e-9
     conservative = next(s for s in scenarios if s["fee_label"] == "conservative")
-    assert abs(conservative["maker_fee"] - 0.52) < 1e-9
+    assert abs(conservative["maker_fee"] - 1.04) < 1e-9
 
 
 def _fake_strategy_runner(realized_by_scenario: dict[str, float]):

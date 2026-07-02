@@ -43,6 +43,16 @@ def default_sensitivity_scenarios(config: Any) -> list[dict[str, Any]]:
     The base configuration itself (declared fill model, 1.0x latency,
     declared fees) is excluded — its stats come from the base run.
     """
+    from backtest_pipeline.src.hftbacktest_only_pipeline import (
+        HftBacktestOnlyPipelineError,
+        resolve_instrument_execution,
+    )
+
+    # The battery must bump from the same resolved base fees the base run
+    # used; unresolved economics would battery fee scenarios off None/0.
+    config, _, resolution_reasons = resolve_instrument_execution(config)
+    if resolution_reasons:
+        raise HftBacktestOnlyPipelineError(";".join(resolution_reasons))
     product = str(config.symbol).split(".")[0].upper()
     conservative_fee_bump = FeeModel(product=product).get_fee_per_contract()
     scenarios: list[dict[str, Any]] = []

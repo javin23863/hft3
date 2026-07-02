@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from backtest_pipeline.src.fee_model import FeeModel
+from backtest_pipeline.src.fee_model import FeeModel, FeeModelError
 from backtest_pipeline.src.research_clock import research_clock_validation_errors
 from backtest_pipeline.src.feature_plane import (
     FEATURE_PLANE_ARTIFACT_FIELDS,
@@ -1366,20 +1366,30 @@ def validate_official_hbt4_replay_contract(
     elif fill_queue_model.get("queue_model_source") not in FILL_QUEUE_MODEL_SOURCES_BY_MODEL.get(str(queue_model), set()):
         reasons.append("official_replay_unsupported_queue_model_source")
 
-    product = str(selected_candidate.get("symbol") or "MES").split(".")[0]
-    builder_fee = FeeModel(product=product).get_fee_per_contract()
-    fee_reasons = []
-    for field in ("maker_fee", "taker_fee"):
-        fee = fill_queue_model.get(field)
-        if not _is_number(fee) or not math.isclose(
-            float(fee),
-            builder_fee,
-            rel_tol=0.0,
-            abs_tol=OFFICIAL_REPLAY_FEE_ABS_TOL,
-        ):
-            fee_reasons.append(field)
-    if fee_reasons:
-        reasons.append("official_replay_unsupported_fee_model")
+    product = str(selected_candidate.get("symbol") or "").split(".")[0]
+    if not product:
+        # A candidate without a symbol has no fee schedule to validate
+        # against; it must never inherit another product's fees.
+        reasons.append("official_replay_symbol_missing")
+    else:
+        try:
+            builder_fee = FeeModel(product=product).get_fee_per_contract()
+        except FeeModelError:
+            builder_fee = None
+            reasons.append("official_replay_unknown_fee_product")
+        if builder_fee is not None:
+            fee_reasons = []
+            for field in ("maker_fee", "taker_fee"):
+                fee = fill_queue_model.get(field)
+                if not _is_number(fee) or not math.isclose(
+                    float(fee),
+                    builder_fee,
+                    rel_tol=0.0,
+                    abs_tol=OFFICIAL_REPLAY_FEE_ABS_TOL,
+                ):
+                    fee_reasons.append(field)
+            if fee_reasons:
+                reasons.append("official_replay_unsupported_fee_model")
 
     return list(dict.fromkeys(reasons))
 

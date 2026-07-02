@@ -387,6 +387,7 @@ def test_campaign_runner_multiworker_recycles_and_resumes_existing_receipts(
         "strategy_id": "hypothesis_limit_order",
         "strategy_surface_version": module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
         "data_contract_version": module.HBT_DATA_CONTRACT_VERSION,
+        "economics_stamp": module._economics_stamp(None, None),
         "dry_run": True,
         "canonical_model_id": rows[0]["canonical_model_id"],
     }
@@ -549,6 +550,7 @@ def test_campaign_runner_resume_keeps_current_data_contract_receipts(
                 "strategy_id": "hypothesis_limit_order",
                 "strategy_surface_version": module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
                 "data_contract_version": module.HBT_DATA_CONTRACT_VERSION,
+                "economics_stamp": module._economics_stamp(None, None),
                 "dry_run": False,
                 "blocker_code": "pipeline_blocker:no_hbt_order_submitted",
             }
@@ -795,3 +797,90 @@ def test_campaign_runner_preserves_prefixed_blocker_codes() -> None:
         )
         == "authority_missing:canonical_model_id_missing"
     )
+
+
+def test_campaign_runner_resume_reruns_receipts_without_economics_stamp(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Receipts written before instrument-spec fee/multiplier resolution
+    (no economics_stamp) were priced with maker/taker 0.0 and contract_size
+    1.0 — they must never satisfy --resume."""
+    module = _load_runner_module()
+    _write_valid_npz(tmp_path / "data.npz")
+    _write_valid_npz(tmp_path / "snapshot.npz")
+    row = _campaign_row(tmp_path)
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    out_root = tmp_path / "runs"
+    existing_dir = out_root / "hbt_campaign_test" / "unit_admissible"
+    existing_dir.mkdir(parents=True)
+    (existing_dir / "campaign_row_result.json").write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "strategy_id": "hypothesis_limit_order",
+                "strategy_surface_version": module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
+                "data_contract_version": module.HBT_DATA_CONTRACT_VERSION,
+                "dry_run": False,
+                "blocker_code": "",
+            }
+        ),
+        encoding="utf-8",
+    )
+    reran: list[str] = []
+
+    def fake_run(config: object, **_kwargs: object) -> dict[str, object]:
+        reran.append(config.run_id)
+        return {"status": "completed", "fail_closed_reasons": []}
+
+    monkeypatch.setattr(module, "run_hftbacktest_only", fake_run)
+
+    summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=out_root,
+        dry_run=False,
+        workers=1,
+        resume=True,
+    )
+
+    assert reran == ["unit_admissible"]
+    assert summary["status_counts"] == {"completed": 1}
+    receipt = json.loads((existing_dir / "campaign_row_result.json").read_text(encoding="utf-8"))
+    assert receipt["economics_stamp"] == module._economics_stamp(None, None)
+
+
+def test_campaign_runner_config_resolves_economics_from_instrument_specs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """The runner must not trust row-declared tick/contract_size (pre-2026-07
+    prepared units carry 1.0 stamps) and must leave fees to spec resolution."""
+    module = _load_runner_module()
+    _write_valid_npz(tmp_path / "data.npz")
+    _write_valid_npz(tmp_path / "snapshot.npz")
+    row = _campaign_row(tmp_path)
+    row["tick_size"] = 0.25
+    row["contract_size"] = 1.0
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    captured: list[object] = []
+
+    def fake_run(config: object, **_kwargs: object) -> dict[str, object]:
+        captured.append(config)
+        return {"status": "completed", "fail_closed_reasons": []}
+
+    monkeypatch.setattr(module, "run_hftbacktest_only", fake_run)
+
+    module.run_campaign(
+        manifest_path=manifest,
+        out_root=tmp_path / "runs",
+        dry_run=False,
+        workers=1,
+    )
+
+    (config,) = captured
+    assert config.tick_size is None
+    assert config.contract_size is None
+    assert config.maker_fee is None
+    assert config.taker_fee is None

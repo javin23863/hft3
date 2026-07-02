@@ -82,11 +82,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--strategy-params-file", type=Path, default=None)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--out-root", type=Path, default=REPO / "artifacts" / "hbt_runs")
-    parser.add_argument("--tick-size", type=float, default=0.25)
+    # Unset economics flags resolve from the authoritative instrument spec
+    # for --symbol; explicit flags stay available for sensitivity overrides.
+    parser.add_argument("--tick-size", type=float, default=None)
     parser.add_argument("--lot-size", type=float, default=1.0)
-    parser.add_argument("--contract-size", type=float, default=1.0)
-    parser.add_argument("--maker-fee", type=float, default=0.0)
-    parser.add_argument("--taker-fee", type=float, default=0.0)
+    parser.add_argument("--contract-size", type=float, default=None)
+    parser.add_argument("--maker-fee", type=float, default=None)
+    parser.add_argument("--taker-fee", type=float, default=None)
     parser.add_argument("--entry-latency-ns", type=int, default=100_000)
     parser.add_argument("--response-latency-ns", type=int, default=100_000)
     parser.add_argument("--exchange-fill-model", default="NoPartialFillExchange")
