@@ -100,6 +100,14 @@ def main(argv: list[str] | None = None) -> int:
             "when the probe summary is missing."
         ),
     )
+    parser.add_argument(
+        "--sensitivity-battery",
+        action="store_true",
+        help=(
+            "After a completed run, execute the Gate-3 fill-model x latency x "
+            "fee sensitivity battery and refresh the promotion decision."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -166,6 +174,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     out_dir = (args.out_root / run_id).resolve()
     result = run_hftbacktest_only(config, out_dir=out_dir, dry_run=args.dry_run)
+    if args.sensitivity_battery and result["status"] == "completed":
+        from backtest_pipeline.src.hbt_only_gates import run_sensitivity_battery
+        from backtest_pipeline.src.hftbacktest_only_pipeline import write_promotion_decision
+
+        gate3 = run_sensitivity_battery(
+            config, out_dir=out_dir, base_stats=result.get("stats_summary") or {}
+        )
+        result["gate3_sensitivity"] = gate3
+        result["promotion_decision"] = write_promotion_decision(out_dir)
     print(json.dumps(result, indent=2, default=str))
     return 0 if result["status"] in {"completed", "dry_run"} else 2
 

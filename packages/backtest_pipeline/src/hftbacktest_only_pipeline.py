@@ -464,26 +464,77 @@ def write_promotion_decision(out_dir: Path, *, stats_summary: Mapping[str, Any] 
         )
     stats = dict(stats_summary or _load_json(stats_path))
     mechanical_pass = stats.get("mechanical_validity_status") == "pass"
+    economic_pass = stats.get("economic_result_status") == "pass"
+
+    # Gates 3-4 are read from their fail-closed reports when present; absent
+    # reports keep the not_evaluated status and promotion stays denied.
+    gate3_path = out_dir / "gate3_sensitivity.json"
+    gate4_path = out_dir / "robustness_report.json"
+    gate3 = _load_json(gate3_path) if gate3_path.is_file() else {}
+    gate4 = _load_json(gate4_path) if gate4_path.is_file() else {}
+    microstructure_status = str(gate3.get("status") or "not_evaluated_minimal_slice")
+    robustness_status = str(gate4.get("status") or "not_evaluated_minimal_slice")
+    if robustness_status == "not_run":
+        # Placeholder file written at run start before any gate evaluation.
+        robustness_status = "not_evaluated_minimal_slice"
+
+    promotion_allowed = (
+        mechanical_pass
+        and economic_pass
+        and microstructure_status == "pass"
+        and robustness_status == "pass"
+    )
+    if promotion_allowed:
+        decision_text = "promote"
+    elif mechanical_pass:
+        decision_text = "observe"
+    else:
+        decision_text = "reject"
     decision = {
         "schema_version": "hft3_hftbacktest_only_promotion_decision_v1",
         "plan": PLAN_PATH,
         "created_at_utc": _utc_now(),
         "run_id": stats.get("run_id"),
         "canonical_model_id": stats.get("canonical_model_id", ""),
-        "decision": "observe" if mechanical_pass else "reject",
-        "promotion_allowed": False,
+        "decision": decision_text,
+        "promotion_allowed": promotion_allowed,
         "mechanical_validity_status": stats.get("mechanical_validity_status"),
         "economic_result_status": stats.get("economic_result_status"),
-        "microstructure_realism_status": "not_evaluated_minimal_slice",
-        "robustness_status": "not_evaluated_minimal_slice",
+        "microstructure_realism_status": microstructure_status,
+        "robustness_status": robustness_status,
+        "gate_reports": {
+            "gate3_sensitivity": str(gate3_path) if gate3 else None,
+            "gate4_robustness": str(gate4_path) if gate4 else None,
+        },
+        "gate_fail_closed_reasons": {
+            "gate3": list(gate3.get("fail_closed_reasons") or []),
+            "gate4": list(gate4.get("fail_closed_reasons") or []),
+        },
+        # Sensitivity axes the pinned engine cannot exercise (e.g. L3 partial
+        # fill in hftbacktest 2.4.2). Surfaced HERE so a promotion granted
+        # without those axes is auditable at the decision layer — the gate is
+        # not silently narrower than declared.
+        "gate3_axes_unavailable_upstream": list(gate3.get("axes_unavailable_upstream") or []),
         "required_artifacts": {
             "recorder_result": str(recorder_path),
             "stats_summary": str(stats_path),
         },
         "notes": [
             "Generated after HftBacktest output exists.",
-            "Minimal active-path slice observes but does not promote without robustness evidence.",
-        ],
+            "promotion_allowed requires mechanical, economic, microstructure "
+            "(gate3_sensitivity.json), and robustness (robustness_report.json) "
+            "gates to all pass; missing gate reports keep promotion denied.",
+        ]
+        + (
+            [
+                "Gate 3 passed with upstream-unavailable sensitivity axes: "
+                + ", ".join(str(a) for a in gate3.get("axes_unavailable_upstream") or [])
+                + ". The pinned hftbacktest has no L3 partial-fill exchange; "
+                "review this caveat before certification."
+            ]
+            if gate3.get("axes_unavailable_upstream")
+            else []
+        ),
     }
     _write_json(out_dir / "promotion_decision.json", decision)
     return decision
