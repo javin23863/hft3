@@ -125,3 +125,49 @@ def test_entry_tracking_resets_when_flat() -> None:
     # Position closed externally: tracking resets, no stale exit.
     assert strategy.on_step(_ctx(now_ns=2_000, best_bid=4970.0, best_ask=4970.25, position=0.0)) == []
     assert strategy._entry_price is None
+
+
+def test_one_sided_book_still_allows_short_holding_exit() -> None:
+    # Short position; bid side empty; ask available. Holding expiry must still
+    # emit the BUY exit at the ask (the side needed to close exists).
+    strategy = HypothesisReplayStrategy(
+        _StubHypothesis(), holding_period_bars=1, bar_duration_ns=1_000_000
+    )
+    strategy.on_step(
+        _ctx(now_ns=1_000, best_bid=4999.75, best_ask=5000.25, position=-1.0,
+             order_events=[_fill_event(5000.0, side="SELL")])
+    )
+    ctx = _ctx(now_ns=2_001_000, best_bid=0.0, best_ask=5000.25, position=-1.0)
+    ctx.book_one_sided = True
+    intents = strategy.on_step(ctx)
+    assert len(intents) == 1
+    assert intents[0].side == "BUY"
+    assert intents[0].price == 5000.25
+    assert intents[0].reason_code == "max_holding"
+
+
+def test_one_sided_book_defers_exit_when_needed_side_empty() -> None:
+    # Long position needs the bid to close; bid side empty -> defer, retry later.
+    strategy = HypothesisReplayStrategy(
+        _StubHypothesis(), holding_period_bars=1, bar_duration_ns=1_000_000
+    )
+    strategy.on_step(
+        _ctx(now_ns=1_000, best_bid=4999.75, best_ask=5000.25, position=1.0,
+             order_events=[_fill_event(5000.0)])
+    )
+    ctx = _ctx(now_ns=2_001_000, best_bid=0.0, best_ask=5000.25, position=1.0)
+    ctx.book_one_sided = True
+    assert strategy.on_step(ctx) == []
+    # Bid returns -> exit emitted (throttle does not consume deferred attempts).
+    ctx2 = _ctx(now_ns=2_101_000, best_bid=4999.0, best_ask=5000.25, position=1.0)
+    intents = strategy.on_step(ctx2)
+    assert len(intents) == 1
+    assert intents[0].side == "SELL"
+    assert intents[0].reason_code == "max_holding"
+
+
+def test_one_sided_book_still_blocks_new_entries() -> None:
+    strategy = HypothesisReplayStrategy(_StubHypothesis(signal=0.9))
+    ctx = _ctx(now_ns=1_000, best_bid=0.0, best_ask=5000.25, position=0.0)
+    ctx.book_one_sided = True
+    assert strategy.on_step(ctx) == []
