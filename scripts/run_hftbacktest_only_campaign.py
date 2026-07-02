@@ -422,11 +422,33 @@ def _hash_json(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(raw).hexdigest()[:24]
 
 
+AUTO_WORKERS_CPU_FRACTION = 0.85
+
+
+def resolve_workers(value: str | int) -> int:
+    """`auto` = 85% of logical cores (floor), leaving headroom for the OS and
+    the coordinator; the 2026-07-02 canary ran 96 explicit workers on a
+    192-core box — half idle."""
+    if isinstance(value, str) and value.strip().lower() == "auto":
+        import os
+
+        cores = os.cpu_count() or 1
+        return max(1, int(cores * AUTO_WORKERS_CPU_FRACTION))
+    workers = int(value)
+    if workers < 1:
+        raise ValueError("--workers must be >= 1 or 'auto'")
+    return workers
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a full HBT-only campaign manifest")
     parser.add_argument("--campaign-manifest", type=Path, required=True)
     parser.add_argument("--out-root", type=Path, default=REPO / "artifacts" / "hbt_campaign_runs")
-    parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument(
+        "--workers",
+        default="1",
+        help="Worker process count, or 'auto' for floor(0.85 x logical cores).",
+    )
     parser.add_argument(
         "--max-tasks-per-child",
         type=int,
@@ -452,12 +474,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.max_tasks_per_child < 0:
         parser.error("--max-tasks-per-child must be >= 0")
+    try:
+        workers = resolve_workers(args.workers)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     summary = run_campaign(
         manifest_path=args.campaign_manifest,
         out_root=args.out_root,
         dry_run=args.dry_run,
-        workers=args.workers,
+        workers=workers,
         max_tasks_per_child=args.max_tasks_per_child,
         resume=args.resume,
         maker_fee=args.maker_fee,
