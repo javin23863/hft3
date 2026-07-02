@@ -98,13 +98,16 @@ def test_portfolio_report_netting_correlation_marginal_psr(tmp_path):
     assert abs(corr[0][1] - (-1.0)) < 1e-9
     assert abs(corr[0][0] - 1.0) < 1e-9
 
-    # Portfolio series 0.5*(i+1) has positive Sharpe; removing either
-    # model changes PSR, so marginal contributions are defined.
+    # Equal-weight portfolio series 0.25*(i+1) has positive Sharpe;
+    # removing either model changes PSR, so marginals are defined.
     assert report["portfolio_psr"] is not None
     assert set(report["marginal_psr"]) == {"model_a", "model_b"}
     assert all(v is not None for v in report["marginal_psr"].values())
 
-    assert report["gate4_status"]
+    # Gate-4 must actually evaluate (performance matrix supplied), not
+    # fail closed on a missing CSCV matrix.
+    assert report["gate4_status"] in {"pass", "fail"}
+    assert report["gate4_psr"] is not None
     assert report["sha_mismatch_rows"] == 0
 
     receipt = json.loads((out_dir / "portfolio_report.json").read_text("utf-8"))
