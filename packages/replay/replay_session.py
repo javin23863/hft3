@@ -31,7 +31,18 @@ _REPO = Path(__file__).resolve().parents[1]
 AUDIT_DIR = _REPO / "runtime" / "replay_audits"
 
 
-def _realized_closed_trade_pnl(fill_records: List[Dict[str, Any]]) -> float:
+def _fifo_fill_state(
+    fill_records: List[Dict[str, Any]],
+    *,
+    contract_multiplier: float = 1.0,
+) -> tuple[float, list[list[float]], int]:
+    """FIFO-match fills; return (realized_pnl, open_lots, open_side).
+
+    open_lots rows are [price, qty, remaining_fee]; open_side is +1 long,
+    -1 short, 0 flat. ``contract_multiplier`` scales the PRICE component of
+    realized PnL into account currency (fees are already currency and are
+    never scaled), matching hbt's linear_asset(contract_size) accounting.
+    """
     open_side = 0
     open_lots: list[list[float]] = []  # [price, qty, remaining_fee]
     realized = 0.0
@@ -56,7 +67,7 @@ def _realized_closed_trade_pnl(fill_records: List[Dict[str, Any]]) -> float:
             matched = min(remaining, lot_qty_before)
             open_fee = lot[2] * (matched / lot_qty_before) if lot_qty_before else 0.0
             close_fee = remaining_fee * (matched / remaining_before) if remaining_before else 0.0
-            realized += (px - lot[0]) * matched * open_side - open_fee - close_fee
+            realized += (px - lot[0]) * matched * open_side * contract_multiplier - open_fee - close_fee
             lot[1] -= matched
             lot[2] -= open_fee
             remaining -= matched
@@ -68,7 +79,34 @@ def _realized_closed_trade_pnl(fill_records: List[Dict[str, Any]]) -> float:
             open_side = sign
         elif not open_lots:
             open_side = 0
+    return realized, open_lots, open_side
+
+
+def _realized_closed_trade_pnl(fill_records: List[Dict[str, Any]]) -> float:
+    realized, _open_lots, _open_side = _fifo_fill_state(fill_records)
     return realized
+
+
+def _unrealized_pnl_marked_to_mid(
+    fill_records: List[Dict[str, Any]],
+    mark_mid: Optional[float],
+    *,
+    contract_multiplier: float = 1.0,
+) -> Optional[float]:
+    """Mark FIFO open inventory to the last observed mid. None when unmarkable.
+
+    ``contract_multiplier`` converts price-point PnL into account currency so
+    the mark matches the simulated account when ``linear_asset(contract_size)``
+    is configured (e.g. MES = 5).
+    """
+    _realized, open_lots, open_side = _fifo_fill_state(fill_records)
+    if not open_lots:
+        return 0.0
+    if mark_mid is None or mark_mid <= 0.0:
+        return None
+    return contract_multiplier * sum(
+        (mark_mid - px) * qty * open_side for px, qty, _fee in open_lots
+    )
 
 
 @dataclass
@@ -153,6 +191,23 @@ class ReplaySessionConfig:
     prepared_data: bool = False
     latency_model_path: str = ""
     fill_queue_model_path: str = ""
+    # In-memory latency model dict (same shape as latency_model.json). Takes
+    # priority over latency_model_path when both are provided — lets callers
+    # like the HftBacktest-only lane pass separate entry/response latencies
+    # without a temp file.
+    latency_model: Optional[Dict[str, Any]] = None
+    # Optional initial book snapshot NPZ passed through to
+    # BacktestAsset.initial_snapshot (required for mid-session L3 captures).
+    initial_snapshot: str = ""
+    # Explicit run economics. When set they override the FeeModel product
+    # default inside build_hftbacktest so executed fees match the caller's
+    # declared config.
+    maker_fee: Optional[float] = None
+    taker_fee: Optional[float] = None
+    contract_size: Optional[float] = None
+    # Exchange fill model: NoPartialFillExchange (conservative base) or
+    # PartialFillExchange (CME-realistic sensitivity axis).
+    exchange_fill_model: str = "NoPartialFillExchange"
 
 
 class ReplaySession:
@@ -172,6 +227,8 @@ class ReplaySession:
         self._temp_npz: Optional[str] = None
         self._fill_records: List[Dict[str, Any]] = []
         self._cum_filled_by_order: Dict[str, float] = {}
+        self._max_abs_position = 0.0
+        self._last_mid: Optional[float] = None
 
     def run(self) -> Dict[str, Any]:
         from backtest_pipeline.src.hft_backtest_builder import build_hftbacktest
@@ -196,9 +253,9 @@ class ReplaySession:
             data_path = cfg.npz_path
 
         try:
-            latency_model = None
+            latency_model = cfg.latency_model
             fill_queue_model = None
-            if cfg.latency_model_path:
+            if latency_model is None and cfg.latency_model_path:
                 latency_model = json.loads(Path(cfg.latency_model_path).read_text(encoding="utf-8"))
             if cfg.fill_queue_model_path:
                 fill_queue_model = json.loads(Path(cfg.fill_queue_model_path).read_text(encoding="utf-8"))
@@ -226,6 +283,11 @@ class ReplaySession:
                 product=cfg.product,
                 prepared_data=cfg.prepared_data,
                 force_l3=force_l3,
+                initial_snapshot=cfg.initial_snapshot or None,
+                maker_fee=cfg.maker_fee,
+                taker_fee=cfg.taker_fee,
+                contract_size=cfg.contract_size,
+                exchange_fill_model=cfg.exchange_fill_model,
             )
             adapter = create_adapter(
                 "REPLAY",
@@ -318,6 +380,10 @@ class ReplaySession:
 
                 depth = hbt.depth(0)
                 book_one_sided = depth.best_bid <= 0 or depth.best_ask <= 0
+                if not book_one_sided:
+                    self._last_mid = (float(depth.best_bid) + float(depth.best_ask)) / 2.0
+                step_position = float(hbt.position(0))
+                self._max_abs_position = max(self._max_abs_position, abs(step_position))
 
                 # Sync the feature clock to ts - feat_latency_ns so the
                 # strategy observes features that are as stale as the
@@ -375,7 +441,7 @@ class ReplaySession:
                     market_state=state,
                     best_bid=float(depth.best_bid),
                     best_ask=float(depth.best_ask),
-                    position=float(hbt.position(0)),
+                    position=step_position,
                     order_events=drained,
                     execution=adapter,
                     symbol=cfg.symbol,
@@ -421,6 +487,7 @@ class ReplaySession:
                 "position": account.position,
                 "order_intent_count": self._intent_count,
                 "fill_events": list(self._fill_records),
+                "order_lifecycle": list(self._lifecycle),
                 "order_lifecycle_summary": summary,
                 "lifecycle_path": str(cfg.audit_dir / f"{self.run_id}_order_lifecycle.jsonl"),
                 "summary_path": str(cfg.audit_dir / f"{self.run_id}_summary.json"),
@@ -511,7 +578,18 @@ class ReplaySession:
             counts[ev.event_type.value] = counts.get(ev.event_type.value, 0) + 1
 
         counters = safety.counter_snapshot()
-        realized_pnl = _realized_closed_trade_pnl(self._fill_records)
+        # Report inventory economics in account currency: hbt's balance is
+        # scaled by linear_asset(contract_size) when configured, so the FIFO
+        # price component scales by the same multiplier (fees stay currency).
+        contract_multiplier = (
+            float(self.config.contract_size) if self.config.contract_size is not None else 1.0
+        )
+        realized_pnl, open_lots, _open_side = _fifo_fill_state(
+            self._fill_records, contract_multiplier=contract_multiplier
+        )
+        unrealized_marked = _unrealized_pnl_marked_to_mid(
+            self._fill_records, self._last_mid, contract_multiplier=contract_multiplier
+        )
         return {
             "run_id": self.run_id,
             "order_intent_count": self._intent_count,
@@ -526,6 +604,13 @@ class ReplaySession:
             "cash_balance": account.balance,
             "realized_pnl": realized_pnl,
             "unrealized_pnl": account.unrealized_pnl,
+            # Open inventory marked to the last observed two-sided mid.
+            # None = inventory exists but no markable mid was seen.
+            "unrealized_pnl_marked_to_mid": unrealized_marked,
+            "open_inventory_lots": len(open_lots),
+            "mark_mid": self._last_mid,
+            "end_position": account.position,
+            "max_inventory_excursion": self._max_abs_position,
             "max_position": abs(account.position),
             "latency_band_ms": self.config.latency_ms,
             "queue_model": self.config.queue_model,
