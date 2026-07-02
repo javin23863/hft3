@@ -193,12 +193,18 @@ def hbt_parameter_set_from_candidate(candidate: CandidateModel) -> dict[str, Any
     canonical_model_id = resolve_model_id(candidate.model_id)
     metadata = dict(candidate.metadata or {})
     family = _hbt_parameter_family_from_metadata(metadata)
+    strategy_params = dict(candidate.strategy_params or {})
+    # Campaign runs must produce closed-trade realized PnL: default the exit
+    # leg on (holding expiry closes the position) unless a proposal explicitly
+    # disables it. Without this a run holds through the window and reports
+    # cash-only PnL that can never pass the economic gate.
+    strategy_params.setdefault("exit_at_holding", True)
     return {
         "schema_version": HBT_PARAMETER_SET_SCHEMA_VERSION,
         "source": HBT_PARAMETER_SET_SOURCE,
         "canonical_model_id": canonical_model_id,
         "parameter_family": family,
-        "strategy_params": dict(candidate.strategy_params or {}),
+        "strategy_params": strategy_params,
         "parameter_proposal_status": HBT_PARAMETER_SET_PRE_HBT_STATUS,
         "objective_evaluations": 0,
         "optimizer_claim": False,
