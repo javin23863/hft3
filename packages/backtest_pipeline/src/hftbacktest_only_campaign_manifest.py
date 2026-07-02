@@ -18,6 +18,8 @@ from typing import Any, Iterable, Iterator, Mapping
 
 import yaml
 
+from replay.cross_asset_assembly import required_leaders_for_model
+
 from hft3.hbt_parameter_sets import (
     HBT_PARAMETER_SET_PRE_HBT_STATUS as _PRE_HBT_PROPOSAL_STATUS,
     HBT_PARAMETER_SET_SCHEMA_VERSION as HBT_SELF_LEARNING_PARAMETER_SET_SCHEMA_VERSION,
@@ -1037,7 +1039,20 @@ def _campaign_manifest_inputs(
     }
 
 
+def _leader_unit_index(prepared_units: Iterable[Mapping[str, Any]]) -> dict[tuple[str, str], str]:
+    """(product, event_id) -> normalized npz for leader-tape lookups."""
+    index: dict[tuple[str, str], str] = {}
+    for prepared in prepared_units:
+        product = str(prepared.get("symbol") or "").split(".")[0].upper()
+        event_id = str(prepared.get("event_id") or "")
+        npz = str(prepared.get("normalized_npz") or prepared.get("source_npz") or "")
+        if product and event_id and npz:
+            index.setdefault((product, event_id), npz)
+    return index
+
+
 def _iter_campaign_rows_from_inputs(inputs: Mapping[str, Any]) -> Iterator[dict[str, Any]]:
+    leader_units = _leader_unit_index(inputs["prepared_units"])
     for canonical_model_id, entry in inputs["models"]:
         aliases = _legacy_aliases(entry)
         adapter_status = _adapter_status(
@@ -1053,6 +1068,7 @@ def _iter_campaign_rows_from_inputs(inputs: Mapping[str, Any]) -> Iterator[dict[
                 prepared=prepared,
                 adapter_status=adapter_status,
                 authority_refs=tuple(inputs["authority_refs"]),
+                leader_units=leader_units,
             )
 
 
@@ -1133,6 +1149,7 @@ def _build_parameter_surface_row(
         "initial_snapshot": campaign_row["initial_snapshot"],
         "initial_snapshot_sha256": campaign_row["initial_snapshot_sha256"],
         "prepared_manifest": campaign_row.get("prepared_manifest", ""),
+        "cross_asset_npz": dict(campaign_row.get("cross_asset_npz") or {}),
         "tick_size": campaign_row.get("tick_size"),
         "lot_size": campaign_row.get("lot_size"),
         "contract_size": campaign_row.get("contract_size"),
@@ -1167,6 +1184,7 @@ def _build_row(
     prepared: Mapping[str, Any],
     adapter_status: str,
     authority_refs: tuple[str, ...],
+    leader_units: Mapping[tuple[str, str], str] | None = None,
 ) -> dict[str, Any]:
     source_npz = str(prepared.get("normalized_npz") or prepared.get("source_npz") or "")
     initial_snapshot = str(prepared.get("initial_snapshot") or "")
@@ -1217,6 +1235,27 @@ def _build_row(
     }:
         blocker_code = f"pipeline_blocker:{adapter_status}"
         blocker_details.append(f"canonical_model_id={canonical_model_id}")
+
+    # Leader-requiring models carry their leader tapes on the row; a leader
+    # without a prepared unit for the SAME event is an explicit blocker at
+    # manifest build, never a silent 0.0 signal downstream.
+    cross_asset_npz: dict[str, str] = {}
+    required_leaders = required_leaders_for_model(canonical_model_id)
+    if required_leaders:
+        row_event_id = str(prepared.get("event_id") or "")
+        missing_leaders: list[str] = []
+        for leader in required_leaders:
+            npz = (leader_units or {}).get((leader, row_event_id), "")
+            if npz:
+                cross_asset_npz[leader] = npz
+            else:
+                missing_leaders.append(leader)
+        if missing_leaders:
+            blocker_details.append("missing_leader_tapes=" + ",".join(missing_leaders))
+            if not blocker_code:
+                blocker_code = (
+                    "pipeline_blocker:leader_tape_missing:" + "+".join(missing_leaders)
+                )
 
     if blocker_code:
         admissibility_status = blocker_code.split(":", 1)[0]
@@ -1271,6 +1310,7 @@ def _build_row(
         "blocker_detail": "; ".join(blocker_details),
         "authority_refs": list(combined_authority_refs),
         "adapter_status": adapter_status,
+        "cross_asset_npz": cross_asset_npz,
         "hbt_run_status": "not_started",
         "hbt_run_id": "",
         "promotion_decision_path": "",

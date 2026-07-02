@@ -34,6 +34,21 @@ REQUIRED_LEADERS_BY_MODEL: dict[str, tuple[str, ...]] = {
 def required_leaders_for_model(model_id: str) -> tuple[str, ...]:
     return REQUIRED_LEADERS_BY_MODEL.get(str(model_id or "").strip().upper(), ())
 
+
+# Sensor feeds each hypothesis reads from MarketState.cross_asset_features
+# (same injection surface as leader legs, sensor-tagged provenance).
+REQUIRED_SENSORS_BY_MODEL: dict[str, tuple[str, ...]] = {
+    "VIX_SPIKE_EVENT_FADE": ("VIX",),
+    "VIX_QUOTE_PULL_LIQUIDITY_VACUUM": ("VIX",),
+    "VIX_IMPLIED_REALIZED_GAP": ("VIX",),
+    "VIX_DEPTH_IMBALANCE_DIRECTION": ("VIX",),
+    "VIX_LEVEL_CONDITIONED_CONTINUATION": ("VIX",),
+}
+
+
+def required_sensors_for_model(model_id: str) -> tuple[str, ...]:
+    return REQUIRED_SENSORS_BY_MODEL.get(str(model_id or "").strip().upper(), ())
+
 PROVENANCE_SYMBOL = "_symbol"
 PROVENANCE_SOURCE_TS = "_source_timestamp_ns"
 

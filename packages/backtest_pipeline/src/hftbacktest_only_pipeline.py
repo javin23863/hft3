@@ -108,6 +108,14 @@ class HftBacktestOnlyRunConfig:
     # Structural models compute signals without the 64-slot extractor, so
     # the requirement does not apply to them.
     required_feature_backend: str = ""
+    # Leader tapes (product -> prepared normalized npz) for cross-asset
+    # models, and precomputed sensor feature files (sensor id -> npz).
+    # A leader-requiring model without full coverage fails the run closed.
+    cross_asset_npz: Mapping[str, str] = field(default_factory=dict)
+    sensor_feature_npz: Mapping[str, str] = field(default_factory=dict)
+    # A leader/sensor leg older than this at decision time is withheld from
+    # the state for that step (point-in-time staleness cap).
+    max_leader_staleness_ns: int = 5_000_000_000
     roi_lower_bound: float | None = None
     roi_upper_bound: float | None = None
     event_window: Mapping[str, Any] = field(default_factory=dict)
@@ -141,6 +149,9 @@ class HftBacktestOnlyRunConfig:
             "taker_fee": self.taker_fee,
             "latency_model": self.latency_model,
             "required_feature_backend": self.required_feature_backend,
+            "cross_asset_npz": dict(self.cross_asset_npz),
+            "sensor_feature_npz": dict(self.sensor_feature_npz),
+            "max_leader_staleness_ns": self.max_leader_staleness_ns,
             "entry_latency_ns": self.entry_latency_ns,
             "response_latency_ns": self.response_latency_ns,
             "exchange_fill_model": self.exchange_fill_model,
@@ -1206,6 +1217,9 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "signal_source": signal_meta.get("signal_source", "none"),
         "signal_field": signal_meta.get("signal_field", ""),
         "feature_backend": signal_meta.get("feature_backend", "none"),
+        "leader_symbols": list(signal_meta.get("leader_symbols") or []),
+        "sensor_ids": list(signal_meta.get("sensor_ids") or []),
+        "leader_alignment_gaps": signal_meta.get("leader_alignment_gaps", 0),
         "no_order_observation": no_order_observation,
         "advance_error": advance_error,
         "orders": orders,
@@ -1234,6 +1248,39 @@ def _required_leader_symbols(model_id: str) -> tuple[str, ...]:
     return required_leaders_for_model(model_id)
 
 
+def _required_sensor_ids(model_id: str) -> tuple[str, ...]:
+    from replay.cross_asset_assembly import required_sensors_for_model
+
+    return required_sensors_for_model(model_id)
+
+
+def _build_leader_feature_timelines(
+    config: HftBacktestOnlyRunConfig,
+    leaders: tuple[str, ...],
+) -> dict[str, list[tuple[int, dict[str, float]]]]:
+    """One PIT feature timeline per leader tape, via the same 64-slot
+    extractor path the primary symbol uses (leader tick size from the
+    authoritative instrument spec)."""
+    from features_engine.src.features.npz_feed import iter_mbo_events, load_npz_events
+    from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
+
+    timelines: dict[str, list[tuple[int, dict[str, float]]]] = {}
+    for sym in leaders:
+        spec = resolve_instrument_spec(sym)
+        leader_events = load_npz_events(str(config.cross_asset_npz[sym]))
+        leader_pipeline = MarketStatePipeline(
+            tick_size=spec.tick_size,
+            latency_ms=float(config.entry_latency_ns) / 1_000_000.0,
+        )
+        observations: list[tuple[int, dict[str, float]]] = []
+        for event in iter_mbo_events(leader_events):
+            state = leader_pipeline.process_event(event)
+            observations.append((int(event.timestamp_ns), dict(state.primary_features)))
+        observations.sort(key=lambda item: item[0])
+        timelines[sym] = observations
+    return timelines
+
+
 def _build_model_signal_lookup(
     config: HftBacktestOnlyRunConfig,
     params: Mapping[str, Any],
@@ -1244,15 +1291,26 @@ def _build_model_signal_lookup(
     if config.canonical_model_id and model_id != config.canonical_model_id:
         return None, {}, ["authority_missing:canonical_model_id_mismatch"]
     required_leaders = _required_leader_symbols(model_id)
-    if required_leaders:
-        # This lane has no leader-tape ingestion yet: a cross-asset hypothesis
-        # evaluated without its leader features returns a permanent 0.0, which
-        # the 2026-07-02 canary misreported as strategy_signal_below_threshold.
-        # Fail closed naming the missing leader tapes instead.
+    missing_leaders = [
+        sym for sym in required_leaders if not (config.cross_asset_npz or {}).get(sym)
+    ]
+    if missing_leaders:
+        # A cross-asset hypothesis evaluated without its leader features
+        # returns a permanent 0.0 — fail closed naming the missing tapes.
         return (
             None,
             {},
-            [f"pipeline_blocker:leader_tape_missing:{'+'.join(required_leaders)}"],
+            [f"pipeline_blocker:leader_tape_missing:{'+'.join(missing_leaders)}"],
+        )
+    required_sensors = _required_sensor_ids(model_id)
+    missing_sensors = [
+        sid for sid in required_sensors if not (config.sensor_feature_npz or {}).get(sid)
+    ]
+    if missing_sensors:
+        return (
+            None,
+            {},
+            [f"pipeline_blocker:sensor_tape_missing:{'+'.join(missing_sensors)}"],
         )
     try:
         adapter_kind, adapter, class_name = _canonical_signal_adapter(model_id)
@@ -1260,6 +1318,8 @@ def _build_model_signal_lookup(
             return _build_structural_signal_lookup(config, adapter, class_name)
         from features_engine.src.features.npz_feed import iter_mbo_events, load_npz_events
         from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
+
+        from replay.cross_asset_assembly import enrich_cross_leg
 
         raw_events = load_npz_events(str(config.normalized_npz))
         pipeline = MarketStatePipeline(
@@ -1279,10 +1339,68 @@ def _build_model_signal_lookup(
                     f"required={required_backend},got={actual_backend}"
                 ],
             )
+        leader_timelines = (
+            _build_leader_feature_timelines(config, required_leaders)
+            if required_leaders
+            else {}
+        )
+        sensor_adapters: dict[str, Any] = {}
+        if required_sensors:
+            from replay.sensor_assembly import enrich_sensor_leg
+            from replay.sensor_feature_adapter import PrecomputedFeatureAdapter
+
+            for sensor_id in required_sensors:
+                sensor_adapters[sensor_id] = PrecomputedFeatureAdapter(
+                    str(config.sensor_feature_npz[sensor_id])
+                )
+        # Leader/sensor features become visible only at
+        # event_ts - feature_latency (mirrors the replay-session PIT clock);
+        # legs older than max_leader_staleness_ns are withheld for that step.
+        feature_latency_ns = int(config.entry_latency_ns)
+        staleness_cap_ns = int(config.max_leader_staleness_ns)
+        leader_cursors = {sym: -1 for sym in leader_timelines}
+        leader_alignment_gaps = 0
         observations: list[tuple[int, float]] = []
         for event in iter_mbo_events(raw_events):
+            event_ts = int(event.timestamp_ns)
+            if leader_timelines or sensor_adapters:
+                feature_ts = event_ts - feature_latency_ns
+                cross: dict[str, dict[str, float]] = {}
+                for sym, timeline in leader_timelines.items():
+                    cursor = leader_cursors[sym]
+                    while (
+                        cursor + 1 < len(timeline)
+                        and timeline[cursor + 1][0] <= feature_ts
+                    ):
+                        cursor += 1
+                    leader_cursors[sym] = cursor
+                    if cursor < 0:
+                        leader_alignment_gaps += 1
+                        continue
+                    source_ts, leg_features = timeline[cursor]
+                    if feature_ts - source_ts > staleness_cap_ns:
+                        leader_alignment_gaps += 1
+                        continue
+                    cross[sym] = enrich_cross_leg(
+                        leg_features,
+                        symbol=sym,
+                        source_timestamp_ns=source_ts,
+                    )
+                for sensor_id, sensor_adapter in sensor_adapters.items():
+                    sensor_adapter.sync_to_timestamp(max(0, feature_ts))
+                    sensor_features = sensor_adapter.current_features()
+                    if not sensor_features:
+                        leader_alignment_gaps += 1
+                        continue
+                    cross[sensor_id] = enrich_sensor_leg(
+                        sensor_features,
+                        sensor_id=sensor_id,
+                        source_timestamp_ns=max(0, feature_ts),
+                        sensor_kind="vix_options" if sensor_id.upper() == "VIX" else "sensor",
+                    )
+                pipeline.cross_asset_features = cross
             state = pipeline.process_event(event)
-            observations.append((int(event.timestamp_ns), float(adapter.evaluate(state))))
+            observations.append((event_ts, float(adapter.evaluate(state))))
     except HftBacktestOnlyPipelineError as exc:
         return None, {}, [str(exc)]
     except Exception as exc:
@@ -1315,6 +1433,10 @@ def _build_model_signal_lookup(
         "signal_source": "hbt_normalized_mbo_market_state_pipeline",
         "signal_field": "hypothesis.evaluate",
         "feature_backend": getattr(pipeline, "feature_backend", "unknown"),
+        "leader_symbols": sorted(leader_timelines),
+        "leader_observations": {sym: len(t) for sym, t in leader_timelines.items()},
+        "sensor_ids": sorted(sensor_adapters),
+        "leader_alignment_gaps": leader_alignment_gaps,
     }, []
 
 

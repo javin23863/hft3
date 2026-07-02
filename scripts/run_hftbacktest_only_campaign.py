@@ -215,6 +215,8 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
         maker_fee=None if settings.get("maker_fee") is None else float(settings["maker_fee"]),
         taker_fee=None if settings.get("taker_fee") is None else float(settings["taker_fee"]),
         required_feature_backend=str(settings.get("required_feature_backend") or ""),
+        cross_asset_npz={str(k): str(v) for k, v in (row.get("cross_asset_npz") or {}).items()},
+        sensor_feature_npz={str(k): str(v) for k, v in (row.get("sensor_feature_npz") or {}).items()},
         entry_latency_ns=int(settings.get("entry_latency_ns") or 100_000),
         response_latency_ns=int(settings.get("response_latency_ns") or 100_000),
         event_window=dict(row.get("event_window") or {}),
