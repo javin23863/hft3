@@ -324,3 +324,13 @@ def test_sensitivity_battery_resolves_unresolved_base_economics(
         assert min(
             abs(scenario_cfg.maker_fee - 0.52), abs(scenario_cfg.maker_fee - 1.04)
         ) < 1e-9
+
+
+def test_default_scenarios_accept_continuous_symbol_notation() -> None:
+    # resolve_instrument_execution keeps the original research symbol on the
+    # config; the gate-level fee lookup must normalize it the same way the
+    # spec resolution does, or `@SYM#C` passes resolution then crashes here.
+    scenarios = default_sensitivity_scenarios(_config(symbol="@MES#C"))
+    assert len(scenarios) == 11
+    declared = next(s for s in scenarios if s["fee_label"] == "declared")
+    assert abs(declared["maker_fee"] - 0.52) < 1e-9

@@ -35,6 +35,8 @@ REPO = Path(__file__).resolve().parents[2]
         ("ZN", 0.015625, 15.625, 1000.0),
         ("ZB", 0.03125, 31.25, 1000.0),
         ("UB", 0.03125, 31.25, 1000.0),
+        ("SR3", 0.0025, 6.25, 2500.0),
+        ("ZQ", 0.0025, 10.4175, 4167.0),
     ],
 )
 def test_spec_values_are_exact_cme_contract_math(symbol, tick_size, tick_value, multiplier) -> None:
@@ -127,6 +129,7 @@ def test_registry_yaml_agrees_with_instrument_specs() -> None:
         )
     )
     defaults = raw.get("defaults") or {}
+    checked = 0
     for entry in raw.get("instruments") or []:
         symbol = str(entry["canonical_internal_symbol"])
         spec = INSTRUMENT_SPECS.get(symbol)
@@ -138,6 +141,9 @@ def test_registry_yaml_agrees_with_instrument_specs() -> None:
         assert float(merged["contract_multiplier"]) == pytest.approx(
             spec.contract_multiplier
         ), symbol
+        checked += 1
+    # Guard against a schema change making this pass vacuously.
+    assert checked >= 13
 
 
 def test_normalize_product_accepts_continuous_notation() -> None:

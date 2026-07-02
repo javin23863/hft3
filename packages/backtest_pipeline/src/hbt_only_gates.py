@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from backtest_pipeline.src.fee_model import FeeModel
+from backtest_pipeline.src.instrument_specs import normalize_product
 
 GATE3_SCHEMA = "hft3_hbt_only_gate3_sensitivity_v1"
 GATE4_SCHEMA = "hft3_hbt_only_gate4_robustness_v1"
@@ -53,7 +54,11 @@ def default_sensitivity_scenarios(config: Any) -> list[dict[str, Any]]:
     config, _, resolution_reasons = resolve_instrument_execution(config)
     if resolution_reasons:
         raise HftBacktestOnlyPipelineError(";".join(resolution_reasons))
-    product = str(config.symbol).split(".")[0].upper()
+    # normalize_product, not a bare split: resolve_instrument_execution keeps
+    # the original research symbol on the config, so `@SYM#C`-style notation
+    # must be normalized here too or the fee lookup fails for symbols the
+    # spec resolution just accepted.
+    product = normalize_product(config.symbol)
     conservative_fee_bump = FeeModel(product=product).get_fee_per_contract()
     scenarios: list[dict[str, Any]] = []
     for fill_model in ("NoPartialFillExchange", "PartialFillExchange"):
