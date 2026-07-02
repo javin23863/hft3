@@ -1,0 +1,41 @@
+{
+ "built_by_event_type": {
+  "FED_BEIGE_BOOK": 22,
+  "FED_H41": 138,
+  "FOMC_MINUTES": 22,
+  "FOMC_PRESS": 12,
+  "FOMC_STATEMENT": 22,
+  "ISM_MANUFACTURING": 29,
+  "ISM_SERVICES": 33,
+  "JOLTS": 32,
+  "PROP_FLATTEN_TOPSTEP": 3,
+  "TREASURY_AUCTION": 29
+ },
+ "campaign_relevant_coverage": {
+  "FOMC_STATEMENT": 22,
+  "ISM_MANUFACTURING": 29,
+  "ISM_SERVICES": 33
+ },
+ "date": "2026-07-02",
+ "empty_by_event_type": {
+  "CORE_CPI": 33,
+  "CORE_PCE": 32,
+  "CPI": 33,
+  "EXPORT_PRICES": 32,
+  "FED_H41": 6,
+  "GDP_ADVANCE": 34,
+  "GDP_FINAL": 34,
+  "GDP_SECOND": 34,
+  "IMPORT_PRICES": 32,
+  "NFP": 32,
+  "PCE": 32,
+  "RETAIL_SALES": 35,
+  "TREASURY_REFUNDING": 11,
+  "UNEMPLOYMENT_CLAIMS": 145
+ },
+ "empty_raw_downloads": 525,
+ "empty_reason": "structural: OPRA options quoting begins 09:30 ET; these event windows (CPI/NFP/PCE/CORE_*/GDP_*/RETAIL_SALES at 08:30 ET pre-market) contain zero VIX.OPT quote records at the source (verified: DBNStore record count 0 on sampled CPI_2025_01_15 and NFP_2024_06_07 vs 18,917 on FED_BEIGE_BOOK_2023_04_19). VIX sensor coverage is physically limited to market-hours events.",
+ "feature_npzs_built": 342,
+ "raw_events_total": 867,
+ "schema_version": "hft3_vix_sensor_extraction_receipt_v1"
+}

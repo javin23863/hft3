@@ -1,0 +1,2627 @@
+[
+{
+"event_id": "CORE_CPI_2023_04_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2023_05_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2023_06_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2023_07_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2023_08_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2023_09_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2023_10_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2023_11_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2023_12_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_01_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_02_09_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_02_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_03_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_04_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_05_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_06_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_07_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_08_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_09_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_10_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_11_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2024_12_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2025_01_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2025_02_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2025_03_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2025_04_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2025_05_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2025_06_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2025_07_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2025_08_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2025_09_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2025_10_24_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_CPI_2025_12_18_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2023_03_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2023_04_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2023_05_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2023_06_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2023_07_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2023_08_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2023_09_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2023_10_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2023_11_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2023_12_22_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2024_01_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2024_02_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2024_04_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2024_05_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2024_06_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2024_07_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2024_08_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2024_09_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2024_10_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2024_11_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2024_12_20_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2025_01_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2025_02_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2025_03_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2025_04_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2025_05_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2025_06_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2025_07_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2025_08_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2025_09_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2025_12_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CORE_PCE_2025_12_23_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2023_04_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2023_05_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2023_06_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2023_07_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2023_08_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2023_09_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2023_10_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2023_11_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2023_12_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_01_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_02_09_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_02_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_03_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_04_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_05_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_06_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_07_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_08_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_09_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_10_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_11_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2024_12_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2025_01_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2025_02_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2025_03_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2025_04_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2025_05_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2025_06_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2025_07_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2025_08_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2025_09_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2025_10_24_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "CPI_2025_12_18_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2023_04_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2023_05_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2023_06_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2023_07_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2023_08_08_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2023_09_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2023_10_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2023_11_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2023_12_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2024_01_09_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2024_02_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2024_03_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2024_04_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2024_05_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2024_06_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2024_07_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2024_08_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2024_09_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2024_10_08_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2024_11_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2024_12_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2025_01_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2025_02_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2025_03_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2025_04_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2025_05_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2025_06_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2025_07_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2025_08_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2025_09_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2025_11_19_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "EXPORT_PRICES_2025_12_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "FED_H41_2023_11_24_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "FED_H41_2023_12_21_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "FED_H41_2024_11_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "FED_H41_2025_04_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "FED_H41_2025_07_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "FED_H41_2025_11_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2023_03_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2023_04_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2023_05_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2023_06_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2023_07_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2023_08_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2023_09_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2023_10_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2023_11_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2023_11_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2023_12_21_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_01_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_02_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_03_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_04_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_05_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_06_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_07_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_08_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_09_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_10_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_10_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_11_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2024_12_19_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2025_01_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2025_02_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2025_03_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2025_04_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2025_05_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2025_06_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2025_07_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2025_08_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2025_09_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_ADVANCE_2025_12_23_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2023_03_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2023_04_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2023_05_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2023_06_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2023_07_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2023_08_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2023_09_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2023_10_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2023_11_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2023_11_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2023_12_21_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_01_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_02_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_03_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_04_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_05_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_06_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_07_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_08_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_09_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_10_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_10_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_11_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2024_12_19_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2025_01_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2025_02_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2025_03_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2025_04_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2025_05_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2025_06_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2025_07_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2025_08_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2025_09_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_FINAL_2025_12_23_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2023_03_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2023_04_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2023_05_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2023_06_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2023_07_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2023_08_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2023_09_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2023_10_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2023_11_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2023_11_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2023_12_21_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_01_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_02_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_03_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_04_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_05_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_06_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_07_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_08_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_09_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_10_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_10_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_11_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2024_12_19_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2025_01_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2025_02_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2025_03_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2025_04_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2025_05_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2025_06_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2025_07_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2025_08_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2025_09_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "GDP_SECOND_2025_12_23_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2023_04_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2023_05_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2023_06_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2023_07_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2023_08_08_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2023_09_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2023_10_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2023_11_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2023_12_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2024_01_09_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2024_02_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2024_03_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2024_04_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2024_05_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2024_06_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2024_07_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2024_08_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2024_09_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2024_10_08_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2024_11_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2024_12_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2025_01_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2025_02_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2025_03_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2025_04_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2025_05_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2025_06_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2025_07_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2025_08_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2025_09_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2025_11_19_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "IMPORT_PRICES_2025_12_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2023_05_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2023_06_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2023_07_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2023_08_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2023_09_01_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2023_10_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2023_11_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2023_12_08_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_01_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_01_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_02_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_03_08_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_04_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_05_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_06_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_07_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_08_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_09_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_10_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_11_01_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2024_12_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2025_01_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2025_02_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2025_03_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2025_04_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2025_05_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2025_06_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2025_07_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2025_08_01_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2025_09_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2025_11_20_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "NFP_2025_12_16_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2023_03_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2023_04_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2023_05_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2023_06_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2023_07_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2023_08_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2023_09_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2023_10_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2023_11_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2023_12_22_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2024_01_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2024_02_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2024_04_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2024_05_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2024_06_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2024_07_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2024_08_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2024_09_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2024_10_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2024_11_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2024_12_20_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2025_01_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2025_02_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2025_03_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2025_04_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2025_05_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2025_06_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2025_07_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2025_08_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2025_09_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2025_12_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "PCE_2025_12_23_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2023_04_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2023_04_24_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2023_05_16_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2023_06_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2023_07_18_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2023_08_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2023_09_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2023_10_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2023_11_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2023_12_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_01_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_02_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_03_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_04_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_04_23_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_05_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_06_18_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_07_16_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_08_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_09_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_10_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_11_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2024_12_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2025_01_16_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2025_02_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2025_03_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2025_04_16_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2025_04_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2025_05_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2025_06_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2025_07_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2025_08_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2025_09_16_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2025_11_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "RETAIL_SALES_2025_12_16_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "TREASURY_REFUNDING_2023_05_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "TREASURY_REFUNDING_2023_08_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "TREASURY_REFUNDING_2023_11_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "TREASURY_REFUNDING_2024_02_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "TREASURY_REFUNDING_2024_05_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "TREASURY_REFUNDING_2024_08_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "TREASURY_REFUNDING_2024_11_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "TREASURY_REFUNDING_2025_02_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "TREASURY_REFUNDING_2025_05_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "TREASURY_REFUNDING_2025_08_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "TREASURY_REFUNDING_2025_11_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_03_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_04_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_04_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_04_20_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_04_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_05_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_05_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_05_18_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_05_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_06_01_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_06_08_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_06_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_06_22_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_06_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_07_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_07_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_07_20_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_07_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_08_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_08_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_08_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_08_24_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_08_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_09_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_09_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_09_21_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_09_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_10_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_10_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_10_19_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_10_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_11_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_11_09_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_11_16_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_11_22_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_11_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_12_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_12_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_12_21_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2023_12_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_01_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_01_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_01_18_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_01_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_02_01_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_02_08_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_02_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_02_22_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_02_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_03_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_03_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_03_21_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_03_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_04_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_04_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_04_18_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_04_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_05_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_05_09_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_05_16_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_05_23_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_05_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_06_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_06_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_06_20_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_06_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_07_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_07_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_07_18_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_07_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_08_01_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_08_08_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_08_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_08_22_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_08_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_09_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_09_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_09_19_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_09_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_10_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_10_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_10_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_10_24_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_10_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_11_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_11_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_11_21_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_11_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_12_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_12_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_12_19_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2024_12_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_01_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_01_08_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_01_16_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_01_23_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_01_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_02_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_02_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_02_20_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_02_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_03_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_03_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_03_20_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_03_27_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_04_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_04_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_04_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_04_24_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_05_01_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_05_08_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_05_15_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_05_22_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_05_29_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_06_05_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_06_12_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_06_18_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_06_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_07_03_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_07_10_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_07_17_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_07_24_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_07_31_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_08_07_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_08_14_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_08_21_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_08_28_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_09_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_09_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_09_18_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_09_25_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_10_02_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_10_09_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_10_16_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_10_23_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_10_30_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_11_06_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_11_13_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_11_20_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_11_26_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_12_04_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_12_11_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_12_18_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_12_24_TIGHT",
+"ok": false,
+"path": null
+},
+{
+"event_id": "UNEMPLOYMENT_CLAIMS_2025_12_31_TIGHT",
+"ok": false,
+"path": null
+}
+]
