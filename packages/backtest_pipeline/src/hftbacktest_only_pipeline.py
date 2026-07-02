@@ -590,6 +590,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     last_recorded_exec_qty = 0.0
     submitted_step: int | None = None
     # Exit-leg state (all inert when exit_leg_enabled is False).
+    entry_fill_step: int | None = None
     exit_order_id = order_id + 1
     exit_snapshot: dict[str, Any] = {}
     last_exit_exec_qty = 0.0
@@ -677,6 +678,8 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             equity.append({"step": step, "net_pnl": _float_field(state, "balance")})
             if submitted:
                 record_order_state("ORDER_STATE_AFTER_ELAPSE", state, step)
+                if entry_fill_step is None and last_recorded_exec_qty > 0:
+                    entry_fill_step = step
                 if exit_submitted:
                     record_exit_order_state("EXIT_ORDER_STATE_AFTER_ELAPSE", state, step)
                     _maybe_call(hbt, "clear_inactive_orders", 0)
@@ -691,9 +694,21 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                     continue
                 _maybe_call(hbt, "clear_inactive_orders", 0)
                 api_calls.append("HashMapMarketDepthBacktest.clear_inactive_orders")
-                time_exit_due = (
-                    submitted_step is not None and step - submitted_step >= holding_steps
-                )
+                if exit_leg_enabled and last_recorded_exec_qty > 0:
+                    # Exit-leg holding is anchored at the first OBSERVED entry
+                    # fill, not the submit step: a passive entry that rests in
+                    # the queue must hold for the configured period after it
+                    # executes, not close immediately on a late fill.
+                    time_exit_due = (
+                        entry_fill_step is not None
+                        and step - entry_fill_step >= holding_steps
+                    )
+                else:
+                    # Legacy v2 semantics (exit leg off, or entry unfilled):
+                    # holding window measured from submission, then break.
+                    time_exit_due = (
+                        submitted_step is not None and step - submitted_step >= holding_steps
+                    )
                 if exit_leg_enabled and last_recorded_exec_qty > 0:
                     entry_avg_px = float(order_snapshot.get("exec_price") or 0.0)
                     depth = hbt.depth(0)
@@ -815,6 +830,8 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             state = _state_values(hbt)
             api_calls.append("HashMapMarketDepthBacktest.state_values")
             record_order_state("ORDER_STATE", state, step)
+            if entry_fill_step is None and last_recorded_exec_qty > 0:
+                entry_fill_step = step
         if submitted and float(order_snapshot.get("leaves_qty") or 0.0) > 0 and hasattr(hbt, "cancel"):
             cancel_step = min(max_loop_steps, int(submitted_step or 0) + holding_steps)
             cancel_ret = int(hbt.cancel(0, order_id, False))

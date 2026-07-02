@@ -1396,3 +1396,43 @@ def test_exit_leg_disabled_keeps_v2_surface_semantics(
     assert not any(str(row.get("event_type", "")).startswith("EXIT_") for row in replay["orders"])
     stats = json.loads((out_dir / "stats_summary.json").read_text(encoding="utf-8"))
     assert stats["economic_gate_metric"] == "net_pnl_cash"
+
+
+def test_exit_leg_holding_anchors_at_entry_fill_not_submit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Passive entry fills at step 3 (submit at step 0) inside the
+    # holding_period_bars=4 cancel window. The holding exit must anchor at
+    # the FILL (step 3 + 4 = step 7), not at submission (step 0 + 4 = 4).
+    # Flat mids keep stop/TP quiet so only the holding exit can fire.
+    _install_exit_leg_fake_hftbacktest(
+        monkeypatch, mids=[5000.0] * 14, entry_fill_step=3
+    )
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "exit_anchor"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_params={
+            "side": "BUY",
+            "quantity": 1.0,
+            "max_steps": 2,
+            "exit_at_holding": True,
+            "holding_period_bars": 4,
+        },
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed", result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["exit_reason"] == "max_holding"
+    exit_rows = [r for r in replay["orders"] if r.get("event_type") == "EXIT_ORDER_SUBMITTED"]
+    assert len(exit_rows) == 1
+    # Entry fill observed at step 3 -> earliest holding exit at step 7
+    # (submit-anchored would have exited at step 4).
+    assert exit_rows[0]["step"] >= 7
+    assert replay["closed_quantity"] == 1.0
