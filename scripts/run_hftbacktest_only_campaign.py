@@ -49,6 +49,11 @@ def run_campaign(
     entry_latency_ns: int = 100_000,
     response_latency_ns: int = 100_000,
 ) -> dict[str, Any]:
+    required_feature_backend = str(required_feature_backend or "").strip().lower()
+    if required_feature_backend not in {"", "cpp", "python"}:
+        raise ValueError(
+            f"required_feature_backend must be '', 'cpp' or 'python'; got {required_feature_backend!r}"
+        )
     first_row = _first_jsonl_row(manifest_path)
     campaign_id = str(first_row.get("campaign_id") or "hbt_campaign")
     campaign_root = Path(out_root) / safe_stem(campaign_id)
@@ -113,6 +118,7 @@ def run_campaign(
         "strategy_surface_version": MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
         "data_contract_version": HBT_DATA_CONTRACT_VERSION,
         "requested_strategy_id": str(strategy_id or MODEL_SPECIFIC_STRATEGY_ID),
+        "required_feature_backend": required_feature_backend,
         "strategy_override_ignored": str(strategy_id or MODEL_SPECIFIC_STRATEGY_ID) != MODEL_SPECIFIC_STRATEGY_ID,
         "dry_run": dry_run,
         "status_counts": dict(sorted(status_counts.items())),
@@ -168,6 +174,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
             hbt_run_id="",
             dry_run=bool(settings.get("dry_run")),
             economics_stamp=str(settings.get("economics_stamp") or ""),
+            required_feature_backend_receipt=str(settings.get("required_feature_backend") or ""),
         )
 
     if metadata_blocker:
@@ -180,6 +187,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
             hbt_run_id="",
             dry_run=bool(settings.get("dry_run")),
             economics_stamp=str(settings.get("economics_stamp") or ""),
+            required_feature_backend_receipt=str(settings.get("required_feature_backend") or ""),
         )
 
     run_id = safe_stem(row_key)
@@ -227,6 +235,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
             hbt_run_id=run_id,
             dry_run=bool(settings.get("dry_run")),
             economics_stamp=str(settings.get("economics_stamp") or ""),
+            required_feature_backend_receipt=str(settings.get("required_feature_backend") or ""),
         )
     status = str(result.get("status") or "unknown")
     fail_closed_reasons = [str(reason) for reason in result.get("fail_closed_reasons") or ()]
@@ -240,6 +249,7 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
         hbt_run_id=run_id,
         dry_run=bool(settings.get("dry_run")),
             economics_stamp=str(settings.get("economics_stamp") or ""),
+            required_feature_backend_receipt=str(settings.get("required_feature_backend") or ""),
     )
 
 
@@ -345,6 +355,7 @@ def _write_row_result(
     hbt_run_id: str,
     dry_run: bool,
     economics_stamp: str = "",
+    required_feature_backend_receipt: str = "",
 ) -> dict[str, Any]:
     payload = {
         "schema_version": ROW_RESULT_SCHEMA_VERSION,
@@ -368,6 +379,7 @@ def _write_row_result(
         "strategy_surface_version": MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
         "data_contract_version": HBT_DATA_CONTRACT_VERSION,
         "economics_stamp": economics_stamp,
+        "required_feature_backend": required_feature_backend_receipt,
         "strategy_params": row.get("strategy_params", {}),
         "parameter_proposal_status": row.get("parameter_proposal_status", ""),
         "objective_evaluations": row.get("objective_evaluations", ""),

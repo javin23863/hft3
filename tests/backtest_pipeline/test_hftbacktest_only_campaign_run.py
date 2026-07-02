@@ -992,3 +992,39 @@ def test_campaign_runner_backend_override_and_stamp(tmp_path: Path, monkeypatch)
     assert module._economics_stamp(None, None, "cpp").endswith(":backend=cpp")
     assert module._economics_stamp(None, None, "").endswith(":backend=any")
     assert module._economics_stamp(None, None, "cpp") != module._economics_stamp(None, None, "")
+
+
+def test_campaign_summary_and_receipts_name_backend_requirement(tmp_path: Path, monkeypatch) -> None:
+    module = _load_runner_module()
+    _write_valid_npz(tmp_path / "data.npz")
+    _write_valid_npz(tmp_path / "snapshot.npz")
+    row = _campaign_row(tmp_path)
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        module,
+        "run_hftbacktest_only",
+        lambda config, **_kwargs: {"status": "completed", "fail_closed_reasons": []},
+    )
+
+    summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=tmp_path / "runs",
+        dry_run=False,
+        workers=1,
+    )
+
+    assert summary["required_feature_backend"] == "cpp"
+    receipt_path = next((tmp_path / "runs").glob("*/*/campaign_row_result.json"))
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["required_feature_backend"] == "cpp"
+
+    with pytest.raises(ValueError, match="required_feature_backend"):
+        module.run_campaign(
+            manifest_path=manifest,
+            out_root=tmp_path / "runs2",
+            dry_run=False,
+            workers=1,
+            required_feature_backend="cppp",
+        )
