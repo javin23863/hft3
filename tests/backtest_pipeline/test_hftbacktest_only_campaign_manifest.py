@@ -1758,6 +1758,76 @@ def test_required_replay_mode_treats_missing_field_as_mismatch(tmp_path: Path) -
     assert "no_units_with_replay_mode:added_orders_only" in str(excinfo.value)
 
 
+def test_replay_mode_filter_keeps_leader_tapes_visible(tmp_path: Path) -> None:
+    registry_path = tmp_path / "model_registry.yaml"
+    registry_path.write_text(
+        """
+models:
+  ES_MES_LEAD_LAG:
+    kind: hypothesis
+    legacy_id: HYP_16
+    display_name: ES leads MES
+    class: EsMesLeadLag
+""".lstrip(),
+        encoding="utf-8",
+    )
+    prepared_root = tmp_path / "prepared"
+    _stamp_replay_mode(_write_prepared_unit(prepared_root), "added_orders_only")
+
+    leader_dir = prepared_root / "ES" / "2024-09-11"
+    leader_dir.mkdir(parents=True)
+    leader_npz = leader_dir / "event_l3.npz"
+    leader_npz.write_bytes(b"leader-normalized")
+    leader_dir.joinpath("CPI_2024_09_11_TIGHT_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "hft3_hbt_only_lake_prepare_v1",
+                "symbol": "ES",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "trade_date": "2024-09-11",
+                "normalized_npz": str(leader_npz),
+                "replay_mode": "full_l3_event_replay",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry_path,
+        adapter_status_by_model={"ES_MES_LEAD_LAG": "available"},
+        required_replay_mode="added_orders_only",
+    )
+    # The full-l3 leader unit is excluded from row emission (filter) but its
+    # tape stays visible to cross-asset leader lookup (feature-side input).
+    assert {row["symbol"] for row in rows} == {"MES"}
+    lead_lag_row = next(row for row in rows if row["canonical_model_id"] == "ES_MES_LEAD_LAG")
+    assert lead_lag_row["cross_asset_npz"] == {"ES": str(leader_npz)}
+    assert "missing_leader_tapes" not in lead_lag_row["blocker_detail"]
+
+
+def test_leader_index_prefers_full_stream_over_filtered() -> None:
+    from backtest_pipeline.src.hftbacktest_only_campaign_manifest import _leader_unit_index
+
+    units = [
+        {
+            "symbol": "ES.v.0",
+            "event_id": "CPI_2024_09_11_TIGHT",
+            "normalized_npz": "/p/es_aoo.npz",
+            "replay_mode": "added_orders_only",
+        },
+        {
+            "symbol": "ES.v.0",
+            "event_id": "CPI_2024_09_11_TIGHT",
+            "normalized_npz": "/p/es_full.npz",
+            "replay_mode": "full_l3_event_replay",
+        },
+    ]
+    index = _leader_unit_index(units)
+    assert index[("ES", "CPI_2024_09_11_TIGHT")] == "/p/es_full.npz"
+
+
 def test_no_required_replay_mode_keeps_all_units(tmp_path: Path) -> None:
     registry = _write_registry(tmp_path / "model_registry.yaml")
     prepared_root = tmp_path / "prepared"

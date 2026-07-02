@@ -1040,9 +1040,19 @@ def _campaign_manifest_inputs(
     registry_path = Path(registry_path)
     registry_hash = _sha256_file(registry_path)
     models = _load_canonical_models(registry_path)
-    prepared_units, replay_mode_skipped = _load_prepared_units(
-        Path(prepared_root), required_replay_mode=required_replay_mode
-    )
+    all_units = _load_prepared_units(Path(prepared_root))
+    if required_replay_mode is None:
+        prepared_units = all_units
+        replay_mode_skipped: dict[str, int] = {}
+    else:
+        prepared_units = []
+        replay_mode_skipped = {}
+        for unit in all_units:
+            unit_mode = str(unit.get("replay_mode") or "")
+            if unit_mode == required_replay_mode:
+                prepared_units.append(unit)
+            else:
+                replay_mode_skipped[unit_mode] = replay_mode_skipped.get(unit_mode, 0) + 1
     if not models:
         raise HftBacktestOnlyCampaignManifestError("authority_missing:model_registry_empty")
     if not prepared_units:
@@ -1070,13 +1080,25 @@ def _campaign_manifest_inputs(
         "authority_refs": tuple(authority_refs),
         "required_replay_mode": required_replay_mode,
         "replay_mode_skipped_counts": replay_mode_skipped,
+        # Leader tapes are feature-side inputs (PIT staging), never replayed
+        # through the engine, so the replay-mode filter must not hide them.
+        "leader_pool_units": all_units,
     }
 
 
 def _leader_unit_index(prepared_units: Iterable[Mapping[str, Any]]) -> dict[tuple[str, str], str]:
-    """(product, event_id) -> normalized npz for leader-tape lookups."""
+    """(product, event_id) -> normalized npz for leader-tape lookups.
+
+    Leader streams feed feature construction, so when the same unit exists
+    under several prepare replay modes the complete stream
+    (full_l3_event_replay) wins over filtered variants.
+    """
     index: dict[tuple[str, str], str] = {}
-    for prepared in prepared_units:
+    ranked = sorted(
+        prepared_units,
+        key=lambda unit: 0 if str(unit.get("replay_mode") or "") == "full_l3_event_replay" else 1,
+    )
+    for prepared in ranked:
         product = str(prepared.get("symbol") or "").split(".")[0].upper()
         event_id = str(prepared.get("event_id") or "")
         npz = str(prepared.get("normalized_npz") or prepared.get("source_npz") or "")
@@ -1090,7 +1112,9 @@ def _iter_campaign_rows_from_inputs(
     *,
     sensor_units: Mapping[str, Mapping[str, str]] | None = None,
 ) -> Iterator[dict[str, Any]]:
-    leader_units = _leader_unit_index(inputs["prepared_units"])
+    leader_units = _leader_unit_index(
+        inputs.get("leader_pool_units") or inputs["prepared_units"]
+    )
     for canonical_model_id, entry in inputs["models"]:
         aliases = _legacy_aliases(entry)
         adapter_status = _adapter_status(
@@ -1611,24 +1635,11 @@ def _load_canonical_models(registry_path: Path) -> list[tuple[str, Mapping[str, 
     return out
 
 
-def _load_prepared_units(
-    prepared_root: Path,
-    required_replay_mode: str | None = None,
-) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """Load prepared-unit manifests; when required_replay_mode is set, drop
-    units prepared under any other replay mode (fail-closed: a missing
-    replay_mode field counts as a mismatch). Returns (units, skipped counts
-    keyed by the offending replay_mode value, "" for absent)."""
+def _load_prepared_units(prepared_root: Path) -> list[dict[str, Any]]:
     paths = sorted(Path(prepared_root).glob("**/*_manifest.json"), key=lambda path: path.as_posix())
     units: list[dict[str, Any]] = []
-    skipped_by_mode: dict[str, int] = {}
     for manifest_path in paths:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if required_replay_mode is not None:
-            unit_mode = str(manifest.get("replay_mode") or "")
-            if unit_mode != required_replay_mode:
-                skipped_by_mode[unit_mode] = skipped_by_mode.get(unit_mode, 0) + 1
-                continue
         normalized_npz = _resolve_manifest_path(manifest_path, manifest.get("normalized_npz"))
         initial_snapshot = _resolve_manifest_path(manifest_path, manifest.get("initial_snapshot"))
         units.append(
@@ -1642,7 +1653,7 @@ def _load_prepared_units(
                 "initial_snapshot": str(initial_snapshot) if initial_snapshot else "",
             }
         )
-    return units, skipped_by_mode
+    return units
 
 
 def _resolve_manifest_path(manifest_path: Path, value: Any) -> Path | None:
