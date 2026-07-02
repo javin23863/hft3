@@ -18,6 +18,10 @@ dependencies = [
     "qrcode[pil]>=7.4.2",
 ]
 
+[project.optional-dependencies]
+# GBM research/paper lane for the decision engine (train.py --model lightgbm).
+ml = ["lightgbm>=4.0"]
+
 [project.scripts]
 workbench = "workbench.__main__:main"
 economic-event-universe = "economic_event_universe.cli:main"
