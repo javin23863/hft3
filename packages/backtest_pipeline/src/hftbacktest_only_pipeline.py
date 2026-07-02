@@ -1225,6 +1225,10 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "meta_model_sha256": signal_meta.get("meta_model_sha256", ""),
         "meta_threshold": signal_meta.get("meta_threshold"),
         "meta_gated_out": signal_meta.get("meta_gated_out", 0),
+        "toxicity_gate_enabled": signal_meta.get("toxicity_gate_enabled", False),
+        "toxicity_gated_out": signal_meta.get("toxicity_gated_out", 0),
+        "toxicity_unavailable_steps": signal_meta.get("toxicity_unavailable_steps", 0),
+        "toxicity_config": signal_meta.get("toxicity_config") or {},
         "no_order_observation": no_order_observation,
         "advance_error": advance_error,
         "orders": orders,
@@ -1375,6 +1379,29 @@ def _build_model_signal_lookup(
                 meta_model_path,
                 expected_model_id=model_id,
             )
+        toxicity_max_vpin = (
+            float(params["toxicity_max_vpin"]) if params.get("toxicity_max_vpin") is not None else None
+        )
+        toxicity_max_cascade = (
+            float(params["toxicity_max_cascade"]) if params.get("toxicity_max_cascade") is not None else None
+        )
+        toxicity_block_regime = (
+            float(params["toxicity_block_regime"]) if params.get("toxicity_block_regime") is not None else None
+        )
+        toxicity_gate_enabled = any(
+            value is not None
+            for value in (toxicity_max_vpin, toxicity_max_cascade, toxicity_block_regime)
+        )
+        toxicity_integrator = None
+        if toxicity_gate_enabled:
+            from features_engine.src.pipeline.structural_integration import (
+                StructuralModelIntegrator,
+            )
+
+            toxicity_integrator = StructuralModelIntegrator(
+                tick_size=float(config.tick_size),
+                target_asset=str(config.symbol),
+            )
         raw_events = load_npz_events(str(config.normalized_npz))
         pipeline = MarketStatePipeline(
             tick_size=float(config.tick_size),
@@ -1416,6 +1443,9 @@ def _build_model_signal_lookup(
         leader_alignment_gaps = 0
         observations: list[tuple[int, float]] = []
         meta_feature_rows: list[list[float]] = []
+        toxicity_flags: list[bool] = []
+        toxicity_unavailable_steps = 0
+        toxicity_gated_out = 0
         for event in iter_mbo_events(raw_events):
             event_ts = int(event.timestamp_ns)
             if leader_timelines or sensor_adapters:
@@ -1464,6 +1494,34 @@ def _build_model_signal_lookup(
                 pipeline.cross_asset_features = cross
             state = pipeline.process_event(event)
             observations.append((event_ts, float(adapter.evaluate(state))))
+            if toxicity_integrator is not None:
+                # No toxicity estimate at a step means NO ENTRY at that step
+                # (conservative per-step block) — a gate must never silently
+                # pass because its producer has not warmed up yet.
+                snap = toxicity_integrator.integrate(event, state.feature_vector)
+                step_blocked = False
+                step_unavailable = False
+                if toxicity_max_vpin is not None:
+                    if snap.vpin is None:
+                        step_unavailable = True
+                    elif float(snap.vpin.VPIN_value) > toxicity_max_vpin:
+                        step_blocked = True
+                if toxicity_max_cascade is not None:
+                    if snap.hawkes is None:
+                        step_unavailable = True
+                    elif float(snap.hawkes.toxic_cascade_score) > toxicity_max_cascade:
+                        step_blocked = True
+                if toxicity_block_regime is not None:
+                    if snap.vpin is None:
+                        step_unavailable = True
+                    else:
+                        regime_value = {"normal": 0.0, "elevated": 1.0, "toxic": 2.0}.get(
+                            str(snap.vpin.toxicity_regime), 0.0
+                        )
+                        if regime_value >= toxicity_block_regime:
+                            step_blocked = True
+                toxicity_flags.append(step_blocked or step_unavailable)
+                toxicity_unavailable_steps += int(step_unavailable)
             if meta_predict is not None:
                 features = state.primary_features
                 missing = [name for name in meta_feature_names if name not in features]
@@ -1479,6 +1537,15 @@ def _build_model_signal_lookup(
                 meta_feature_rows.append(
                     [float(features[name]) for name in meta_feature_names]
                 )
+        if toxicity_integrator is not None and observations:
+            gated_observations: list[tuple[int, float]] = []
+            for (ts, signal_value), blocked in zip(observations, toxicity_flags):
+                if blocked and signal_value != 0.0:
+                    toxicity_gated_out += 1
+                    gated_observations.append((ts, 0.0))
+                else:
+                    gated_observations.append((ts, signal_value))
+            observations = gated_observations
         meta_gated_out = 0
         meta_score_min: float | None = None
         meta_score_max: float | None = None
@@ -1536,6 +1603,14 @@ def _build_model_signal_lookup(
         "meta_gated_out": meta_gated_out,
         "meta_score_min": meta_score_min,
         "meta_score_max": meta_score_max,
+        "toxicity_gate_enabled": toxicity_gate_enabled,
+        "toxicity_gated_out": toxicity_gated_out,
+        "toxicity_unavailable_steps": toxicity_unavailable_steps,
+        "toxicity_config": {
+            "max_vpin": toxicity_max_vpin,
+            "max_cascade": toxicity_max_cascade,
+            "block_regime": toxicity_block_regime,
+        },
     }, []
 
 
