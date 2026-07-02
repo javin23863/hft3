@@ -1116,6 +1116,7 @@ def _install_exit_leg_fake_hftbacktest(
     entry_fill_step: int = 1,
     exit_fill_delay: int = 1,
     fee_per_fill: float = 0.0,
+    exit_submit_return: int = 0,
 ) -> None:
     """Fake hftbacktest where the entry fills and the mid then follows `mids`.
 
@@ -1150,6 +1151,7 @@ def _install_exit_leg_fake_hftbacktest(
             self.exit_price = 0.0
             self.exit_qty = 0.0
             self.exit_submit_step: int | None = None
+            self.exit_rejected = False
             self.fee = 0.0
             self._fees_charged: set[str] = set()
 
@@ -1175,6 +1177,7 @@ def _install_exit_leg_fake_hftbacktest(
         def _exit_filled(self) -> bool:
             return (
                 self.exit_id is not None
+                and not self.exit_rejected
                 and self.exit_submit_step is not None
                 and self.steps >= self.exit_submit_step + exit_fill_delay
             )
@@ -1212,6 +1215,11 @@ def _install_exit_leg_fake_hftbacktest(
                 self.exit_price = float(price)
                 self.exit_qty = float(qty)
                 self.exit_submit_step = self.steps
+                if exit_submit_return != 0:
+                    # Exchange rejects the flatten: order never becomes live.
+                    self.exit_rejected = True
+                    self.exit_id = None
+                    return exit_submit_return
             return 0
 
         def wait_order_response(self, *_args: object) -> int:
@@ -1436,3 +1444,39 @@ def test_exit_leg_holding_anchors_at_entry_fill_not_submit(
     # (submit-anchored would have exited at step 4).
     assert exit_rows[0]["step"] >= 7
     assert replay["closed_quantity"] == 1.0
+
+
+def test_exit_leg_rejected_exit_submit_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The exchange rejects the closing order. A failed flatten is an
+    # engine/order failure, never strategy evidence: the run must fail
+    # closed instead of reporting a mechanical pass with the residual
+    # position framed as an exit-leg observation.
+    _install_exit_leg_fake_hftbacktest(
+        monkeypatch, mids=[5000.0] * 8, exit_submit_return=9
+    )
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "exit_reject"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_params={
+            "side": "BUY",
+            "quantity": 1.0,
+            "max_steps": 2,
+            "exit_at_holding": True,
+            "holding_period_bars": 2,
+        },
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert "exit_order_submit_failed" in result["fail_closed_reasons"]
+    assert result["status"] != "completed"
+    # Fail-closed: no stats receipt is produced, so the run can never be
+    # indexed as strategy evidence.
+    assert not (out_dir / "stats_summary.json").is_file()

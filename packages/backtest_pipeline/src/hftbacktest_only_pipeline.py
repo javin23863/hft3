@@ -890,6 +890,13 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     # hftbacktest v2 return codes: 0 = success, 3 = WaitCanceled timeout for passive orders.
     if response_ret not in (0, 3, None):
         reasons.append("order_response_failed")
+    # A rejected flatten is an engine/order failure, never strategy evidence:
+    # without this, a residual position after a failed exit submit would be
+    # misclassified as an exit-leg observation on a mechanical pass.
+    if exit_submit_ret not in (0, None):
+        reasons.append("exit_order_submit_failed")
+    if exit_response_ret not in (0, 3, None):
+        reasons.append("exit_order_response_failed")
     if submitted and not order_snapshot:
         reasons.append("order_state_missing")
     gross_pnl = _float_field(final_state, "balance") + _float_field(final_state, "fee")
