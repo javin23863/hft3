@@ -144,7 +144,9 @@ def build_family_ensembles(
             "weights_fitted_on": {"events": len(train_ids), "through": split_date},
             "embargo_end": embargo_end,
             "effective_breadth": effective_breadth,
-            "train_correlation": [[float(c) for c in row] for row in corr],
+            "train_correlation": [
+                [float(c) if np.isfinite(c) else None for c in row] for row in corr
+            ],
             "eval_events": len(eval_ids),
             "ensemble_eval_mean": float(ensemble_eval.mean()),
             "best_single_eval_mean": float(eval_matrix.mean(axis=0).max()),
