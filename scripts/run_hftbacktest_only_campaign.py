@@ -325,7 +325,9 @@ def _join_blocker_details(*details: Any) -> str:
 def _fail_closed_blocker(status: str, reasons: list[str]) -> str:
     reason = reasons[0] if reasons else status
     if (
-        reason.startswith(("pipeline_blocker:", "data_blocker:", "authority_missing:"))
+        reason.startswith(
+            ("semantic_blocker:", "pipeline_blocker:", "data_blocker:", "authority_missing:")
+        )
         or reason == "authority_missing"
     ):
         return reason

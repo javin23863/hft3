@@ -543,10 +543,15 @@ def test_hypothesis_limit_order_requires_event_window_for_entry_scan(
     assert not (out_dir / "recorder_result.npz").exists()
 
 
-def test_structural_limit_order_evaluates_canonical_payload_signal(
+def test_structural_model_refused_standalone_order(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # no-cherry-pick v2: BOOK_PRESSURE has a WORKING structural signal adapter
+    # (available), but is a context_feature — it must never be converted into a
+    # standalone BUY/SELL by the hypothesis_limit_order runner. The fail-closed
+    # semantic guard blocks it with an honest receipt and writes no order,
+    # recorder, stats, or promotion artifacts (never a fake standalone PnL).
     _install_fake_hftbacktest(monkeypatch)
     data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz", include_trade_event=True)
     snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
@@ -569,19 +574,16 @@ def test_structural_limit_order_evaluates_canonical_payload_signal(
 
     result = run_hftbacktest_only(config, out_dir=out_dir)
 
-    assert result["status"] == "completed"
-    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
-    stats = json.loads((out_dir / "stats_summary.json").read_text(encoding="utf-8"))
-    submitted = [row for row in replay["orders"] if row["event_type"] == "ORDER_SUBMITTED"]
-    assert replay["strategy_adapter_status"] == "available"
-    assert replay["signal_source"] == "hbt_normalized_mbo_structural_integrator"
-    assert set(replay["signal_field"].split(",")) <= {"OFI_zscore", "OFI_smooth", "book_pressure_direction"}
-    assert replay["signal_field"]
-    assert replay["signal_observations"] > 0
-    assert submitted
-    assert submitted[0]["side"] in {"BUY", "SELL"}
-    assert isinstance(submitted[0]["signal"], float)
-    assert stats["canonical_model_id"] == "BOOK_PRESSURE"
+    assert result["status"] == "semantic_blocker"
+    assert any(
+        reason.startswith("semantic_blocker:not_standalone_role")
+        for reason in result["fail_closed_reasons"]
+    )
+    # semantic block short-circuits before any run artifact is written
+    assert not (out_dir / "official_replay.json").exists()
+    assert not (out_dir / "recorder_result.npz").exists()
+    assert not (out_dir / "stats_summary.json").exists()
+    assert not (out_dir / "promotion_decision.json").exists()
 
 
 def test_missing_uniform_hbt_adapter_is_pipeline_blocker(
@@ -1480,6 +1482,126 @@ def test_exit_leg_rejected_exit_submit_fails_closed(
     # Fail-closed: no stats receipt is produced, so the run can never be
     # indexed as strategy evidence.
     assert not (out_dir / "stats_summary.json").is_file()
+
+
+def test_exit_leg_unfilled_exit_produces_honest_mark_to_mid_pnl(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Entry fills at best_bid 4999.875; the holding exit is submitted at
+    # step 3 (entry_fill_step=1 + holding_period_bars=2) but never fills
+    # (exit_fill_delay=100 > data length). The run completes with a
+    # residual long position of 1.0.
+    #
+    # The engine balance marks the open position at the entry cash flow
+    # (-4999.875), which is a broken settlement mark. The fix computes
+    # net_pnl from the residual marked to the true mid (5000.0) instead:
+    #   unrealized = (5000.0 - 4999.875) * 1.0 * 5.0 = 0.625
+    #   gross_pnl  = 0.0 (no closed trips) + 0.625 = 0.625
+    #   net_pnl    = 0.625 - 0.47 (entry fee) = 0.155
+    # vs the broken engine_balance_raw = -4999.875.
+    _install_exit_leg_fake_hftbacktest(
+        monkeypatch,
+        mids=[5000.0] * 8,
+        exit_fill_delay=100,
+        fee_per_fill=0.47,
+    )
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "exit_unfilled_residual"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_params={
+            "side": "BUY",
+            "quantity": 1.0,
+            "max_steps": 2,
+            "exit_at_holding": True,
+            "holding_period_bars": 2,
+        },
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed", result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    # Residual position: entry filled, exit never filled.
+    assert replay["end_position"] == 1.0
+    assert replay["exit_leg_enabled"] is True
+    assert replay["exit_reason"] == "max_holding"
+    assert replay["exit_leg_observation"] == "exit_leg_unfilled_residual_position"
+    # No closed round trips — realized_closed_trade_pnl is None.
+    assert replay["realized_closed_trade_pnl"] is None
+    assert replay["round_trips_completed"] == 0
+    # Honest mark-to-mid valuation of the residual.
+    assert replay["entry_avg_price"] == pytest.approx(4999.875)
+    assert replay["mark_mid"] == pytest.approx(5000.0)
+    assert replay["unrealized_pnl_marked_to_mid"] == pytest.approx(0.625)
+    assert replay["residual_unmarked"] is False
+    # Reported PnL from honest components, NOT the engine balance.
+    assert replay["gross_pnl"] == pytest.approx(0.625)
+    assert replay["net_pnl"] == pytest.approx(0.155)
+    # The broken engine balance is preserved for audit only.
+    assert replay["engine_balance_raw"] == pytest.approx(-4999.875)
+    # Stats summary propagates the honest net_pnl.
+    stats = json.loads((out_dir / "stats_summary.json").read_text(encoding="utf-8"))
+    assert stats["net_pnl"] == pytest.approx(0.155)
+    assert stats["gross_pnl"] == pytest.approx(0.625)
+    assert stats["unrealized_pnl_marked_to_mid"] == pytest.approx(0.625)
+    assert stats["end_position"] == 1.0
+    # No closed trades → economic gate falls back to net_pnl_cash.
+    assert stats["economic_gate_metric"] == "net_pnl_cash"
+
+
+def test_exit_leg_unfilled_exit_mark_to_mid_negative(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Same scenario but the mid declines to 4990.0 by the time the exit
+    # is submitted, so the residual mark is negative:
+    #   unrealized = (4990.0 - 4999.875) * 1.0 * 5.0 = -49.375
+    #   net_pnl    = -49.375 - 0.47 = -49.845
+    # The broken engine_balance_raw would be -4999.875 — a $5k phantom
+    # loss from marking the position at entry cash flow, not the true mid.
+    _install_exit_leg_fake_hftbacktest(
+        monkeypatch,
+        mids=[5000.0, 5000.0, 5000.0, 4990.0, 4990.0, 4990.0, 4990.0, 4990.0],
+        exit_fill_delay=100,
+        fee_per_fill=0.47,
+    )
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz")
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "exit_unfilled_residual_neg"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_params={
+            "side": "BUY",
+            "quantity": 1.0,
+            "max_steps": 2,
+            "exit_at_holding": True,
+            "holding_period_bars": 2,
+        },
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "completed", result["fail_closed_reasons"]
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["end_position"] == 1.0
+    assert replay["entry_avg_price"] == pytest.approx(4999.875)
+    # last_mid was frozen at step 3 when the exit was submitted.
+    assert replay["mark_mid"] == pytest.approx(4990.0)
+    assert replay["unrealized_pnl_marked_to_mid"] == pytest.approx(-49.375)
+    assert replay["residual_unmarked"] is False
+    assert replay["gross_pnl"] == pytest.approx(-49.375)
+    assert replay["net_pnl"] == pytest.approx(-49.845)
+    assert replay["engine_balance_raw"] == pytest.approx(-4999.875)
+    stats = json.loads((out_dir / "stats_summary.json").read_text(encoding="utf-8"))
+    assert stats["net_pnl"] == pytest.approx(-49.845)
+    assert stats["economic_result_status"] == "observe"
 
 
 def test_instrument_resolution_fills_unset_fields_from_specs(
