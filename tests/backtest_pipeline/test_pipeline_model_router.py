@@ -17,12 +17,15 @@ from backtest_pipeline.src.pipeline_model_router import (
     all_model_ids,
     route,
 )
+from features_engine.src.model_registry import all_slugs
 
 
-def test_all_model_ids_count_56() -> None:
+def test_all_model_ids_cover_registry() -> None:
+    # count derives from the registry loader, never a stale literal
     ids = all_model_ids()
-    assert len(ids) == 56
-    assert len(set(ids)) == 56
+    expected = len(all_slugs())
+    assert len(ids) == expected
+    assert len(set(ids)) == expected
 
 
 def test_route_engine_kinds_unique_coverage() -> None:

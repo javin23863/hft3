@@ -434,10 +434,13 @@ def test_first_eligible_canary_uses_manifest_order_without_manual_filter(
     )
     assert not (tmp_path / "campaign_manifest.jsonl.checkpoint.json").exists()
 
+    # no-cherry-pick v2: only standalone-executable slugs are canary-eligible.
+    # QUEUE_TOXICITY_HAWKES (pdf_structural) and RL_EXECUTION_POLICY are
+    # ledgered but semantic-blocked, so the sole eligible row is the hypothesis.
     summary = stream_first_eligible_canary_manifest(
         (json.loads(line) for line in base_path.read_text(encoding="utf-8").splitlines()),
         out_path=tmp_path / "canary_manifest.jsonl",
-        count=2,
+        count=1,
         summary_path=tmp_path / "canary_summary.json",
         source_manifest=base_path,
         parameter_surface_status="base_only",
@@ -450,12 +453,11 @@ def test_first_eligible_canary_uses_manifest_order_without_manual_filter(
     ]
     assert [row["canonical_model_id"] for row in canary_rows] == [
         "SPREAD_BLOWOUT_RECOMPRESSION",
-        "QUEUE_TOXICITY_HAWKES",
     ]
     assert summary["selector"] == "first_n_manifest_order_after_readiness_predicates"
     assert summary["manual_filter_used"] is False
     assert summary["hbt_jobs_started"] == 0
-    assert summary["eligibility_counts"]["eligible"] == 2
+    assert summary["eligibility_counts"]["eligible"] == 1
 
 
 def test_manifest_omissions_fail_closed(tmp_path: Path) -> None:
@@ -704,10 +706,15 @@ models:
     )
 
     assert len(rows) == 2
+    # Adapter inference still resolves available vs missing. no-cherry-pick v2
+    # adds semantic gating: BOOK_PRESSURE has a working adapter but is a
+    # context_feature (pdf_structural), so it is semantic-blocked, not run
+    # standalone. VPIN's missing adapter is a higher-precedence pipeline blocker.
     assert rows[0]["canonical_model_id"] == "BOOK_PRESSURE"
     assert rows[0]["adapter_status"] == "available"
-    assert rows[0]["admissibility_status"] == "admissible"
-    assert rows[0]["blocker_code"] == ""
+    assert rows[0]["execution_role"] == "context_feature"
+    assert rows[0]["admissibility_status"] == "semantic_blocker"
+    assert rows[0]["blocker_code"] == "semantic_blocker:diagnostic_only"
     assert rows[1]["canonical_model_id"] == "VPIN_TOXICITY"
     assert rows[1]["adapter_status"] == "missing_uniform_hbt_adapter"
     assert rows[1]["admissibility_status"] == "pipeline_blocker"
@@ -1016,13 +1023,35 @@ def test_model_scoped_parameter_sets_do_not_omit_ready_models(tmp_path: Path) ->
     assert surface_rows[0]["canonical_model_id"] == "SPREAD_BLOWOUT_RECOMPRESSION"
     assert "packages/research_pipeline/parameter_search.py" in surface_rows[0]["authority_refs"]
 
+    # no-cherry-pick v2: QUEUE_TOXICITY_HAWKES (pdf) and RL are ledgered but
+    # semantic-blocked, so they are NOT executable and do not force a surface
+    # row. Building over all rows with SPREAD's set therefore succeeds and
+    # yields only the standalone hypothesis.
+    all_surface = build_parameter_surface_rows(
+        campaign_rows=campaign_rows,
+        parameter_sets=parameter_sets,
+    )
+    assert [row["canonical_model_id"] for row in all_surface] == [
+        "SPREAD_BLOWOUT_RECOMPRESSION",
+    ]
+
+    # The no-omission guard still holds for an EXECUTABLE model: SPREAD without
+    # a parameter set (the set here is scoped to a non-executable model) is a
+    # hard error, never a silent drop.
+    hawkes_scoped_sets = [
+        _parameter_set(
+            "grid",
+            {"signal_threshold": 0.15},
+            canonical_model_id="QUEUE_TOXICITY_HAWKES",
+        )
+    ]
     with pytest.raises(
         HftBacktestOnlyCampaignManifestError,
-        match="parameter_surface_missing_for_executable_model:QUEUE_TOXICITY_HAWKES",
+        match="parameter_surface_missing_for_executable_model:SPREAD_BLOWOUT_RECOMPRESSION",
     ):
         build_parameter_surface_rows(
             campaign_rows=campaign_rows,
-            parameter_sets=parameter_sets,
+            parameter_sets=hawkes_scoped_sets,
         )
 
 
@@ -1421,13 +1450,17 @@ def test_cli_writes_parameter_surface_manifest(tmp_path: Path, capsys: pytest.Ca
             "--canary-out",
             str(tmp_path / "canary_manifest.jsonl"),
             "--canary-count",
-            "2",
+            "1",
             "--canary-summary-out",
             str(tmp_path / "canary_manifest_summary.json"),
         ]
     ) == 0
 
     output = json.loads(capsys.readouterr().out)
+    # All 3 slugs are ledgered through the campaign manifest AND the parameter
+    # surface (no omission — non-standalone rows carry their semantic blocker).
+    # Only the standalone hypothesis is canary-eligible (no-cherry-pick v2);
+    # QUEUE_TOXICITY_HAWKES (pdf) and RL stay in the surface, semantic-blocked.
     assert output["campaign_manifest"]["row_count"] == 3
     assert output["parameter_surface"]["row_count"] == 3
     surface_summary = json.loads(
@@ -1435,7 +1468,7 @@ def test_cli_writes_parameter_surface_manifest(tmp_path: Path, capsys: pytest.Ca
     )
     assert surface_summary["parameter_family_counts"] == {"grid": 3}
     canary_summary = output["canary_manifest"]
-    assert canary_summary["emitted_count"] == 2
+    assert canary_summary["emitted_count"] == 1
     assert canary_summary["source_manifest"].endswith("parameter_surface.jsonl")
     assert canary_summary["parameter_surface_status"] == "parameter_surface_expanded"
     assert canary_summary["parameter_surface_config_status"] == "parameter_config_present"
@@ -1593,7 +1626,7 @@ def test_cli_missing_default_parameter_sets_is_config_blocker_not_grid_invention
             "--canary-out",
             str(tmp_path / "canary_manifest.jsonl"),
             "--canary-count",
-            "2",
+            "1",
             "--canary-summary-out",
             str(tmp_path / "canary_manifest_summary.json"),
         ]
@@ -1607,10 +1640,11 @@ def test_cli_missing_default_parameter_sets_is_config_blocker_not_grid_invention
         "pipeline_blocker:parameter_sets_config_missing"
     )
     canary_summary = output["canary_manifest"]
-    assert canary_summary["emitted_count"] == 2
+    # Only the standalone hypothesis is canary-eligible (no-cherry-pick v2).
+    assert canary_summary["emitted_count"] == 1
     assert canary_summary["hbt_jobs_started"] == 0
     assert canary_summary["manual_filter_used"] is False
-    assert (tmp_path / "canary_manifest.jsonl").read_text(encoding="utf-8").count("\n") == 2
+    assert (tmp_path / "canary_manifest.jsonl").read_text(encoding="utf-8").count("\n") == 1
     assert not (tmp_path / "parameter_surface.jsonl").exists()
 
 

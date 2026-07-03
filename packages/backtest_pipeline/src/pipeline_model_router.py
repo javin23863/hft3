@@ -9,12 +9,15 @@ from typing import List
 from features_engine.src.model_registry import load_model_registry, resolve_model_id
 from workbench.src.registry.unified_registry import list_models
 
-PDF_STRUCTURAL_EVAL = frozenset(
-    {"BOOK_PRESSURE", "CROSS_ASSET_LEAD_LAG", "VPIN_TOXICITY", "DOW_YM_INDEX", "TRANSFER_ENTROPY", "STOCHASTIC_THERMO"}
+# Single source of truth for the PDF structural role sets lives in
+# model_execution_contracts (no-cherry-pick v2). Re-exported here so existing
+# importers keep working, but membership is defined once.
+from backtest_pipeline.src.model_execution_contracts import (
+    PDF_DIAGNOSTICS,
+    PDF_HYBRID_REPLAY,
+    PDF_OPTIONS_FIXTURE,
+    PDF_STRUCTURAL_EVAL,
 )
-PDF_DIAGNOSTICS = frozenset({"TREASURY_CTD", "QUANTUM_SPREAD_DEFENSE", "HAWKES_TOXIC_FLOW"})
-PDF_HYBRID_REPLAY = frozenset({"HYBRID_EXECUTION"})
-PDF_OPTIONS_FIXTURE = frozenset({"DEALER_HEDGING"})
 
 SMOKE_HYP_SAMPLE = frozenset({"SECOND_WAVE_CONTINUATION", "SPREAD_BLOWOUT_RECOMPRESSION"})
 
