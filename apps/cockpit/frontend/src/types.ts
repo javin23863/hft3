@@ -3,6 +3,7 @@
 
 export type Status = "ok" | "running" | "stale" | "fail" | "missing" | "unknown";
 export type Health = "green" | "amber" | "red";
+export type EsqHealth = Health | "gray";
 export type Severity = "info" | "warn" | "crit";
 
 export interface Stage {
@@ -340,6 +341,67 @@ export interface AutonomyZone {
   error?: string;
 }
 
+export interface EsqTrade {
+  entry_ts?: string | null;
+  exit_ts?: string | null;
+  entry_px?: number | null;
+  exit_px?: number | null;
+  exit_reason?: string | null;
+  ev?: number | null;
+  pnl_usd?: number | null;
+  [k: string]: unknown;
+}
+
+export interface EsqHeartbeat {
+  run_utc?: string | null;
+  last_bar?: string | null;
+  close?: number | null;
+  entry_signal?: boolean | null;
+  ensemble_ev?: number | null;
+  action?: string | null;
+  n_new_closed_trades?: number | null;
+  shadow_total_net?: number | null;
+  [k: string]: unknown;
+}
+
+export interface EsqAudit {
+  registered?: string | null;
+  run_utc?: string | null;
+  n_ref?: number | null;
+  n_shadow?: number | null;
+  n_forward?: number | null;
+  n_seeded?: number | null;
+  shadow_net_usd?: number | null;
+  shadow_max_dd_usd?: number | null;
+  forward_net_usd?: number | null;
+  trade_match_rate?: number | null;
+  bands?: { net_p5?: number | null; net_p50?: number | null; net_p95?: number | null; dd_p99?: number | null };
+  checks?: Record<string, boolean>;
+  dormant?: boolean | null;
+  verdict?: "PASS" | "WARN" | "FAIL" | "EMPTY" | string;
+  [k: string]: unknown;
+}
+
+export interface EsqZone {
+  zone: "esq";
+  generated_utc: string;
+  health: EsqHealth;
+  heartbeat: EsqHeartbeat | null;
+  heartbeat_age_min: number | null;
+  stats: {
+    n_trades: number;
+    net_usd: number | null;
+    win_rate: number | null;
+    profit_factor: number | null;
+    max_dd_usd: number | null;
+  };
+  equity_curve: Array<{ ts: string | null; equity: number }>;
+  recent_trades: EsqTrade[];
+  audit: EsqAudit | null;
+  sizing: { trades_per_year: number | null };
+  xmkt: Record<string, unknown> | null;
+}
+
 export interface Zones {
   pipeline?: PipelineZone;
   portfolio?: PortfolioZone;
@@ -349,4 +411,5 @@ export interface Zones {
   autonomy?: AutonomyZone;
   system?: SystemZone;
   alerts?: AlertsZone;
+  esq?: EsqZone;
 }

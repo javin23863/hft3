@@ -241,6 +241,11 @@ def alerts(_: str = Depends(require_view)) -> dict:
     return _zone("alerts")
 
 
+@app.get("/api/esq")
+def esq(_: str = Depends(require_view)) -> dict:
+    return _zone("esq")
+
+
 @app.get("/api/artifact")
 def artifact(path: str = Query(..., min_length=1), _: str = Depends(require_view)):
     target = _safe_artifact_path(path)

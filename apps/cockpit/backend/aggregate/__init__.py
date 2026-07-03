@@ -5,7 +5,7 @@ go through this table so a new zone is wired in one place.
 """
 from __future__ import annotations
 
-from . import alerts, autonomy, lifecycle, models, options, pipeline, portfolio, system
+from . import alerts, autonomy, esq, lifecycle, models, options, pipeline, portfolio, system
 
 ZONES = {
     "pipeline": pipeline.build,
@@ -16,6 +16,7 @@ ZONES = {
     "autonomy": autonomy.build,
     "system": system.build,
     "alerts": alerts.build,
+    "esq": esq.build,
 }
 
-__all__ = ["ZONES", "pipeline", "portfolio", "models", "options", "lifecycle", "autonomy", "system", "alerts"]
+__all__ = ["ZONES", "pipeline", "portfolio", "models", "options", "lifecycle", "autonomy", "system", "alerts", "esq"]

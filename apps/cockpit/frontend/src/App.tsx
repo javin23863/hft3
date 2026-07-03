@@ -11,6 +11,7 @@ import { LifecycleView } from "./views/LifecycleView";
 import { AutonomyView } from "./views/AutonomyView";
 import { SystemView } from "./views/SystemView";
 import { PortfolioView } from "./views/PortfolioView";
+import { EsqView } from "./views/EsqView";
 import { ChatView } from "./views/ChatView";
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
               <Route path="/autonomy" element={<AutonomyView />} />
               <Route path="/system" element={<SystemView />} />
               <Route path="/portfolio" element={<PortfolioView />} />
+              <Route path="/esq" element={<EsqView />} />
               <Route path="/chat" element={<ChatView />} />
             </Routes>
           </main>

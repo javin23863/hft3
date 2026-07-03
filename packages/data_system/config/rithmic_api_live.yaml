@@ -1,0 +1,67 @@
+# Rithmic R|API Plus - LIVE production profile ("Rithmic 01", EdgeClear FCM).
+# Credentials are supplied at runtime with RITHMIC_USERNAME / RITHMIC_PASSWORD.
+# DO NOT copy secrets into this file.
+#
+# Parameters observed from local Rithmic Trader Pro live-session logs under
+# C:\Users\MSI\Documents\Rithmic on 2026-07-03 (MML_DOMAIN_NAME =
+# rithmic_prod_01_dmz_domain; Price/Order/History/RMS agents from the
+# "Rithmic 01" login block). Entitlement verified working by user 2026-07-03
+# (the 2026-06 rp_code 13 block is resolved).
+#
+# SCOPE: market-data capture only. Python order-send is hard-blocked in the
+# bridge (PYTHON_RITHMIC_ORDER_SEND_DISABLED_USE_NATIVE_CPP_PROBE); live order
+# routing remains behind cockpit controls per operations charter.
+
+api_version: "13.7.0.0"
+endpoint_profile: "live_prod_01"
+system: "Rithmic 01"
+gateway: "Chicago Area"
+endpoint_params_status: "CONFIGURED_FROM_RTRADER_LIVE_LOG"
+
+engine_params:
+  app_name: "HFT3"
+  app_version: "1.0"
+
+required_environment_params:
+  - MML_DMN_SRVR_ADDR
+  - MML_DOMAIN_NAME
+  - MML_LIC_SRVR_ADDR
+  - MML_LOC_BROK_ADDR
+  - MML_LOGGER_ADDR
+
+required_repository_params:
+  - sCnnctPt
+
+required_login_params:
+  - sMdCnnctPt
+  - sTsCnnctPt
+  - sIhCnnctPt
+  - sPnlCnnctPt
+
+environment:
+  MML_DMN_SRVR_ADDR: "ritpz01004.01.rithmic.com:65000~ritpz04063.04.rithmic.com:65000~ritpz01004.01.rithmic.net:65000~ritpz04063.04.rithmic.net:65000~ritpz01004.01.theomne.net:65000~ritpz04063.04.theomne.net:65000~ritpz01004.01.theomne.com:65000~ritpz04063.04.theomne.com:65000"
+  MML_DOMAIN_NAME: "rithmic_prod_01_dmz_domain"
+  MML_LIC_SRVR_ADDR: "ritpz04063.04.rithmic.com:56000~ritpz01004.01.rithmic.com:56000~ritpz04063.04.rithmic.net:56000~ritpz04063.04.theomne.net:56000~ritpz04063.04.theomne.com:56000~ritpz01000.01.rithmic.com:56000~ritpz01001.01.rithmic.com:56000~ritpz01000.01.rithmic.net:56000~ritpz01001.01.rithmic.net:56000~ritpz01000.01.theomne.net:56000~ritpz01001.01.theomne.net:56000~ritpz01000.01.theomne.com:56000~ritpz01001.01.theomne.com:56000~ritpz24050.rithmic.com:56000~ritpz24050.rithmic.net:56000~ritpz24050.theomne.net:56000~ritpz24050.theomne.com:56000~ritpz23010.rithmic.com:56000~ritpz23010.rithmic.net:56000~ritpz23010.theomne.net:56000~ritpz23010.theomne.com:56000~ritpz23011.rithmic.com:56000~ritpz23011.rithmic.net:56000~ritpz23011.theomne.net:56000~ritpz23011.theomne.com:56000~ritpz24013.rithmic.com:56000~ritpz24013.rithmic.net:56000~ritpz24013.theomne.net:56000~ritpz24013.theomne.com:56000"
+  MML_LOC_BROK_ADDR: "ritpz04063.04.rithmic.com:64100"
+  MML_LOGGER_ADDR: "ritpz04063.04.rithmic.com:45454~ritpz01004.01.rithmic.com:45454~ritpz04063.04.rithmic.net:45454~ritpz01004.01.rithmic.net:45454~ritpz04063.04.theomne.net:45454~ritpz01004.01.theomne.net:45454~ritpz04063.04.theomne.com:45454~ritpz01004.01.theomne.com:45454"
+  MML_LOG_TYPE: "log_net"
+
+repository_login:
+  sCnnctPt: "login_agent_repositoryc"
+
+login_params:
+  # From the live "Rithmic 01" login block in the R|Trader Pro log:
+  #   Price: login_agent_tp_r01c / Order: login_agent_prodc
+  #   History: login_agent_historyc / RMS: login_agent_pnl_sslc
+  sMdCnnctPt: "login_agent_tp_r01c"
+  sTsCnnctPt: "login_agent_prodc"
+  sIhCnnctPt: "login_agent_historyc"
+  sPnlCnnctPt: "login_agent_pnl_sslc"
+
+ssl:
+  cert_file: "rithmic_ssl_cert_auth_params"
+
+sdk_paths:
+  linux_x86_64: "rithmic_gateway/RApiPlus/13.7.0.0/linux-gnu-4.18-x86_64/lib"
+  win10: "rithmic_gateway/RApiPlus/13.7.0.0/win10/lib"
+  include: "rithmic_gateway/RApiPlus/13.7.0.0/include/RApiPlus.h"

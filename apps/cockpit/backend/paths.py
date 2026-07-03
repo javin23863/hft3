@@ -117,10 +117,19 @@ LIFECYCLE_OPERATOR_RECEIPTS = _p("runtime", "lifecycle", "operator_receipts.json
 CONTROL_AUDIT_LOG = _p("runtime", "cockpit", "control_audit.jsonl")
 ALERT_STATE = _p("runtime", "cockpit", "alert_state.json")
 
+# --- esq zone (separate repo — ES futures strategy, shadow-trading phase) ---
+# esq lives outside this repo; read-only, cross-repo. A missing esq checkout
+# must render as "not found", never crash the dashboard.
+ESQ_ROOT = Path(r"C:\Users\MSI\repos\esq")
+ESQ_SHADOW_TRADES = ESQ_ROOT / "runtime" / "shadow" / "trades.jsonl"
+ESQ_SHADOW_LOG = ESQ_ROOT / "runtime" / "shadow" / "log.jsonl"
+ESQ_VALIDATION_DIR = ESQ_ROOT / "runtime" / "validation"
+
 # Directories the file-watcher monitors for live deltas.
 WATCH_DIRS = [
     _p("runtime"),
     _p("research_cards"),
+    ESQ_ROOT / "runtime",
 ]
 
 
