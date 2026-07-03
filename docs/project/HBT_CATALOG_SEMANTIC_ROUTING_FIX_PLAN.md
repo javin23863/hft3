@@ -27,6 +27,8 @@ This plan is grounded in these artifacts read during the planning pass:
 
 Working tree was dirty before this plan was written. Observed dirty paths included prior HBT/graph/runtime work. Do not reset/stash/clean without owner instruction.
 
+**Code-verification pass (2026-07-03, post-draft):** the load-bearing claims in section 1 were re-checked against source and confirmed at exact lines — `_structural_payload_signal` tanh -> BUY/SELL at `hftbacktest_only_pipeline.py:1803-1814` with side pick at `:1038`; runner flatten at `run_hftbacktest_only_campaign.py:33,163,194-195`; no semantic/execution-role columns in the manifest (`REQUIRED_ROW_FIELDS:61-89`, `_build_row:1371-1402`); `_infer_adapter_statuses` is adapter-availability introspection, not a role graph (`:1710-1717`); inventory 65 = 50 hypothesis / 11 pdf_structural / 4 reinforcement_learning. The same pass found infrastructure the draft understated; sections 4, 6.1 (Phase 1), and 6.4 (Phase 4) were corrected accordingly.
+
 ## 1. Problem statement
 
 The current HBT-only campaign correctly rejected the old VectorBT/Stage-A selector, but it overcorrected. The 2026-06-29 no-cherry-pick decision conflated two different requirements:
@@ -82,6 +84,8 @@ All 65 slugs must be covered by tests and manifest contracts.
 ## 4. Proposed execution-role taxonomy
 
 Add one central semantic contract layer, preferably extending existing registry/catalog data rather than creating a parallel taxonomy.
+
+**Reconcile with the existing router categories first.** `packages/backtest_pipeline/src/pipeline_model_router.py:12-17` already defines role frozensets — `PDF_STRUCTURAL_EVAL`, `PDF_DIAGNOSTICS`, `PDF_HYBRID_REPLAY`, `PDF_OPTIONS_FIXTURE`, `SMOKE_HYP_SAMPLE`. They are currently metadata-only and gate nothing in the HBT runner. The contract layer must absorb these sets as its source of role truth (or delete them in the same change and re-home their membership on the contract). Do not stand up a second taxonomy beside them — that is the parallel-taxonomy failure this section is meant to avoid.
 
 Suggested fields / dataclass shape:
 
@@ -236,10 +240,10 @@ packages/backtest_pipeline/src/model_execution_contracts.py
 Minimum implementation:
 
 - Load all slugs from `model_registry.yaml`.
-- Merge existing role/dependency metadata from `apps/workbench/config/model_catalog.yaml` and `apps/workbench/config/models.yaml`.
-- Pull `valid_instrument_universe` / `target_instrument_universe` from registry.
-- Pull `required_leaders_for_model()` from `replay.cross_asset_assembly`.
-- Add `required_sensors_for_model()` for VIX clue models.
+- Merge existing role/dependency metadata from `apps/workbench/config/model_catalog.yaml` (this is where `blocks_trade` lives — it is not in the registry) and `apps/workbench/config/models.yaml`.
+- Absorb the `pipeline_model_router.py` role frozensets (section 4) rather than re-deriving PDF roles.
+- Pull `valid_instrument_universe` from registry (present on all 65 slugs). `target_instrument_universe` is sparse — only 4 models carry it (`ES_MES_LEAD_LAG`, `NQ_MNQ_LEAD_LAG`, `ZN_ZB_ES_NQ_MACRO_IMPULSE`, `MICRO_CONTRACT_RETAIL_LAG`). Treat its absence as "no target constraint," not an error.
+- Reuse the existing `required_leaders_for_model()` and `required_sensors_for_model()` from `replay.cross_asset_assembly` — both already exist, and `REQUIRED_SENSORS_BY_MODEL` already lists the five VIX models. Do not re-add the requirement tables; only the enforcement/validation is missing (see Phase 4).
 - Emit fail-closed `unknown_semantic_contract` for any slug not covered.
 
 No hidden allowlist that silently drops models. Tests must assert exact coverage equals `all_slugs()`.
@@ -289,11 +293,11 @@ BOOK_PRESSURE -> hypothesis_limit_order unless an explicit primary strategy spec
 
 Update `packages/replay/cross_asset_assembly.py` or adjacent contract module:
 
-- Keep existing tests for real leader vs own-symbol placeholder.
-- Add target enforcement helpers, not only leader helpers.
-- Add VIX sensor requirements for the five VIX models.
-- Audit `ZN_ZB_ES_NQ_MACRO_IMPULSE`: current helper requires only `ZN`, while model name/registry imply ZN/ZB -> ES/NQ. Decide from spec/code whether `ZB` is required, optional, or separate clue.
-- Audit `MAX_CONTRACT_CROWDING_IN_MICROS`: name says micros, registry says broad; decide whether valid universe should be micro-only or name/description should change.
+- Keep existing tests for real leader vs own-symbol placeholder (`tests/test_cross_asset_assembly.py`: `test_own_symbol_placeholder_detected`, `test_validate_accepts_real_leader_leg`, `test_validate_rejects_missing_leader_leg`).
+- Add a target-universe enforcement helper. `default_leaders_for_target()` already exists for target->leader defaults; the missing piece is a validator that rejects a row whose symbol is outside `target_instrument_universe`, parallel to `validate_cross_asset_alignment` on the leader side.
+- Add a VIX sensor *enforcement* helper only. The requirement data already exists — `REQUIRED_SENSORS_BY_MODEL` (five VIX models) and `required_sensors_for_model()` — but no validator fails a row when the VIX sensor tape is absent. Add the validator, not the requirement table.
+- Audit `ZN_ZB_ES_NQ_MACRO_IMPULSE`: the leader dict `REQUIRED_LEADERS_BY_MODEL` requires only `("ZN",)`, while the registry `valid_instrument_universe` already lists `ZN` and `ZB` (plus ES/MES/NQ/MNQ). Decide from spec/code whether the leader dict should add `ZB` (required), keep it optional, or treat `ZB` as a separate clue. This edit is to the leader dict, not the registry universe.
+- Audit `MAX_CONTRACT_CROWDING_IN_MICROS`: name says micros, registry `valid_instrument_universe` is broad (ES/MES/NQ/MNQ/YM/MYM/RTY/M2K/CL/MCL/NG/GC/MGC/SI/HG/ZN/ZB/ZF/ZT); decide whether the valid universe should be micro-only or the name/description should change.
 
 ### Phase 5 — Parameter-surface policy
 
@@ -315,7 +319,7 @@ Required test groups:
 
 1. **Catalog coverage**
    - every slug in `all_slugs()` has a `ModelExecutionContract`;
-   - test count derives from registry, not hard-coded stale `56`;
+   - test count derives from the registry loader (`len(all_slugs()) == 65` computed, not a literal). A code-verification pass found no stale hard-coded count in `tests/backtest_pipeline/test_hftbacktest_only_campaign_manifest.py`; if any test elsewhere (router/workbench) hard-codes a model count, locate that actual site and switch it to derive from the registry — do not assume `56` exists;
    - no unknown semantic policy.
 
 2. **PDF/structural non-standalone guard**
