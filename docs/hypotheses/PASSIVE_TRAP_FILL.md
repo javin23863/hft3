@@ -17,6 +17,7 @@ signal = tanh(3*aggressor_volume_imbalance)                     # modules.py:445
 - Slot: `aggressor_volume_imbalance` only.
 - Range (-1,1); positive = BUY.
 - DEGENERATE: byte-identical math to SECOND_WAVE_CONTINUATION (tanh(3*agg_imb)). The docstring says "simulated continuous loss function representation" — this hypothesis currently duplicates HYP_1 and tests nothing distinct. Spec verdict: needs a real queue-trap formula (fill-side conditional) or retirement.
+- DEGENERACY (PR-0b cross-flag): TRAILING_DRAWDOWN_PRESSURE (modules.py:770-781) is the same formula restricted to the trend_continuation regime — see its spec; the three slugs form one degenerate family.
 
 ## 3. Falsifiable prediction
 Pre-registered (mechanical, HORIZON_MAP_PREREGISTERED.json):
