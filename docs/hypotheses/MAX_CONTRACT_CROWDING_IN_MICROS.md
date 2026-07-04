@@ -45,7 +45,7 @@ Directional claim: max-size trade imbalance predicts mid drift in the imbalance 
 | ZN | 1.07 | 1000 | 0.0021 | 0.137 | 1.137 |
 | ZT | 1.07 | 2000 | 0.0011 | 0.274 | 1.274 |
 
-Symbols in the declared universe WITHOUT an authoritative spec/fee row (CL, GC, HG, MCL, MGC, NG, SI) are fail-closed: NOT tradable and rejected at intake until instrument_specs.py/fee_model.py gain their rows (no lake data exists for them in this program either).
+Excluded from this model's universe (removed 2026-07-04): CL, MCL, NG, GC, MGC, SI, HG — no authoritative instrument_specs/fee rows (fail-closed per PR #57) and no lake data in this program.
 
 Predicted edge at H must exceed the traded symbol's total hurdle or the model is
 rejected at intake (template section 4).
@@ -53,7 +53,7 @@ rejected at intake (template section 4).
 ## 5. Classification and instrument binding
 - Class: offensive (catalog role: None; blocks_trade: False)
 - Target universe: (none declared — no target constraint; trades any valid-universe symbol)
-- Valid universe: ['ES', 'MES', 'NQ', 'MNQ', 'YM', 'MYM', 'RTY', 'M2K', 'CL', 'MCL', 'NG', 'GC', 'MGC', 'SI', 'HG', 'ZN', 'ZB', 'ZF', 'ZT']
+- Valid universe: ['ES', 'MES', 'NQ', 'MNQ', 'YM', 'MYM', 'RTY', 'M2K', 'ZN', 'ZB', 'ZF', 'ZT']
 - Required leaders: none | Required sensors: none
 - max_round_trips intent: single-shot event trade (v1 evidence: multi-trip machinery mostly idle)
 

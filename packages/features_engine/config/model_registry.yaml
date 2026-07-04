@@ -56,7 +56,7 @@ models:
       take_profit: [0.15, 0.90]
       holding_bars: [5, 45]
     recommended_horizon_bars: [10, 45]
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "CL", "MCL", "GC", "MGC"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ"]
     volatility_regime: high_volatility
     risk_metrics:
       primary: sortino
@@ -109,7 +109,7 @@ models:
     legacy_id: HYP_6
     display_name: Aggressor deceleration fade
     class: AggressorDecelerationFade
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   FORCED_LIQUIDATION_CASCADE:
     hypothesis_spec_ref: docs/hypotheses/FORCED_LIQUIDATION_CASCADE.md
@@ -118,7 +118,7 @@ models:
     legacy_id: HYP_7
     display_name: Forced liquidation cascade
     class: ForcedLiquidationCascade
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   FALSE_BREAKOUT_TRAP:
     hypothesis_spec_ref: docs/hypotheses/FALSE_BREAKOUT_TRAP.md
@@ -147,7 +147,7 @@ models:
     legacy_id: HYP_9
     display_name: Cancel storm before move
     class: CancelStormBeforeMove
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   QUEUE_DEPLETION_TRIGGER:
     hypothesis_spec_ref: docs/hypotheses/QUEUE_DEPLETION_TRIGGER.md
@@ -176,7 +176,7 @@ models:
     legacy_id: HYP_11
     display_name: Book slope collapse
     class: BookSlopeCollapse
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   ABSORPTION_FADE:
     hypothesis_spec_ref: docs/hypotheses/ABSORPTION_FADE.md
@@ -185,7 +185,7 @@ models:
     legacy_id: HYP_12
     display_name: Absorption fade
     class: AbsorptionFade
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   ICEBERG_RELOAD_DETECTION:
     hypothesis_spec_ref: docs/hypotheses/ICEBERG_RELOAD_DETECTION.md
@@ -194,7 +194,7 @@ models:
     legacy_id: HYP_13
     display_name: Iceberg/reload detection
     class: IcebergReloadDetection
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   LIQUIDITY_DEFENSE_BREAK:
     kind: hypothesis
@@ -202,7 +202,7 @@ models:
     legacy_id: HYP_14
     display_name: Liquidity defense break
     class: LiquidityDefenseBreak
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   ONE_SIDED_ADD_CANCEL_IMBALANCE:
     hypothesis_spec_ref: docs/hypotheses/ONE_SIDED_ADD_CANCEL_IMBALANCE.md
@@ -211,7 +211,7 @@ models:
     legacy_id: HYP_15
     display_name: One-sided add/cancel imbalance
     class: OneSidedAddCancelImbalance
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   ES_MES_LEAD_LAG:
     hypothesis_spec_ref: docs/hypotheses/ES_MES_LEAD_LAG.md
@@ -269,7 +269,7 @@ models:
     legacy_id: HYP_21
     display_name: Round-number stop sweep
     class: RoundNumberStopSweep
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   PRIOR_HIGH_LOW_BREAKOUT_TRAP:
     hypothesis_spec_ref: docs/hypotheses/PRIOR_HIGH_LOW_BREAKOUT_TRAP.md
@@ -278,7 +278,7 @@ models:
     legacy_id: HYP_22
     display_name: Prior high/low breakout trap
     class: PriorHighLowBreakoutTrap
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   OPENING_CANDLE_CHASE:
     kind: hypothesis
@@ -286,7 +286,7 @@ models:
     legacy_id: HYP_23
     display_name: Opening candle chase
     class: OpeningCandleChase
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   VWAP_DEFENSE_BREAK:
     hypothesis_spec_ref: docs/hypotheses/VWAP_DEFENSE_BREAK.md
@@ -295,7 +295,7 @@ models:
     legacy_id: HYP_24
     display_name: VWAP defense/break
     class: VWAPDefenseBreak
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   DOM_ILLUSION_TRAP:
     hypothesis_spec_ref: docs/hypotheses/DOM_ILLUSION_TRAP.md
@@ -304,7 +304,7 @@ models:
     legacy_id: HYP_25
     display_name: DOM illusion trap
     class: DOMIllusionTrap
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   LATE_CANDLE_ENTRY_FADE:
     kind: hypothesis
@@ -312,7 +312,7 @@ models:
     legacy_id: HYP_26
     display_name: Late candle entry fade
     class: LateCandleEntryFade
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   STOP_LOSS_CASCADE_CONTINUATION:
     hypothesis_spec_ref: docs/hypotheses/STOP_LOSS_CASCADE_CONTINUATION.md
@@ -321,7 +321,7 @@ models:
     legacy_id: HYP_27
     display_name: Stop-loss cascade continuation
     class: StopLossCascadeContinuation
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   PANIC_MARKET_ORDER_SPREAD_TAX:
     kind: hypothesis
@@ -329,7 +329,7 @@ models:
     legacy_id: HYP_28
     display_name: Panic market-order spread tax
     class: PanicMarketOrderSpreadTax
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   END_OF_DAY_FORCED_FLATTEN_FLOW:
     kind: hypothesis
@@ -337,7 +337,7 @@ models:
     legacy_id: HYP_29
     display_name: End-of-day forced flatten flow
     class: EndOfDayForcedFlatten
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   CUTOFF_PANIC_EXITS:
     kind: hypothesis
@@ -345,7 +345,7 @@ models:
     legacy_id: HYP_30
     display_name: Cutoff panic exits
     class: CutoffPanicExits
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   NO_OVERNIGHT_INVENTORY_SQUEEZE:
     kind: hypothesis
@@ -353,7 +353,7 @@ models:
     legacy_id: HYP_31
     display_name: No-overnight inventory squeeze
     class: NoOvernightInventorySqueeze
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   DAILY_LOSS_LIMIT_DEFENSE:
     kind: hypothesis
@@ -361,7 +361,7 @@ models:
     legacy_id: HYP_32
     display_name: Daily loss-limit defense
     class: DailyLossLimitDefense
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   TRAILING_DRAWDOWN_PRESSURE:
     kind: hypothesis
@@ -369,7 +369,7 @@ models:
     legacy_id: HYP_33
     display_name: Trailing drawdown pressure
     class: TrailingDrawdownPressure
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   PROFIT_LOCK_BEHAVIOR:
     kind: hypothesis
@@ -377,7 +377,7 @@ models:
     legacy_id: HYP_34
     display_name: Profit-lock behavior
     class: ProfitLockBehavior
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   MAX_CONTRACT_CROWDING_IN_MICROS:
     hypothesis_spec_ref: docs/hypotheses/MAX_CONTRACT_CROWDING_IN_MICROS.md
@@ -386,7 +386,7 @@ models:
     legacy_id: HYP_35
     display_name: Max-contract crowding in micros
     class: MaxContractCrowding
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   PROP_RESET_REOPEN_WINDOW:
     kind: hypothesis
@@ -394,7 +394,7 @@ models:
     legacy_id: HYP_36
     display_name: Prop reset/reopen window
     class: PropResetReopenWindow
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   FRIDAY_WEEKEND_DERISKING:
     kind: hypothesis
@@ -402,7 +402,7 @@ models:
     legacy_id: HYP_37
     display_name: Friday/weekend de-risking
     class: FridayWeekendDerisking
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   ECONOMIC_EVENT_RESTRICTION_FLATTENING:
     hypothesis_spec_ref: docs/hypotheses/ECONOMIC_EVENT_RESTRICTION_FLATTENING.md
@@ -411,7 +411,7 @@ models:
     legacy_id: HYP_38
     display_name: Economic-event restriction flattening
     class: EconomicEventRestrictionFlattening
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   QUOTE_PULL_BEFORE_VOLATILITY:
     kind: hypothesis
@@ -419,7 +419,7 @@ models:
     legacy_id: HYP_39
     display_name: Quote pull before volatility
     class: QuotePullBeforeVolatility
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   REQUOTE_RACE_AFTER_SHOCK:
     kind: hypothesis
@@ -427,7 +427,7 @@ models:
     legacy_id: HYP_40
     display_name: Re-quote race after shock
     class: RequoteRaceAfterShock
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   THIN_BOOK_CONTINUATION:
     hypothesis_spec_ref: docs/hypotheses/THIN_BOOK_CONTINUATION.md
@@ -436,7 +436,7 @@ models:
     legacy_id: HYP_41
     display_name: Thin-book continuation
     class: ThinBookContinuation
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   PASSIVE_TRAP_FILL:
     hypothesis_spec_ref: docs/hypotheses/PASSIVE_TRAP_FILL.md
@@ -445,7 +445,7 @@ models:
     legacy_id: HYP_42
     display_name: Passive trap fill
     class: PassiveTrapFill
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   REBATE_TRAP_AVOIDANCE:
     kind: hypothesis
@@ -453,7 +453,7 @@ models:
     legacy_id: HYP_43
     display_name: Rebate trap avoidance
     class: RebateTrapAvoidance
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   SPREAD_REGIME_CHANGE:
     kind: hypothesis
@@ -461,7 +461,7 @@ models:
     legacy_id: HYP_44
     display_name: Spread regime change
     class: SpreadRegimeChange
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   GHOST_ROUTE:
     kind: hypothesis
@@ -469,7 +469,7 @@ models:
     legacy_id: HYP_45
     display_name: Ghost Route MBO queue-decay
     class: GhostRoute
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_SPIKE_EVENT_FADE:
     hypothesis_spec_ref: docs/hypotheses/VIX_SPIKE_EVENT_FADE.md
@@ -478,7 +478,7 @@ models:
     legacy_id: HYP_46
     display_name: VIX spike event fade
     class: VixSpikeEventFade
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_QUOTE_PULL_LIQUIDITY_VACUUM:
     kind: hypothesis
@@ -486,7 +486,7 @@ models:
     legacy_id: HYP_47
     display_name: VIX quote-pull liquidity vacuum
     class: VixQuotePullLiquidityVacuum
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_IMPLIED_REALIZED_GAP:
     hypothesis_spec_ref: docs/hypotheses/VIX_IMPLIED_REALIZED_GAP.md
@@ -495,7 +495,7 @@ models:
     legacy_id: HYP_48
     display_name: VIX implied-realized vol gap
     class: VixImpliedRealizedGap
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_DEPTH_IMBALANCE_DIRECTION:
     hypothesis_spec_ref: docs/hypotheses/VIX_DEPTH_IMBALANCE_DIRECTION.md
@@ -504,7 +504,7 @@ models:
     legacy_id: HYP_49
     display_name: VIX depth imbalance direction
     class: VixDepthImbalanceDirection
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_LEVEL_CONDITIONED_CONTINUATION:
     hypothesis_spec_ref: docs/hypotheses/VIX_LEVEL_CONDITIONED_CONTINUATION.md
@@ -513,7 +513,7 @@ models:
     legacy_id: HYP_50
     display_name: VIX level-conditioned continuation
     class: VixLevelConditionedContinuation
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   BOOK_PRESSURE:
     kind: pdf_structural
@@ -527,7 +527,7 @@ models:
       take_profit: [0.05, 0.45]
       holding_bars: [1, 20]
     recommended_horizon_bars: [1, 20]
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "ZN", "ZB", "CL", "GC"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "ZN", "ZB"]
     volatility_regime: any
     risk_metrics:
       primary: sharpe
@@ -538,21 +538,21 @@ models:
     legacy_id: PDF_MODEL_2
     display_name: Cross-Asset Lead-Lag
     class: CrossAssetLeadLagModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   VPIN_TOXICITY:
     kind: pdf_structural
     legacy_id: PDF_MODEL_3
     display_name: VPIN Flow Toxicity
     class: VPINToxicityModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   HYBRID_EXECUTION:
     kind: pdf_structural
     legacy_id: PDF_MODEL_4
     display_name: Hybrid Defensive Execution
     class: HybridExecutionModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   DEALER_HEDGING:
     kind: pdf_structural
@@ -580,28 +580,28 @@ models:
     legacy_id: PDF_MODEL_8
     display_name: Transfer Entropy Lead-Lag
     class: TransferEntropyModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   QUANTUM_SPREAD_DEFENSE:
     kind: pdf_structural
     legacy_id: PDF_MODEL_9
     display_name: Quantum Spread Defense
     class: QuantumSpreadDefenseModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   STOCHASTIC_THERMO:
     kind: pdf_structural
     legacy_id: PDF_MODEL_10
     display_name: Stochastic Thermodynamics
     class: StochasticThermoModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   HAWKES_TOXIC_FLOW:
     kind: pdf_structural
     legacy_id: PDF_MODEL_11
     display_name: Hawkes Toxic Flow Detection
     class: HawkesToxicFlowModel
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   RL_EXECUTION_POLICY:
     kind: reinforcement_learning
@@ -616,7 +616,7 @@ models:
     source_family: microstructure_policy_rows
     action_space: ["hold", "enter_long", "enter_short"]
     promotion_status: blocked_downstream_validation_required
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
     authority_refs:
       - "docs/project/REINFORCEMENT_LEARNING_IMPLEMENTATION_PLAN.md"
       - "packages/research_pipeline/rl_agents.py"
@@ -679,7 +679,7 @@ models:
     source_family: interactive_replay_simulation
     action_space: ["hold", "enter_long", "enter_short"]
     promotion_status: blocked_downstream_validation_required
-    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
+    valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
     authority_refs:
       - "docs/project/REINFORCEMENT_LEARNING_IMPLEMENTATION_PLAN.md"
       - "vault:library/papers/rl-training-source-map-2026-06-25.md"
