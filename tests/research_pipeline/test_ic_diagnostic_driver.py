@@ -72,7 +72,23 @@ def _write_synthetic_tape(path: Path, *, n_rows: int = 240, base_ts: int = 1_000
 def _event_contract_via_pipeline():
     from tests.backtest_pipeline.test_hftbacktest_only_pipeline import _event_contract
 
-    return _event_contract()
+    dtype, constants = _event_contract()
+    # The backtest-test contract hand-rolls flag bits (BUY=1<<10, SELL=1<<11,
+    # EXCH=1<<8, LOCAL=1<<9) that do NOT match hftbacktest.types (BUY=1<<29,
+    # SELL=1<<28, EXCH=1<<31, LOCAL=1<<30) — npz_feed._event_side masks with
+    # the REAL flags, so tapes written with the hand-rolled bits decode as
+    # all-bid and never form a two-sided book (mid stays 0.0). Overlay the
+    # real values so synthetic research tapes exercise a live book.
+    from hftbacktest.types import BUY_EVENT, EXCH_EVENT, LOCAL_EVENT, SELL_EVENT
+
+    constants = dict(constants)
+    constants.update({
+        "BUY_EVENT": int(BUY_EVENT),
+        "SELL_EVENT": int(SELL_EVENT),
+        "EXCH_EVENT": int(EXCH_EVENT),
+        "LOCAL_EVENT": int(LOCAL_EVENT),
+    })
+    return dtype, constants
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +183,44 @@ def test_multi_adapter_single_pass_parity(tmp_path: Path) -> None:
         want = ref["primary_signal"].to_numpy(dtype=np.float64)
         assert len(got) == len(want)
         np.testing.assert_allclose(got, want, rtol=0, atol=1e-12)
+
+
+def test_one_sided_book_rows_masked(tmp_path: Path) -> None:
+    # First box run: one-sided books during event windows produced garbage
+    # mids ("edges" of hundreds of ticks at 15s). Rows before the book has
+    # both sides must carry NaN mid/spread, not fake values.
+    driver = _load_driver()
+    dtype, constants = _event_contract_via_pipeline()
+    rows = []
+    base_ts = 1_000_000_000
+    # 30 bid-only adds (one-sided book), then two-sided from row 30 on.
+    for i in range(60):
+        ts = base_ts + i * 100_000_000
+        if i < 30 or i % 2 == 0:
+            ev = constants["ADD_ORDER_EVENT"] | constants["BUY_EVENT"]
+            px = 5000.0
+        else:
+            ev = constants["ADD_ORDER_EVENT"] | constants["SELL_EVENT"]
+            px = 5000.25
+        rows.append((ev | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+                     ts, ts + 100, px, 1.0, 1000 + i, 0, 0.0))
+    events = np.zeros(len(rows), dtype=dtype)
+    for idx, row in enumerate(rows):
+        for field, value in zip(("ev", "exch_ts", "local_ts", "px", "qty", "order_id", "ival", "fval"), row):
+            events[idx][field] = value
+    np.savez_compressed(tmp_path / "one_sided.npz", data=events, timestamp_units="nanoseconds")
+
+    unit = {"source_npz": str(tmp_path / "one_sided.npz"), "symbol": "MES.v.0",
+            "event_id": "CORE_CPI_2021_05_12_TIGHT", "sensor_feature_npz": {}}
+    frame, _ = driver._extract_signal_frame(unit, ["SECOND_WAVE_CONTINUATION"])
+    mid = frame["mid_price"].to_numpy(dtype=np.float64)
+    spread = frame["spread_ticks"].to_numpy(dtype=np.float64)
+    # the one-sided prefix must be masked...
+    assert np.isnan(mid[:25]).all()
+    assert np.isnan(spread[:25]).all()
+    # ...and the two-sided tail must be real (1-tick spread)
+    assert np.isfinite(mid[-10:]).all()
+    np.testing.assert_allclose(spread[-10:], 1.0)
 
 
 # ---------------------------------------------------------------------------

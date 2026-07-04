@@ -224,8 +224,17 @@ def _extract_signal_frame(
             state.cross_asset_features["VIX"] = sensor_features
         feats = state.primary_features
         records["timestamp_ns"].append(int(event.timestamp_ns))
-        records["mid_price"].append(float(feats.get("mid_price", float("nan"))))
-        records["spread_ticks"].append(float(feats.get("spread", float("nan"))) / tick_size)
+        # Two-sided-book sanity gate: MBOFeatureExtractor emits spread=0.0
+        # when either side is empty (bb<=0 or ba=inf), and the mid on a
+        # one-sided book is garbage — event windows produced "edges" of
+        # hundreds of ticks at 15s in the first box run. Invalid rows keep
+        # their timestamp (monotonicity) but carry NaN mid/spread so every
+        # forward return touching them is NaN and drops from inference.
+        _mid = float(feats.get("mid_price", float("nan")))
+        _spr = float(feats.get("spread", float("nan")))
+        _book_ok = math.isfinite(_mid) and math.isfinite(_spr) and _spr > 0.0
+        records["mid_price"].append(_mid if _book_ok else float("nan"))
+        records["spread_ticks"].append(_spr / tick_size if _book_ok else float("nan"))
         records["realized_vol_state"].append(float(feats.get("realized_vol_state", float("nan"))))
         for mid_id, adapter in adapters:
             try:
