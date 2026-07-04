@@ -1028,3 +1028,50 @@ def test_campaign_summary_and_receipts_name_backend_requirement(tmp_path: Path, 
             workers=1,
             required_feature_backend="cppp",
         )
+
+
+def test_resume_never_reuses_cached_receipt_for_blocked_row(tmp_path: Path, monkeypatch) -> None:
+    # Cache-poisoning guard (no-cherry-pick v2): a row that the CURRENT
+    # manifest blocks (e.g. semantic_blocker) must never return a stale
+    # "completed" receipt cached by an older-semantics run — the blocked
+    # receipt is rewritten from the current row instead.
+    _install_fake_hftbacktest()
+    module = _load_runner_module()
+    row = _campaign_row(
+        tmp_path,
+        blocker_code="semantic_blocker:diagnostic_only",
+    )
+    manifest = tmp_path / "campaign.jsonl"
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    out_root = tmp_path / "runs"
+    stale_receipt = {
+        "status": "completed",
+        "blocker_code": "",
+        "strategy_id": "hypothesis_limit_order",
+        "strategy_surface_version": module.MODEL_SPECIFIC_STRATEGY_SURFACE_VERSION,
+        "data_contract_version": module.HBT_DATA_CONTRACT_VERSION,
+        "economics_stamp": module._economics_stamp(None, None, "cpp"),
+        "dry_run": False,
+        "canonical_model_id": row["canonical_model_id"],
+    }
+    stale_dir = out_root / "hbt_campaign_test" / "unit_blocked"
+    stale_dir.mkdir(parents=True)
+    (stale_dir / "campaign_row_result.json").write_text(
+        json.dumps(stale_receipt), encoding="utf-8"
+    )
+
+    summary = module.run_campaign(
+        manifest_path=manifest,
+        out_root=out_root,
+        dry_run=False,
+        workers=1,
+        resume=True,
+        required_feature_backend="cpp",
+    )
+
+    assert summary["status_counts"] == {"blocked_before_hbt": 1}
+    receipt = json.loads(
+        (stale_dir / "campaign_row_result.json").read_text(encoding="utf-8")
+    )
+    assert receipt["status"] == "blocked_before_hbt"
+    assert receipt["blocker_code"] == "semantic_blocker:diagnostic_only"

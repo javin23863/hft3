@@ -497,6 +497,15 @@ def run_hftbacktest_only(
     """Run the active HftBacktest-only slice and write plan-shaped artifacts."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Fail-closed semantic guard (no-cherry-pick v2). The standalone order
+    # runner must never convert a non-standalone model (defensive / context /
+    # structural / options / RL) into a BUY/SELL — e.g. HawkesToxicFlow's
+    # reservation_price_skew. The campaign runner already skips semantic-blocked
+    # rows before this call; this is defense-in-depth for any direct invocation.
+    semantic_reasons = _semantic_guard_reasons(config)
+    if semantic_reasons:
+        _write_audit(out_dir, "semantic_blocker", semantic_reasons)
+        return _result(config, out_dir, "semantic_blocker", semantic_reasons)
     config, instrument_resolution, instrument_reasons = resolve_instrument_execution(config)
     manifest = config.run_manifest()
     manifest["instrument_resolution"] = instrument_resolution
@@ -1152,8 +1161,11 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         reasons.append("exit_order_response_failed")
     if submitted and not order_snapshot:
         reasons.append("order_state_missing")
-    gross_pnl = _float_field(final_state, "balance") + _float_field(final_state, "fee")
-    net_pnl = _float_field(final_state, "balance")
+    # The engine account balance marks residual open inventory at a settlement
+    # price that is frequently wrong (phantom +/-$100k on tapes that end
+    # non-flat) — kept only for audit. Reported gross_pnl/net_pnl are computed
+    # below from realized closed-trip PnL plus residual marked to the true mid.
+    engine_balance_raw = _float_field(final_state, "balance")
     fills_count = len(fills)
     orders_intended = 1
     # Entry counters: recorded round trips each carried one accepted entry;
@@ -1192,20 +1204,43 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     realized_closed_trade_pnl = None
     unrealized_pnl_marked_to_mid: float | None = None
     residual_position = direction * (last_recorded_exec_qty - last_exit_exec_qty)
+    # Mark any residual open inventory to the last observed two-sided mid — the
+    # only honest valuation of an unclosed position. Done unconditionally (not
+    # gated on exit_leg_enabled) so reported PnL never inherits the engine's
+    # broken settlement mark.
+    if abs(residual_position) > 1e-12:
+        if last_mid is not None and entry_avg_price:
+            unrealized_pnl_marked_to_mid = (
+                (last_mid - entry_avg_price) * residual_position * contract_multiplier
+            )
+        else:
+            unrealized_pnl_marked_to_mid = None
+    else:
+        unrealized_pnl_marked_to_mid = 0.0
     if exit_leg_enabled:
         if closed_quantity_total > 0:
             realized_closed_trade_pnl = gross_realized_total - total_fees_currency
         elif submitted and last_recorded_exec_qty <= 0:
             realized_closed_trade_pnl = 0.0 - total_fees_currency if total_fees_currency else 0.0
-        if abs(residual_position) > 1e-12:
-            if last_mid is not None and entry_avg_price:
-                unrealized_pnl_marked_to_mid = (
-                    (last_mid - entry_avg_price) * residual_position * contract_multiplier
-                )
-            else:
-                unrealized_pnl_marked_to_mid = None
-        else:
-            unrealized_pnl_marked_to_mid = 0.0
+
+    if exit_leg_enabled:
+        # Honest reported PnL: realized closed-trip PnL plus residual
+        # inventory marked to the true mid, minus fees. Never the engine
+        # balance, which marks residual at a broken settlement price.
+        residual_mark = (
+            unrealized_pnl_marked_to_mid
+            if unrealized_pnl_marked_to_mid is not None
+            else 0.0
+        )
+        gross_pnl = gross_realized_total + residual_mark
+        net_pnl = gross_pnl - total_fees_currency
+    else:
+        # Legacy v2 semantics (exit leg off): the engine cash balance is
+        # the reported metric. The residual mark is informational only.
+        gross_pnl = engine_balance_raw + total_fees_currency
+        net_pnl = engine_balance_raw
+    residual_unmarked = bool(abs(residual_position) > 1e-12 and unrealized_pnl_marked_to_mid is None)
+
     exit_leg_observation = (
         "exit_leg_unfilled_residual_position"
         if exit_leg_enabled and exit_submitted and last_exit_exec_qty < last_recorded_exec_qty - 1e-12
@@ -1239,6 +1274,8 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "closed_quantity_total": closed_quantity_total,
         "realized_closed_trade_pnl": realized_closed_trade_pnl,
         "unrealized_pnl_marked_to_mid": unrealized_pnl_marked_to_mid,
+        "residual_unmarked": residual_unmarked,
+        "engine_balance_raw": engine_balance_raw,
         "mark_mid": last_mid,
         "end_position": _float_field(final_state, "position"),
         "max_inventory_excursion": max_abs_position,
@@ -2107,7 +2144,46 @@ def _write_optional_parquet(path: Path, rows: Any) -> None:
         )
 
 
+def _semantic_guard_reasons(config: HftBacktestOnlyRunConfig) -> list[str]:
+    """Reasons a non-standalone model must not run the standalone order strategy.
+
+    Only the ``hypothesis_limit_order`` standalone surface is guarded here;
+    composition/other strategies are out of scope. Fail-closed on unknown
+    slugs (Greptile P1, PR #73): the manifest's registry-aware path classifies
+    from the CALLER's registry, so a slug absent from the canonical registry
+    could otherwise reach a standalone run with zero semantic check.
+    """
+    if config.strategy_id != "hypothesis_limit_order":
+        return []
+    from backtest_pipeline.src.model_execution_contracts import model_execution_contract
+
+    try:
+        contract = model_execution_contract(config.canonical_model_id)
+    except KeyError:
+        # Unknown to the canonical registry: never runnable standalone.
+        # Any other exception propagates — a broken contract layer must fail
+        # loudly (runner_failed receipt), never silently skip the guard.
+        return [
+            "semantic_blocker:unknown_semantic_contract:"
+            f"{config.canonical_model_id}"
+        ]
+    if contract.is_standalone_alpha:
+        return []
+    # Only block a model that would OTHERWISE run standalone. A missing adapter
+    # is reported by the adapter check with its own pipeline_blocker code, so
+    # the semantic verdict does not mask it (mirrors the manifest precedence).
+    if uniform_hbt_order_adapter_status(config.canonical_model_id) != "available":
+        return []
+    return [
+        "semantic_blocker:not_standalone_role:"
+        f"{contract.execution_role}:{contract.standalone_hbt_policy}"
+    ]
+
+
 def _blocked_run_status(reasons: list[str]) -> str:
+    for reason in reasons:
+        if reason.startswith("semantic_blocker:"):
+            return "semantic_blocker"
     for reason in reasons:
         if reason.startswith("pipeline_blocker:"):
             return "pipeline_blocker"

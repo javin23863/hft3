@@ -23,6 +23,8 @@ from replay.cross_asset_assembly import (
     required_sensors_for_model,
 )
 
+from backtest_pipeline.src.model_execution_contracts import contract_for
+
 from hft3.hbt_parameter_sets import (
     HBT_PARAMETER_SET_PRE_HBT_STATUS as _PRE_HBT_PROPOSAL_STATUS,
     HBT_PARAMETER_SET_SCHEMA_VERSION as HBT_SELF_LEARNING_PARAMETER_SET_SCHEMA_VERSION,
@@ -83,6 +85,9 @@ REQUIRED_ROW_FIELDS = (
     "blocker_detail",
     "authority_refs",
     "adapter_status",
+    "execution_role",
+    "standalone_hbt_policy",
+    "target_instrument_universe",
     "hbt_run_status",
     "hbt_run_id",
     "promotion_decision_path",
@@ -1130,6 +1135,7 @@ def _iter_campaign_rows_from_inputs(
                 prepared=prepared,
                 adapter_status=adapter_status,
                 authority_refs=tuple(inputs["authority_refs"]),
+                registry_entry=entry,
                 leader_units=leader_units,
                 sensor_units=sensor_units,
             )
@@ -1227,6 +1233,13 @@ def _build_parameter_surface_row(
         "objective_evaluations": parameter_set["objective_evaluations"],
         "optimizer_claim": parameter_set["optimizer_claim"],
         "adapter_status": campaign_row["adapter_status"],
+        "execution_role": campaign_row.get("execution_role", "unknown"),
+        "standalone_hbt_policy": campaign_row.get(
+            "standalone_hbt_policy", "unknown_semantic_contract"
+        ),
+        "target_instrument_universe": list(
+            campaign_row.get("target_instrument_universe") or []
+        ),
         "admissibility_status": campaign_row["admissibility_status"],
         "blocker_code": campaign_row["blocker_code"],
         "blocker_detail": campaign_row["blocker_detail"],
@@ -1248,6 +1261,7 @@ def _build_row(
     prepared: Mapping[str, Any],
     adapter_status: str,
     authority_refs: tuple[str, ...],
+    registry_entry: Mapping[str, Any] | None = None,
     leader_units: Mapping[tuple[str, str], str] | None = None,
     sensor_units: Mapping[str, Mapping[str, str]] | None = None,
 ) -> dict[str, Any]:
@@ -1267,6 +1281,22 @@ def _build_row(
     )
     if blocker_code and prepared.get("blocker_detail"):
         blocker_details.append(str(prepared.get("blocker_detail")))
+
+    # Resolve the semantic execution contract (no-cherry-pick v2) for the row
+    # columns. The blocking decision is applied lower down, only when the row is
+    # otherwise admissible, so genuine data/adapter/authority blockers keep
+    # their specific codes and the semantic gate catches exactly the slugs that
+    # would otherwise have run standalone.
+    execution_role = "unknown"
+    standalone_hbt_policy = "unknown_semantic_contract"
+    target_instrument_universe: list[str] = []
+    try:
+        _contract = contract_for(canonical_model_id, registry_entry=registry_entry)
+        execution_role = _contract.execution_role
+        standalone_hbt_policy = _contract.standalone_hbt_policy
+        target_instrument_universe = list(_contract.target_instrument_universe)
+    except KeyError:
+        _contract = None
 
     if not blocker_code and not source_exists:
         blocker_code = "data_blocker:source_npz_missing"
@@ -1341,6 +1371,48 @@ def _build_row(
                     "pipeline_blocker:sensor_tape_missing:" + "+".join(missing_sensors)
                 )
 
+    # Semantic execution gate (no-cherry-pick v2). Applied only when the row is
+    # otherwise admissible: a slug that is not a standalone order strategy is
+    # blocked with an honest semantic receipt so it is ledgered but never
+    # flattened into the standalone PnL bucket. Genuine data/adapter/authority/
+    # leader/sensor blockers above keep their more specific codes.
+    if not blocker_code:
+        if _contract is None:
+            blocker_code = "semantic_blocker:unknown_semantic_contract"
+            blocker_details.append(f"canonical_model_id={canonical_model_id}")
+        elif not _contract.is_standalone_alpha:
+            if _contract.blocks_trade:
+                blocker_code = "semantic_blocker:defensive_veto_not_standalone"
+            elif _contract.standalone_hbt_policy == "composition_only":
+                blocker_code = "semantic_blocker:composition_only_not_standalone"
+            elif _contract.standalone_hbt_policy == "diagnostic_only":
+                blocker_code = "semantic_blocker:diagnostic_only"
+            else:
+                blocker_code = "semantic_blocker:not_standalone_role"
+            blocker_details.append(
+                f"execution_role={execution_role}; "
+                f"standalone_hbt_policy={standalone_hbt_policy}"
+            )
+        else:
+            _row_symbol = str(prepared.get("symbol") or "").split(".")[0].strip().upper()
+            _valid = {v.strip().upper() for v in _contract.valid_instrument_universe}
+            _targets = {t.strip().upper() for t in target_instrument_universe}
+            if _row_symbol and _targets and _row_symbol not in _targets:
+                blocker_code = "semantic_blocker:target_instrument_mismatch"
+                blocker_details.append(
+                    f"symbol={_row_symbol} not_in "
+                    f"target_instrument_universe={sorted(_targets)}"
+                )
+            elif _row_symbol and _valid and _row_symbol not in _valid:
+                # Plan Phase 2: a standalone model may only queue on products
+                # inside its declared valid universe (Greptile P1 on PR #73 —
+                # previously only the target constraint was enforced).
+                blocker_code = "semantic_blocker:invalid_instrument_for_model"
+                blocker_details.append(
+                    f"symbol={_row_symbol} not_in "
+                    f"valid_instrument_universe={sorted(_valid)}"
+                )
+
     if blocker_code:
         admissibility_status = blocker_code.split(":", 1)[0]
 
@@ -1394,6 +1466,9 @@ def _build_row(
         "blocker_detail": "; ".join(blocker_details),
         "authority_refs": list(combined_authority_refs),
         "adapter_status": adapter_status,
+        "execution_role": execution_role,
+        "standalone_hbt_policy": standalone_hbt_policy,
+        "target_instrument_universe": target_instrument_universe,
         "cross_asset_npz": cross_asset_npz,
         "sensor_feature_npz": sensor_feature_npz,
         "hbt_run_status": "not_started",
