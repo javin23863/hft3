@@ -69,6 +69,49 @@ def _write_synthetic_tape(path: Path, *, n_rows: int = 240, base_ts: int = 1_000
     return path
 
 
+def _write_leader_tape(
+    path: Path,
+    *,
+    base_ts: int = 1_000_000_000,
+    n_rows: int = 240,
+    flip_agg_at_ts: int | None = None,
+) -> Path:
+    """Two-sided leader book + heavy one-directional aggressor trades.
+
+    Trades carry SELL_EVENT (resting side = ask) which npz_feed decodes as
+    side 'A' = BUY-aggressor flow, so leader aggressor_volume_imbalance sits
+    near +1 — far from the target tape's unflagged (side 'B' = sell-aggressor)
+    trades. After flip_agg_at_ts the aggressor side flips, so leader features
+    demonstrably change over time (used by the PIT test).
+    """
+    dtype, constants = _event_contract_via_pipeline()
+    rows = []
+    px = 5000.0
+    order_id = 9000
+    for i in range(n_rows):
+        ts = base_ts + i * 100_000_000
+        side_buy = i % 2 == 0
+        ev = constants["ADD_ORDER_EVENT"] | (
+            constants["BUY_EVENT"] if side_buy else constants["SELL_EVENT"]
+        )
+        # deep resting size (10) vs small prints (1): trades consume book
+        # liquidity, and fully-eaten levels would one-side the leader book
+        # and (correctly) trip the two-sided sanity gate on every other row.
+        rows.append((ev | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+                     ts, ts + 100, px if side_buy else px + 0.25, 10.0, order_id, 0, 0.0))
+        order_id += 1
+        agg = "SELL_EVENT" if flip_agg_at_ts is None or ts <= flip_agg_at_ts else "BUY_EVENT"
+        rows.append((constants["TRADE_EVENT"] | constants[agg]
+                     | constants["EXCH_EVENT"] | constants["LOCAL_EVENT"],
+                     ts + 50, ts + 150, px + 0.25, 1.0, order_id - 1, 0, 0.0))
+    events = np.zeros(len(rows), dtype=dtype)
+    for idx, row in enumerate(rows):
+        for field, value in zip(("ev", "exch_ts", "local_ts", "px", "qty", "order_id", "ival", "fval"), row):
+            events[idx][field] = value
+    np.savez_compressed(path, data=events, timestamp_units="nanoseconds")
+    return path
+
+
 def _event_contract_via_pipeline():
     from tests.backtest_pipeline.test_hftbacktest_only_pipeline import _event_contract
 
@@ -221,6 +264,113 @@ def test_one_sided_book_rows_masked(tmp_path: Path) -> None:
     # ...and the two-sided tail must be real (1-tick spread)
     assert np.isfinite(mid[-10:]).all()
     np.testing.assert_allclose(spread[-10:], 1.0)
+
+
+# ---------------------------------------------------------------------------
+# Leader legs (cross-asset lead-lag)
+# ---------------------------------------------------------------------------
+
+def test_leader_tape_feeds_lead_lag_signals(tmp_path: Path) -> None:
+    # Leader tape supplied -> ES_MES_LEAD_LAG sees a real ES leg and emits
+    # nonzero signals; leader absent -> the adapter abstains at exactly 0.0.
+    driver = _load_driver()
+    base = 1_000_000_000
+    target = _write_synthetic_tape(tmp_path / "target.npz", base_ts=base)
+    # leader leads the target by 500ms (its flow exists before each target ts)
+    leader = _write_leader_tape(tmp_path / "leader.npz", base_ts=base - 500_000_000)
+
+    unit = {"source_npz": str(target), "symbol": "MES.v.0",
+            "event_id": "CORE_CPI_2021_05_12_TIGHT", "sensor_feature_npz": {}}
+    frame0, _ = driver._extract_signal_frame(unit, ["ES_MES_LEAD_LAG"])
+    sig0 = frame0["sig__ES_MES_LEAD_LAG"].to_numpy(dtype=np.float64)
+    assert np.nansum(np.abs(sig0)) == 0.0  # abstain path intact
+
+    unit_l = dict(unit, leader_npz={"ES": str(leader)})
+    frame1, _ = driver._extract_signal_frame(unit_l, ["ES_MES_LEAD_LAG"])
+    sig1 = frame1["sig__ES_MES_LEAD_LAG"].to_numpy(dtype=np.float64)
+    assert len(sig1) == len(sig0)
+    # buy-aggressor leader vs sell-aggressor target -> strong positive signal
+    nonzero = np.abs(np.nan_to_num(sig1)) > 0.0
+    assert nonzero.sum() > len(sig1) * 0.5
+
+
+def test_leader_features_are_point_in_time(tmp_path: Path) -> None:
+    # Truncating the leader tape at ts=cut must not change any signal at
+    # target rows with ts <= cut: leader features never read future leader
+    # events. Rows after the cut MUST differ (the flipped aggressor flow is
+    # actually consumed), so the equality half is non-vacuous.
+    driver = _load_driver()
+    base = 1_000_000_000
+    cut = base + 12_000_000_000  # halfway through the 24s tape
+    target = _write_synthetic_tape(tmp_path / "target.npz", base_ts=base)
+    leader_full = _write_leader_tape(
+        tmp_path / "leader_full.npz", base_ts=base - 500_000_000, flip_agg_at_ts=cut)
+    with np.load(tmp_path / "leader_full.npz") as arch:
+        raw = arch["data"]
+    np.savez_compressed(tmp_path / "leader_trunc.npz",
+                        data=raw[raw["local_ts"] <= cut],
+                        timestamp_units="nanoseconds")
+
+    unit = {"source_npz": str(target), "symbol": "MES.v.0",
+            "event_id": "CORE_CPI_2021_05_12_TIGHT", "sensor_feature_npz": {}}
+    f_full, _ = driver._extract_signal_frame(
+        dict(unit, leader_npz={"ES": str(leader_full)}), ["ES_MES_LEAD_LAG"])
+    f_trunc, _ = driver._extract_signal_frame(
+        dict(unit, leader_npz={"ES": str(tmp_path / "leader_trunc.npz")}),
+        ["ES_MES_LEAD_LAG"])
+
+    ts = f_full["timestamp_ns"].to_numpy(dtype=np.int64)
+    s_full = f_full["sig__ES_MES_LEAD_LAG"].to_numpy(dtype=np.float64)
+    s_trunc = f_trunc["sig__ES_MES_LEAD_LAG"].to_numpy(dtype=np.float64)
+    pre = ts <= cut
+    assert pre.any() and (~pre).any()
+    np.testing.assert_array_equal(s_full[pre], s_trunc[pre])
+    assert not np.array_equal(s_full[~pre], s_trunc[~pre])
+
+
+def test_unreadable_leader_tape_skips_unit_with_receipt(tmp_path: Path) -> None:
+    # Leader tape exists but is corrupt (known tape error) -> unit-level skip
+    # receipt, never a silent leader-absent masquerade.
+    driver = _load_driver()
+    target = _write_synthetic_tape(tmp_path / "target.npz")
+    bad = tmp_path / "ES.v.0_CORE_CPI_2021_05_12_TIGHT_mbo.npz"
+    bad.write_bytes(b"PK\x03\x04" + b"\x00" * 64)  # zip magic, corrupt body
+    unit = {"source_npz": str(target), "symbol": "MES.v.0",
+            "event_id": "CORE_CPI_2021_05_12_TIGHT", "year": 2021,
+            "sensor_feature_npz": {}, "leader_npz": {"ES": str(bad)}}
+    res = driver._process_unit(
+        (unit, ["ES_MES_LEAD_LAG"], {"ES_MES_LEAD_LAG": {"horizon_ms": 15000, "threshold": 0.1}}))
+    assert res["skipped"] == "leader_tape_load_failed:BadZipFile"
+    assert res["models"] == {}
+
+
+def test_missing_leader_tape_keeps_no_verdict_receipt(tmp_path: Path) -> None:
+    # --leader-lake-root given but no tape for the event -> the model keeps
+    # its honest no_verdict receipt and coverage counts the gap per model.
+    driver = _load_driver()
+    tape = _write_synthetic_tape(tmp_path / "tape.npz")
+    manifest = tmp_path / "m.jsonl"
+    manifest.write_text(
+        json.dumps({"source_npz": str(tape), "symbol": "MES.v.0",
+                    "event_id": "CORE_CPI_2021_05_12_TIGHT"}) + "\n",
+        encoding="utf-8",
+    )
+    empty_lake = tmp_path / "lake"
+    empty_lake.mkdir()
+    out = tmp_path / "out"
+    rc = driver.main([
+        "--campaign-manifest", str(manifest),
+        "--out-dir", str(out),
+        "--workers", "1",
+        "--leader-lake-root", str(empty_lake),
+    ])
+    assert rc == 0
+    report = json.loads((out / "ic_report.json").read_text(encoding="utf-8"))
+    kill = json.loads((out / "kill_list.json").read_text(encoding="utf-8"))
+    assert kill["models"]["ES_MES_LEAD_LAG"]["verdict"] == "no_verdict_leader_features_absent"
+    cov = report["leader_coverage"]["ES_MES_LEAD_LAG"]
+    assert cov == {"required_leaders": ["ES"], "units_with_leader": 0,
+                   "units_without_leader": 1}
 
 
 # ---------------------------------------------------------------------------
