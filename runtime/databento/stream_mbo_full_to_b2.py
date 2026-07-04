@@ -234,6 +234,8 @@ def main() -> int:
     )
 
     uploaded = skipped = empty = failed = 0
+    consecutive_failures = 0
+    max_consecutive_failures = 3
     for w_start, w_end in windows:
         if args.chunk == "week":
             remote = _remote_weekly(remote_root, w_start)
@@ -279,9 +281,18 @@ def main() -> int:
                 skipped += 1
             else:
                 empty += 1
+            consecutive_failures = 0
         except Exception as exc:
             failed += 1
+            consecutive_failures += 1
             logging.exception("FAIL %s: %s", tag, exc)
+            if consecutive_failures >= max_consecutive_failures:
+                logging.error(
+                    "ABORT: %d consecutive failures (auth/account issue?) — "
+                    "stopping instead of hammering the API",
+                    consecutive_failures,
+                )
+                break
 
     logging.info(
         "done uploaded=%d skipped=%d empty=%d failed=%d", uploaded, skipped, empty, failed
