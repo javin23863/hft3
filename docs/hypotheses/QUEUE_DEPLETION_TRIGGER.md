@@ -26,7 +26,7 @@ E[ mid(t + H) - mid(t) | signal(t) > s ] > hurdle
 H = 1000 ms, s = 0.03
 ```
 
-Directional claim: differential queue depletion predicts mid moving toward the depleting side over 15s. REFUTED if the spread-adjusted conditional expectancy E[sign(signal)*(mid(t+H)-mid(t)) - taker spread cost | |signal|>s] fails to exceed the section-4 hurdle on Confirmation years (2021-2022) at BH-corrected q=0.10 over >=40 events (errors two-way clustered by event x calendar month).
+Directional claim: differential queue depletion predicts mid moving toward the depleting side over 1s. REFUTED if the spread-adjusted conditional expectancy E[sign(signal)*(mid(t+H)-mid(t)) - taker spread cost | |signal|>s] fails to exceed the section-4 hurdle on Confirmation years (2021-2022) at BH-corrected q=0.10 over >=40 events (errors two-way clustered by event x calendar month).
 
 ## 4. Cost hurdle (authoritative: instrument_specs.py + fee_model.py, non-member tier)
 

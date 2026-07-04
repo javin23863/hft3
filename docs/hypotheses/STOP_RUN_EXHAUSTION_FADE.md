@@ -28,7 +28,7 @@ E[ mid(t + H) - mid(t) | signal(t) > s ] > hurdle
 H = 3000 ms, s = 0.05
 ```
 
-Directional claim: after an aggressive one-sided sweep with high near-touch cancels and an opposing book slope, mid reverts against the sweep over 15s. REFUTED if the spread-adjusted conditional expectancy E[sign(signal)*(mid(t+H)-mid(t)) - taker spread cost | |signal|>s] fails to exceed the section-4 hurdle on Confirmation years (2021-2022) at BH-corrected q=0.10 over >=40 events (errors two-way clustered by event x calendar month).
+Directional claim: after an aggressive one-sided sweep with high near-touch cancels and an opposing book slope, mid reverts against the sweep over 3s. REFUTED if the spread-adjusted conditional expectancy E[sign(signal)*(mid(t+H)-mid(t)) - taker spread cost | |signal|>s] fails to exceed the section-4 hurdle on Confirmation years (2021-2022) at BH-corrected q=0.10 over >=40 events (errors two-way clustered by event x calendar month).
 
 ## 4. Cost hurdle (authoritative: instrument_specs.py + fee_model.py, non-member tier)
 
