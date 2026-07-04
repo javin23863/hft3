@@ -174,6 +174,15 @@ def test_bh_nan_never_rejected() -> None:
     assert mask == [True, False, True]
 
 
+def test_bh_nan_preserves_family_size() -> None:
+    # A no-verdict (NaN) model must still count in the BH denominator.
+    # p=0.04 alone at q=0.05 rejects (adjusted 0.04); in a family of 2 the
+    # adjusted value is min(1.0, 0.04*2/1) = 0.08 > 0.05 -> no rejection.
+    # Dropping the NaN would shrink the family and falsely promote it.
+    assert bh_reject([0.04], q=0.05) == [True]
+    assert bh_reject([0.04, float("nan")], q=0.05) == [False, False]
+
+
 def test_hurdle_arithmetic_exact() -> None:
     mes = hurdle_ticks(fee_per_side=0.52, contract_multiplier=5.0, tick_size=0.25)
     assert mes["fee_points"] == pytest.approx(0.208)

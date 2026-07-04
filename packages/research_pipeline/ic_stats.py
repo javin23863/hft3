@@ -238,19 +238,20 @@ def bh_reject(p_values: Sequence[float], q: float) -> list[bool]:
 
     Delegates the adjustment to the repo's existing
     ``statistics.p_value_correction(..., "bh")`` — one implementation only.
-    NaN p-values are never rejected.
+
+    Non-finite p-values (insufficient/no-verdict tests) stay IN the family as
+    p=1.0 so they keep paying their share of the multiple-testing penalty, and
+    are themselves never rejected. Dropping them would shrink the BH
+    denominator and let a borderline finite p-value pass with a weaker
+    correction than the pre-registered family size demands.
     """
     ps = [float(p) for p in p_values]
-    finite = [p for p in ps if math.isfinite(p)]
-    adjusted_finite = p_value_correction(finite, "bh")
-    it = iter(adjusted_finite)
-    out: list[bool] = []
-    for p in ps:
-        if math.isfinite(p):
-            out.append(next(it) <= float(q))
-        else:
-            out.append(False)
-    return out
+    filled = [p if math.isfinite(p) else 1.0 for p in ps]
+    adjusted = p_value_correction(filled, "bh")
+    return [
+        math.isfinite(p) and adj <= float(q)
+        for p, adj in zip(ps, adjusted)
+    ]
 
 
 def hurdle_ticks(
