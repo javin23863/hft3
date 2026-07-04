@@ -216,3 +216,6 @@ def test_sharpe_and_dsr_branch_call_shape() -> None:
     # degenerate inputs stay NaN, never raise
     sr2, dsr2 = driver._sharpe_and_dsr(np.array([0.5]), n_trials=3)
     assert sr2 != sr2 and dsr2 != dsr2  # NaN, no exception
+    # constant edges (zero variance) must also degrade to NaN, never raise
+    sr3, dsr3 = driver._sharpe_and_dsr(np.full(45, 0.7), n_trials=12)
+    assert sr3 != sr3 and dsr3 != dsr3

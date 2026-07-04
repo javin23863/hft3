@@ -320,7 +320,17 @@ def _sharpe_and_dsr(edges, n_trials: int) -> tuple[float, float]:
     values = [float(v) for v in edges]
     if len(values) < 2:
         return float("nan"), float("nan")
-    sr = sharpe_ratio(values)
+    mean = sum(values) / len(values)
+    var = sum((v - mean) ** 2 for v in values) / (len(values) - 1)
+    if var < 1e-18:
+        # (Near-)constant edges: no Sharpe is defined. Exact zero variance
+        # raises inside sharpe_ratio; float-noise variance yields astronomic
+        # Sharpe and DSR=1.0 (a garbage auto-pass). Both degrade to NaN.
+        return float("nan"), float("nan")
+    try:
+        sr = sharpe_ratio(values)
+    except ValueError:
+        return float("nan"), float("nan")
     if sr != sr:
         return float("nan"), float("nan")
     dsr = deflated_sharpe_ratio(sr, n_obs=len(values), n_trials=max(1, int(n_trials)))
