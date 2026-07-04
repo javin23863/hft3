@@ -150,6 +150,41 @@ def test_lake_scanner_builds_manifest_and_coverage(tmp_path: Path) -> None:
     assert coverage["leader_tape_counts"] == {"ES": 1, "NQ": 1}
 
 
+def test_lake_scanner_resolves_relative_npz_path_under_repo_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SSoT (data_system.src.lake_manifest.resolve_npz_path): relative
+    npz_path entries resolve under REPO ROOT, not under npz_root."""
+    module = _load_script("build_leader_lake_manifest")
+    npz_root = tmp_path / "lake" / "npz"
+    npz_root.mkdir(parents=True)
+    repo_root = tmp_path / "repo"
+    rel = Path("data") / "npz" / "ES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"
+    leader_file = repo_root / rel
+    leader_file.parent.mkdir(parents=True)
+    _write_source_npz(leader_file)
+    rows = [
+        _index_row(npz_root, "MES.v.0", "CPI_2024_09_11_TIGHT"),
+        {
+            "event_id": "CPI_2024_09_11_TIGHT",
+            "symbol": "ES.v.0",
+            "npz_path": str(rel),  # repo-relative, per lake_manifest schema
+            "event_count": 3,
+            "sha256": hashlib.sha256(leader_file.read_bytes()).hexdigest(),
+            "created_utc": "2026-06-19T12:00:00+00:00",
+        },
+    ]
+    (npz_root / "manifest.json").write_text(json.dumps(rows), encoding="utf-8")
+    monkeypatch.setattr(module, "REPO", repo_root)
+
+    manifest, _coverage = module.build_leader_lake_manifest(npz_root=npz_root)
+
+    (es_row,) = [row for row in manifest["rows"] if row["product"] == "ES"]
+    assert Path(es_row["npz_path"]) == leader_file  # under repo root
+    assert not str(es_row["npz_path"]).startswith(str(npz_root))
+    assert Path(es_row["npz_path"]).is_file()
+
+
 def test_lake_scanner_fails_closed_without_index_or_targets(tmp_path: Path) -> None:
     module = _load_script("build_leader_lake_manifest")
 

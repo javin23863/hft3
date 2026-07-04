@@ -32,6 +32,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages")]
 
 from backtest_pipeline.src.hftbacktest_only_io import write_json_atomic
+from data_system.src.lake_manifest import resolve_npz_path
 from data_system.src.npz_resolver import npz_root as resolve_npz_root
 from replay.cross_asset_assembly import REQUIRED_LEADERS_BY_MODEL
 
@@ -90,9 +91,7 @@ def scan_leader_tapes(
         if product not in wanted:
             continue
         event_id = str(record.get("event_id") or "")
-        npz_path = Path(str(record.get("npz_path") or ""))
-        if not npz_path.is_absolute():
-            npz_path = npz_root / npz_path
+        npz_path = resolve_npz_path(REPO, str(record.get("npz_path") or ""))
         row = {
             "event_id": event_id,
             "symbol": symbol,
