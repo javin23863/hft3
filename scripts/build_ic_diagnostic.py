@@ -136,6 +136,12 @@ def _load_units(manifest_path: Path) -> tuple[list[dict[str, Any]], list[str]]:
             event_id = str(row.get("event_id") or "")
             if not npz or not event_id:
                 continue
+            # data_blocker rows reference unusable tapes (empty stubs,
+            # prepare failures) — the IC pass reads raw tapes, so only
+            # DATA-level blockers disqualify a unit. Semantic/pipeline
+            # blockers gate execution, not tape validity.
+            if str(row.get("blocker_code") or "").startswith("data_blocker:"):
+                continue
             year = _event_year(event_id)
             if year not in DISCOVERY_YEARS + CONFIRMATION_YEARS:
                 excluded.add(event_id)  # holdout seal (2023+) or pre-2018
@@ -239,7 +245,13 @@ def _process_unit(task: tuple[dict[str, Any], list[str], Mapping[str, Any]]) -> 
     from decision_engine.python.src.targets import build_labels_frame
 
     symbol_root = str(unit["symbol"]).split(".")[0].upper()
-    raw_frame, tick_size = _extract_signal_frame(unit, model_ids)
+    try:
+        raw_frame, tick_size = _extract_signal_frame(unit, model_ids)
+    except Exception as exc:  # fail-soft per unit: receipt, never kill the run
+        return {"event_id": unit["event_id"], "symbol": symbol_root,
+                "year": unit["year"], "n_rows": 0,
+                "skipped": f"tape_load_failed:{type(exc).__name__}",
+                "models": {}}
     ts_list = raw_frame["timestamp_ns"].tolist()
     mids = raw_frame["mid_price"].tolist()
     spread_ticks_arr = raw_frame["spread_ticks"].to_numpy(dtype=np.float64)
@@ -590,6 +602,10 @@ def main(argv: list[str] | None = None) -> int:
                   "holdout_sealed": "2023+"},
         "holdout_excluded_events": holdout_excluded,
         "units_processed": len(units),
+        # No silent caps: every unit that produced no aggregates is itemized.
+        "units_skipped": collections.Counter(
+            str(r["skipped"]) for r in results if r.get("skipped")
+        ),
         "models": report_models,
         "bh_q_primary": BH_Q_PRIMARY,
         "min_events": MIN_EVENTS,
