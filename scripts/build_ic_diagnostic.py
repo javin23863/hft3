@@ -26,7 +26,13 @@ EVENT_ALPHA_REBUILD_PLAN pre-commits:
 
 Cross-asset lead-lag models abstain (signal == 0) without leader feature
 legs; they receive verdict "no_verdict_leader_features_absent" — never a
-fake pass/fail. Their first real test follows the PR-2 leader-lane unlock.
+fake pass/fail. Passing --leader-lake-root wires real leader legs: for each
+unit, the leader tape <SYM>.v.0_<EVENT_ID>_mbo.npz (same event) is replayed
+through its own MarketStatePipeline and injected point-in-time into
+state.cross_asset_features[SYM], mirroring the production feed
+(packages/replay/replay_session.py secondary-adapter path). Units whose
+leader tape is absent keep today's abstain path, counted per model in
+ic_report leader_coverage.
 
 The pre-registered horizon map must be committed and clean in git; the
 driver refuses to run otherwise (pre-registration is code, not convention).
@@ -80,6 +86,28 @@ KILL_LIST_ALLOWED_FIELDS = frozenset(
         "alpha_class",
     }
 )
+
+
+class _LeaderTapeLoadError(Exception):
+    """A leader tape existed but failed to load with a KNOWN tape error.
+
+    Wraps the original exception (as __cause__) so _process_unit can convert
+    it into a unit-level skip receipt without also swallowing target-tape
+    errors under the wrong label. Unknown exception types are never wrapped —
+    they propagate and kill the diagnostic (fail-closed).
+    """
+
+
+def _known_tape_errors() -> tuple[type[Exception], ...]:
+    """Fail-soft ONLY for known data-quality / NPZ-load failures — a broken
+    adapter or pipeline regression must still kill the diagnostic loudly
+    rather than silently shrinking the inference population (Greptile P1
+    on #80: bare Exception converted RuntimeError into a skip receipt)."""
+    import zipfile
+
+    from research_pipeline.data_quality import NoOHLCVDataError
+
+    return (NoOHLCVDataError, OSError, EOFError, zipfile.BadZipFile)
 
 
 def _event_year(event_id: str) -> int:
@@ -206,6 +234,25 @@ def _extract_signal_frame(
 
         sensor_adapter = PrecomputedFeatureAdapter(sensor_npz)
 
+    # Leader legs — transcribed from the production feed in
+    # packages/replay/replay_session.py (ReplaySession.run, secondary-adapter
+    # path): one HistoricalReplayMarketDataAdapter per leader tape (built with
+    # the TARGET tick_size, exactly as replay_session passes cfg.tick_size),
+    # synced as-of the decision timestamp, primary_features injected via
+    # enrich_cross_leg with source_timestamp_ns = the sync timestamp.
+    leader_mdas: dict[str, Any] = {}
+    if unit.get("leader_npz"):
+        from replay.cross_asset_assembly import enrich_cross_leg
+        from replay.market_data_adapter import HistoricalReplayMarketDataAdapter
+
+        for leader_sym, leader_path in sorted((unit["leader_npz"] or {}).items()):
+            try:
+                leader_mdas[leader_sym] = HistoricalReplayMarketDataAdapter.from_npz(
+                    leader_path, tick_size=tick_size, latency_ms=0.1
+                )
+            except _known_tape_errors() as exc:
+                raise _LeaderTapeLoadError(f"{leader_sym}:{leader_path}") from exc
+
     raw_events = load_npz_events(unit["source_npz"])
     pipeline = MarketStatePipeline(tick_size=tick_size, latency_ms=0.1)
 
@@ -218,12 +265,32 @@ def _extract_signal_frame(
 
     for event in iter_mbo_events(raw_events):
         state = pipeline.process_event(event)
+        ts_ns = int(event.timestamp_ns)
         if sensor_adapter is not None:
-            sensor_adapter.sync_to_timestamp(int(event.timestamp_ns))
+            sensor_adapter.sync_to_timestamp(ts_ns)
             sensor_features = sensor_adapter.current_features() or {}
             state.cross_asset_features["VIX"] = sensor_features
+        # Point-in-time leader legs: sync_to_timestamp feeds ONLY leader
+        # events with ts <= target event ts (single monotonic merge cursor
+        # per leader — one pipeline pass, never a nested rescan). The
+        # two-sided-book sanity gate applies to the leader mid exactly as it
+        # does to the target below: a one-sided leader book (spread<=0 or
+        # non-finite mid) yields garbage features, so that leg is dropped for
+        # the row and the lead-lag adapters abstain (0.0), matching the
+        # leader-absent contract.
+        for leader_sym, leader_mda in leader_mdas.items():
+            lead_state = leader_mda.sync_to_timestamp(ts_ns)
+            lead_feats = lead_state.primary_features if lead_state is not None else {}
+            _lmid = float(lead_feats.get("mid_price", float("nan")))
+            _lspr = float(lead_feats.get("spread", float("nan")))
+            if math.isfinite(_lmid) and math.isfinite(_lspr) and _lspr > 0.0:
+                state.cross_asset_features[leader_sym] = enrich_cross_leg(
+                    lead_feats, symbol=leader_sym, source_timestamp_ns=ts_ns
+                )
+            else:
+                state.cross_asset_features.pop(leader_sym, None)
         feats = state.primary_features
-        records["timestamp_ns"].append(int(event.timestamp_ns))
+        records["timestamp_ns"].append(ts_ns)
         # Two-sided-book sanity gate: MBOFeatureExtractor emits spread=0.0
         # when either side is empty (bb<=0 or ba=inf), and the mid on a
         # one-sided book is garbage — event windows produced "edges" of
@@ -254,18 +321,19 @@ def _process_unit(task: tuple[dict[str, Any], list[str], Mapping[str, Any]]) -> 
     from decision_engine.python.src.targets import build_labels_frame
 
     symbol_root = str(unit["symbol"]).split(".")[0].upper()
-    import zipfile
 
-    from research_pipeline.data_quality import NoOHLCVDataError
-
-    # Fail-soft ONLY for known data-quality / NPZ-load failures — a broken
-    # adapter or pipeline regression must still kill the diagnostic loudly
-    # rather than silently shrinking the inference population (Greptile P1
-    # on #80: bare Exception converted RuntimeError into a skip receipt).
-    _TAPE_ERRORS = (NoOHLCVDataError, OSError, EOFError, zipfile.BadZipFile)
+    # Fail-soft ONLY for the known tape errors (see _known_tape_errors);
+    # anything else raises. A leader tape that exists but is unreadable skips
+    # the whole unit under its own receipt — the target rows without leader
+    # legs would silently masquerade as "leader absent" otherwise.
     try:
         raw_frame, tick_size = _extract_signal_frame(unit, model_ids)
-    except _TAPE_ERRORS as exc:
+    except _LeaderTapeLoadError as exc:
+        return {"event_id": unit["event_id"], "symbol": symbol_root,
+                "year": unit["year"], "n_rows": 0,
+                "skipped": f"leader_tape_load_failed:{type(exc.__cause__).__name__}",
+                "models": {}}
+    except _known_tape_errors() as exc:
         return {"event_id": unit["event_id"], "symbol": symbol_root,
                 "year": unit["year"], "n_rows": 0,
                 "skipped": f"tape_load_failed:{type(exc).__name__}",
@@ -419,6 +487,11 @@ def main(argv: list[str] | None = None) -> int:
                         default=REPO / "runtime" / "stagec1" / "envelope_rt_tox_ab.json")
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--max-tapes", type=int, default=0, help="0 = all (smoke runs cap this)")
+    parser.add_argument(
+        "--leader-lake-root", type=Path, default=None,
+        help="lake root holding leader tapes <SYM>.v.0_<EVENT_ID>_mbo.npz; "
+             "units without a leader tape keep the abstain path "
+             "(no_verdict_leader_features_absent)")
     args = parser.parse_args(argv)
 
     import numpy as np
@@ -438,6 +511,39 @@ def main(argv: list[str] | None = None) -> int:
     model_ids = _hypothesis_model_ids(hmap)
     if not units or not model_ids:
         raise SystemExit(f"nothing_to_do:units={len(units)}:models={len(model_ids)}")
+
+    # Resolve leader tapes per unit: <SYM>.v.0_<EVENT_ID>_mbo.npz under the
+    # leader lake root, for every leader any evaluated model requires
+    # (replay.cross_asset_assembly.REQUIRED_LEADERS_BY_MODEL). One filename
+    # index walk, not one rglob per unit. Missing tape -> key absent -> that
+    # model's rows abstain exactly as before.
+    from replay.cross_asset_assembly import required_leaders_for_model
+
+    leaders_by_model = {m: required_leaders_for_model(m) for m in model_ids}
+    needed_leaders = sorted({s for syms in leaders_by_model.values() for s in syms})
+    leader_index: dict[str, Path] = {}
+    if args.leader_lake_root and needed_leaders:
+        leader_index = {p.name: p for p in args.leader_lake_root.rglob("*_mbo.npz")}
+    for u in units:
+        u["leader_npz"] = {
+            sym: str(leader_index[f"{sym}.v.0_{u['event_id']}_mbo.npz"])
+            for sym in needed_leaders
+            if f"{sym}.v.0_{u['event_id']}_mbo.npz" in leader_index
+        }
+    # Honest receipt: per model, how many units carried ALL required leaders.
+    leader_coverage = {
+        m: {
+            "required_leaders": list(syms),
+            "units_with_leader": sum(
+                1 for u in units if all(s in u["leader_npz"] for s in syms)
+            ),
+            "units_without_leader": sum(
+                1 for u in units if not all(s in u["leader_npz"] for s in syms)
+            ),
+        }
+        for m, syms in leaders_by_model.items()
+        if syms
+    }
 
     tasks = [(u, model_ids, hmap) for u in units]
     results: list[dict[str, Any]] = []
@@ -624,6 +730,8 @@ def main(argv: list[str] | None = None) -> int:
         "units_skipped": collections.Counter(
             str(r["skipped"]) for r in results if r.get("skipped")
         ),
+        "leader_lake_root": str(args.leader_lake_root) if args.leader_lake_root else None,
+        "leader_coverage": leader_coverage,
         "models": report_models,
         "bh_q_primary": BH_Q_PRIMARY,
         "min_events": MIN_EVENTS,
