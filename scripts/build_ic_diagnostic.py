@@ -38,6 +38,7 @@ import argparse
 import collections
 import concurrent.futures
 import json
+import math
 import re
 import statistics as pystats
 import subprocess
@@ -456,10 +457,9 @@ def main(argv: list[str] | None = None) -> int:
         alpha_class = "momentum" if "primary_alpha" in role else role
         verdict = "no_verdict"
         if "p_raw" in e:
-            passed = (
-                bool(e.get("bh_pass"))
-                and float(e.get("spread_adjusted_edge_ticks") or -9e9) > float(e["pass_line_ticks"])
-            )
+            _edge = e.get("spread_adjusted_edge_ticks")
+            _edge_val = float(_edge) if _edge is not None else float("-inf")
+            passed = bool(e.get("bh_pass")) and _edge_val > float(e["pass_line_ticks"])
             verdict = "pass" if passed else "fail"
         elif e.get("verdict_reason"):
             verdict = e["verdict_reason"]
@@ -496,7 +496,7 @@ def main(argv: list[str] | None = None) -> int:
         agg: dict[str, dict[str, list[float]]] = collections.defaultdict(lambda: collections.defaultdict(list))
         for row in rows:
             for h, v in row["by_h"].items():
-                if v == v:  # not NaN
+                if math.isfinite(v):  # excludes NaN AND inf
                     agg[row["event_type"]][h].append(v)
         exploratory[m] = {
             etype: {h: round(pystats.fmean(vs), 4) for h, vs in hs.items() if vs}
