@@ -219,6 +219,37 @@ def test_bh_family_includes_no_verdict_models() -> None:
     assert with_no_verdict == [False, False]
 
 
+def test_hurdle_referenced_inference() -> None:
+    # Greptile P1 (PR #75 round 5): p must test the HURDLE, not zero. A model
+    # whose edge is significantly > 0 but below the pass line must get a
+    # large one-sided p; the same edges against a cleared hurdle stay small.
+    driver = _load_driver()
+    rng = np.random.default_rng(11)
+    n = 60
+    edges = rng.normal(1.0, 0.3, n)  # clearly > 0
+    half = np.full(n, 0.5)
+    events = [f"E{i}" for i in range(n)]
+    months = [f"2021-{(i % 12) + 1:02d}" for i in range(n)]
+    # net mean = 1.0 - 0.5 - 2.0 << 0 -> one-sided p near 1
+    _t_hi, p_below, _ = driver._hurdle_referenced_test(edges, half, 2.0, events, months)
+    assert p_below > 0.5
+    # net mean = 1.0 - 0.5 - 0.1 > 0 -> small one-sided p
+    _t_lo, p_above, _ = driver._hurdle_referenced_test(edges, half, 0.1, events, months)
+    assert p_above < 0.05
+    # NaN half-spread rows drop from inference without raising; symmetric
+    # data around the hurdle keeps a mid-range one-sided p (t=0 -> p=0.5).
+    half_nan = half.copy()
+    half_nan[:10] = np.nan
+    _t, p_nan, _ = driver._hurdle_referenced_test(edges, half_nan, 0.1, events, months)
+    assert np.isfinite(p_nan)
+    sym = np.array([0.4, 0.6] * 20)  # mean net exactly 0 at pass_line 0.5
+    t0, p0, _ = driver._hurdle_referenced_test(
+        sym, np.zeros(40), 0.5, [f"E{i}" for i in range(40)],
+        [f"2021-{(i % 12) + 1:02d}" for i in range(40)],
+    )
+    assert abs(t0) < 1e-9 and p0 == pytest.approx(0.5)
+
+
 def test_sharpe_and_dsr_branch_call_shape() -> None:
     # Greptile P1 (PR #75): deflated_sharpe_ratio takes an observed-Sharpe
     # float + n_obs/n_trials kwargs; the MIN_EVENTS branch previously passed

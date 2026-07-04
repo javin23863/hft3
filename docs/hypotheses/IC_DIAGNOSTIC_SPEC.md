@@ -42,10 +42,16 @@ leader legs → `no_verdict_leader_features_absent` (first real test post-PR-2).
 - Floors: ≥40 Confirmation events; ≥5 fired rows/event; censoring ≤20% at H*.
 - Spread adjustment: edge − measured half-spread at signal time;
   pass line = fee hurdle (instrument_specs/fee_model) + 0.5 residual ticks.
+- Inference target: the clustered t (two-way CGM, event × month) is on the
+  per-event NET series `edge_i − half_spread_i − pass_line` — H0 is "the
+  hypothesis does not clear its own cost hurdle", matching the template claim
+  E[move|signal] > hurdle. One-sided p (alternative: net > 0). A test against
+  zero would let a significant-but-below-hurdle model pass on the point
+  estimate alone.
 
 ## Testable behavior / acceptance gate
-kill_list.json verdict per model: `pass` requires BH rejection AND
-spread-adjusted edge > pass line AND floors met. Everything else `fail` or an
+kill_list.json verdict per model: `pass` requires BH rejection of the
+hurdle-referenced null AND spread-adjusted edge > pass line AND floors met. Everything else `fail` or an
 explicit no-verdict reason. kill_list schema forbids exploratory-grid fields
 (KILL_LIST_ALLOWED_FIELDS; test-locked). Exploratory grid (7 horizons ×
 event-type × Discovery-frozen vol terciles) lives in ic_report.json,

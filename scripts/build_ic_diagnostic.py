@@ -308,6 +308,32 @@ def _envelope_trials_per_model(envelope_path: Path) -> dict[str, int]:
     return dict(counts)
 
 
+def _hurdle_referenced_test(edges, half_spreads, pass_line, event_ids, months):
+    """Clustered t of H0 "edge does not clear the cost hurdle" (one-sided).
+
+    The pre-registered claim is E[move|signal] > hurdle
+    (HYPOTHESIS_SPEC_TEMPLATE section 3), so inference runs on the per-event
+    NET series ``edge_i - half_spread_i - pass_line``, not on raw edge vs
+    zero — a zero-referenced test would let a significant-but-below-hurdle
+    model pass on its point estimate alone (Greptile P1, PR #75 round 5).
+    Returns (t_stat, p_one_sided, dof); alternative is strictly net > 0.
+    """
+    import numpy as np
+
+    from research_pipeline.ic_stats import clustered_t_two_way
+
+    net = (
+        np.asarray(edges, dtype=np.float64)
+        - np.asarray(half_spreads, dtype=np.float64)
+        - float(pass_line)
+    )
+    t_stat, p_two, dof = clustered_t_two_way(net, event_ids, months)
+    if not np.isfinite(t_stat):
+        return t_stat, p_two, dof
+    p_one = p_two / 2.0 if t_stat > 0 else 1.0 - p_two / 2.0
+    return t_stat, p_one, dof
+
+
 def _bh_over_primary_family(model_ids, report_models, *, q: float) -> list[bool]:
     """BH mask over the FULL pre-registered primary family.
 
@@ -441,13 +467,24 @@ def main(argv: list[str] | None = None) -> int:
         else:
             entry["hurdle_fee_ticks"] = float("nan")
 
-        if len(conf) >= MIN_EVENTS and np.isfinite(conf["edge"]).sum() >= MIN_EVENTS:
-            edges = conf["edge"].to_numpy(dtype=np.float64)
-            t_stat, p_raw, dof = clustered_t_two_way(edges, conf["event_id"], conf["month"])
+        # The inference floor counts events with a finite NET term (finite
+        # edge AND finite half-spread): clustered_t_two_way silently drops
+        # non-finite rows, so gating on edge alone could pass MIN_EVENTS
+        # while the effective test N falls below it.
+        edges = conf["edge"].to_numpy(dtype=np.float64) if len(conf) else np.array([])
+        half_spreads = (
+            conf["half_spread"].to_numpy(dtype=np.float64) if len(conf) else np.array([])
+        )
+        n_inference = int((np.isfinite(edges) & np.isfinite(half_spreads)).sum())
+        if len(conf) >= MIN_EVENTS and n_inference >= MIN_EVENTS:
             edge = float(np.nanmean(edges))
-            half_spread = float(np.nanmean(conf["half_spread"]))
+            half_spread = float(np.nanmean(half_spreads))
             spread_adj = edge - half_spread
             pass_line = entry["hurdle_fee_ticks"] + RESIDUAL_SLIPPAGE_TICKS
+            t_stat, p_raw, dof = _hurdle_referenced_test(
+                edges, half_spreads, pass_line, conf["event_id"], conf["month"]
+            )
+            entry["n_events_inference"] = n_inference
             finite_edges = edges[np.isfinite(edges)]
             sr, dsr = _sharpe_and_dsr(finite_edges, max(1, trials.get(mid_id, 1)))
             entry.update({
