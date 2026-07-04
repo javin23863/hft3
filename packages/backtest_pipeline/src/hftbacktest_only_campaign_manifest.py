@@ -1393,14 +1393,24 @@ def _build_row(
                 f"execution_role={execution_role}; "
                 f"standalone_hbt_policy={standalone_hbt_policy}"
             )
-        elif target_instrument_universe:
+        else:
             _row_symbol = str(prepared.get("symbol") or "").split(".")[0].strip().upper()
-            _allowed = {t.strip().upper() for t in target_instrument_universe}
-            if _row_symbol and _row_symbol not in _allowed:
+            _valid = {v.strip().upper() for v in _contract.valid_instrument_universe}
+            _targets = {t.strip().upper() for t in target_instrument_universe}
+            if _row_symbol and _targets and _row_symbol not in _targets:
                 blocker_code = "semantic_blocker:target_instrument_mismatch"
                 blocker_details.append(
                     f"symbol={_row_symbol} not_in "
-                    f"target_instrument_universe={sorted(_allowed)}"
+                    f"target_instrument_universe={sorted(_targets)}"
+                )
+            elif _row_symbol and _valid and _row_symbol not in _valid:
+                # Plan Phase 2: a standalone model may only queue on products
+                # inside its declared valid universe (Greptile P1 on PR #73 —
+                # previously only the target constraint was enforced).
+                blocker_code = "semantic_blocker:invalid_instrument_for_model"
+                blocker_details.append(
+                    f"symbol={_row_symbol} not_in "
+                    f"valid_instrument_universe={sorted(_valid)}"
                 )
 
     if blocker_code:
