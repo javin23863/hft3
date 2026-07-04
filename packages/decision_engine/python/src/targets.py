@@ -38,10 +38,15 @@ def build_forward_returns(
 def build_labels_frame(
     events_df: pd.DataFrame,
     tick_size: float = 0.25,
+    horizons_ms: list[int] | None = None,
 ) -> pd.DataFrame:
     """
     Expects columns: timestamp_ns, mid_price, filled, pnl_ticks, as_ticks, action_id.
     Adds forward return columns with leakage audit.
+
+    ``horizons_ms`` defaults to the module HORIZONS_MS; callers with
+    pre-registered per-model horizons (e.g. the IC diagnostic's 3000ms) pass
+    their own list — same vectorized path, same leakage audit.
 
     Vectorized: one np.searchsorted call per horizon, O(N log N) total instead of
     O(N * H) per-row Python loops. Semantics are identical to the previous
@@ -57,7 +62,7 @@ def build_labels_frame(
 
     labels = events_df.copy()
 
-    for h in HORIZONS_MS:
+    for h in (HORIZONS_MS if horizons_ms is None else sorted({int(h) for h in horizons_ms})):
         col = f"y_return_{h}ms"
         target_ts = ts + h * 1_000_000  # target wall-time for each row
 
