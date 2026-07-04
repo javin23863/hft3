@@ -36,7 +36,7 @@ Directional claim: differential queue depletion predicts mid moving toward the d
 | MES | 0.52 | 5 | 0.2080 | 0.832 | 1.832 |
 | MNQ | 0.52 | 2 | 0.5200 | 2.080 | 3.080 |
 | NQ | 1.52 | 20 | 0.1520 | 0.608 | 1.608 |
-| ZB | 1.07 | 1000 | 0.0021 | 0.069 | 1.069 |
+| ZB | 1.07 | 1000 | 0.0021 | 0.068 | 1.068 |
 | ZN | 1.07 | 1000 | 0.0021 | 0.137 | 1.137 |
 
 Predicted edge at H must exceed the traded symbol's total hurdle or the model is

@@ -34,6 +34,7 @@ Directional claim: ES-minus-MES flow divergence predicts MES mid moving toward t
 
 | symbol | fee/side $ | multiplier | fee hurdle (pts) | fee hurdle (ticks) | + 1 tick taker slippage (ticks RT) |
 |---|---|---|---|---|---|
+| ES | 1.52 | 50 | 0.0608 | 0.243 | 1.243 |
 | MES | 0.52 | 5 | 0.2080 | 0.832 | 1.832 |
 
 Predicted edge at H must exceed the traded symbol's total hurdle or the model is

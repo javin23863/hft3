@@ -43,8 +43,12 @@ Directional claim: during VIX-detected vol jumps, extreme aggressor imbalance me
 | NQ | 1.52 | 20 | 0.1520 | 0.608 | 1.608 |
 | RTY | 1.52 | 50 | 0.0608 | 0.608 | 1.608 |
 | YM | 1.52 | 5 | 0.6080 | 0.608 | 1.608 |
-| ZB | 1.07 | 1000 | 0.0021 | 0.069 | 1.069 |
+| ZB | 1.07 | 1000 | 0.0021 | 0.068 | 1.068 |
+| ZF | 1.07 | 1000 | 0.0021 | 0.274 | 1.274 |
 | ZN | 1.07 | 1000 | 0.0021 | 0.137 | 1.137 |
+| ZT | 1.07 | 2000 | 0.0011 | 0.274 | 1.274 |
+
+Symbols in the declared universe WITHOUT an authoritative spec/fee row (CL, GC, HG, MCL, MGC, NG, SI) are fail-closed: NOT tradable and rejected at intake until instrument_specs.py/fee_model.py gain their rows (no lake data exists for them in this program either).
 
 Predicted edge at H must exceed the traded symbol's total hurdle or the model is
 rejected at intake (template section 4).

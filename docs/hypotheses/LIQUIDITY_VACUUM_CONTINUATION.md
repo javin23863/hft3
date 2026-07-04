@@ -36,6 +36,8 @@ Directional claim: aggressor flow combined with measured book vacuum predicts co
 | MNQ | 0.52 | 2 | 0.5200 | 2.080 | 3.080 |
 | NQ | 1.52 | 20 | 0.1520 | 0.608 | 1.608 |
 
+Symbols in the declared universe WITHOUT an authoritative spec/fee row (CL, GC, MCL, MGC) are fail-closed: NOT tradable and rejected at intake until instrument_specs.py/fee_model.py gain their rows (no lake data exists for them in this program either).
+
 Predicted edge at H must exceed the traded symbol's total hurdle or the model is
 rejected at intake (template section 4).
 
