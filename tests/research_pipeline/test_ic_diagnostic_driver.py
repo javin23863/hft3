@@ -339,7 +339,7 @@ def test_unreadable_leader_tape_skips_unit_with_receipt(tmp_path: Path) -> None:
             "event_id": "CORE_CPI_2021_05_12_TIGHT", "year": 2021,
             "sensor_feature_npz": {}, "leader_npz": {"ES": str(bad)}}
     res = driver._process_unit(
-        (unit, ["ES_MES_LEAD_LAG"], {"ES_MES_LEAD_LAG": {"horizon_ms": 15000, "threshold": 0.1}}))
+        (unit, ["ES_MES_LEAD_LAG"], {"ES_MES_LEAD_LAG": {"horizon_ms": 15000, "threshold": 0.1}}, 10))
     assert res["skipped"] == "leader_tape_load_failed:BadZipFile"
     assert res["models"] == {}
 
@@ -404,6 +404,89 @@ def test_driver_end_to_end_smoke(tmp_path: Path) -> None:
     for entry in models.values():
         assert entry["verdict"] not in ("pass",)
         assert set(entry) <= driver.KILL_LIST_ALLOWED_FIELDS
+
+
+def test_entry_latency_marks_capturable_edge(tmp_path: Path) -> None:
+    # Edge must be mid(t+H) - mid(t+L) with L the MEASURED ack latency —
+    # the first-L move belongs to faster participants. Same tape, two L
+    # values: with L=50ms (< 100ms row spacing) the entry mid is the next
+    # row; with L=1ms it is effectively the signal row. On a drifting tape
+    # the two produce different per-horizon means; the report must stamp
+    # the latency + source.
+    driver = _load_driver()
+    tape = _write_synthetic_tape(tmp_path / "tape.npz")
+    manifest = tmp_path / "m.jsonl"
+    manifest.write_text(
+        json.dumps({"source_npz": str(tape), "symbol": "MES.v.0",
+                    "event_id": "CORE_CPI_2021_05_12_TIGHT"}) + "\n",
+        encoding="utf-8",
+    )
+    # Report stamps the latency + source (main-level).
+    out = tmp_path / "out_stamp"
+    rc = driver.main([
+        "--campaign-manifest", str(manifest), "--out-dir", str(out),
+        "--workers", "1", "--entry-latency-ms", "50",
+    ])
+    assert rc == 0
+    rep = json.loads((out / "ic_report.json").read_text(encoding="utf-8"))
+    assert rep["entry_latency_ms"] == 50
+    assert rep["entry_latency_source"] == "cli"
+
+    # Worker-level math, isolated from LOB simulation: monkeypatch the
+    # extractor with a hand-built frame — mid climbs +1 tick every row,
+    # rows 100ms apart, signal +1 everywhere. Then for horizon H and entry
+    # latency L (multiples of the row spacing) the capturable edge is
+    # exactly (H - L) / 100ms rows * 1 tick: L=100 -> 9 ticks at H=1000,
+    # L=300 -> 7 ticks. The first-L move is provably excluded.
+    import pandas as pd
+
+    n_rows = 120
+    ts = np.arange(n_rows, dtype=np.int64) * 100_000_000 + 1_000_000_000
+    hand_frame = pd.DataFrame({
+        "timestamp_ns": ts,
+        "mid_price": 5000.0 + 0.25 * np.arange(n_rows),
+        "spread_ticks": np.ones(n_rows),
+        "realized_vol_state": np.ones(n_rows),
+        "sig__SECOND_WAVE_CONTINUATION": np.ones(n_rows),
+    })
+    saved_extract = driver._extract_signal_frame
+    saved_expl = driver.EXPLORATORY_HORIZONS_MS
+    driver._extract_signal_frame = lambda unit, model_ids: (hand_frame.copy(), 0.25)
+    driver.EXPLORATORY_HORIZONS_MS = [1000]
+    unit = {"source_npz": "unused.npz", "symbol": "MES.v.0",
+            "event_id": "CORE_CPI_2021_05_12_TIGHT", "year": 2021,
+            "sensor_feature_npz": {}, "leader_npz": {}}
+    hmap = {"SECOND_WAVE_CONTINUATION": {"horizon_ms": 1000, "threshold": 0.0}}
+    try:
+        res100 = driver._process_unit((unit, ["SECOND_WAVE_CONTINUATION"], hmap, 100))
+        res300 = driver._process_unit((unit, ["SECOND_WAVE_CONTINUATION"], hmap, 300))
+    finally:
+        driver._extract_signal_frame = saved_extract
+        driver.EXPLORATORY_HORIZONS_MS = saved_expl
+    m100 = res100["models"]["SECOND_WAVE_CONTINUATION"]["mean_signed_by_h"]["1000"]
+    m300 = res300["models"]["SECOND_WAVE_CONTINUATION"]["mean_signed_by_h"]["1000"]
+    assert m100 == pytest.approx(9.0)
+    assert m300 == pytest.approx(7.0)
+
+
+def test_entry_latency_default_resolves_measured() -> None:
+    # No CLI value -> the driver must resolve the MEASURED authoritative
+    # send->ack p99 from the repo latency summary (owner-measured 9.811ms,
+    # ceil -> 10ms), never a hardcoded constant.
+    import math as _math
+
+    driver = _load_driver()
+    import json as _json
+
+    from backtest_pipeline.src.chi404_latency import (
+        DEFAULT_CHI404_SUMMARY,
+        resolve_order_ack_ms,
+    )
+    summary = _json.loads(DEFAULT_CHI404_SUMMARY.read_text(encoding="utf-8"))
+    ack_ms, measured, source = resolve_order_ack_ms(summary)
+    assert measured and ack_ms is not None
+    assert source.endswith("authoritative")
+    assert _math.ceil(ack_ms) >= 1
 
 
 def test_bh_family_includes_no_verdict_models() -> None:
