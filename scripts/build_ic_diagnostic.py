@@ -308,6 +308,25 @@ def _envelope_trials_per_model(envelope_path: Path) -> dict[str, int]:
     return dict(counts)
 
 
+def _sharpe_and_dsr(edges, n_trials: int) -> tuple[float, float]:
+    """Per-event Sharpe of the edge series + Bailey-Lopez de Prado deflation.
+
+    deflated_sharpe_ratio takes the OBSERVED SHARPE (float) plus n_obs and
+    n_trials keywords (Greptile P1 on PR #75 — the previous call passed the
+    raw edge list positionally and crashed at the MIN_EVENTS branch).
+    """
+    from research_pipeline.statistics import deflated_sharpe_ratio, sharpe_ratio
+
+    values = [float(v) for v in edges]
+    if len(values) < 2:
+        return float("nan"), float("nan")
+    sr = sharpe_ratio(values)
+    if sr != sr:
+        return float("nan"), float("nan")
+    dsr = deflated_sharpe_ratio(sr, n_obs=len(values), n_trials=max(1, int(n_trials)))
+    return sr, dsr
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="IC diagnostic (PR-1 gate)")
     parser.add_argument("--campaign-manifest", type=Path, required=True)
@@ -404,10 +423,7 @@ def main(argv: list[str] | None = None) -> int:
             spread_adj = edge - half_spread
             pass_line = entry["hurdle_fee_ticks"] + RESIDUAL_SLIPPAGE_TICKS
             finite_edges = edges[np.isfinite(edges)]
-            sr = sharpe_ratio(list(finite_edges))
-            dsr = deflated_sharpe_ratio(
-                list(finite_edges), num_trials=max(1, trials.get(mid_id, 1))
-            )
+            sr, dsr = _sharpe_and_dsr(finite_edges, max(1, trials.get(mid_id, 1)))
             entry.update({
                 "edge_ticks": round(edge, 4),
                 "spread_adjusted_edge_ticks": round(spread_adj, 4),

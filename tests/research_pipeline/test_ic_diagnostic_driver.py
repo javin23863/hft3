@@ -200,3 +200,19 @@ def test_driver_end_to_end_smoke(tmp_path: Path) -> None:
     for entry in models.values():
         assert entry["verdict"] not in ("pass",)
         assert set(entry) <= driver.KILL_LIST_ALLOWED_FIELDS
+
+
+def test_sharpe_and_dsr_branch_call_shape() -> None:
+    # Greptile P1 (PR #75): deflated_sharpe_ratio takes an observed-Sharpe
+    # float + n_obs/n_trials kwargs; the MIN_EVENTS branch previously passed
+    # the raw edge list and crashed. Exercise the exact helper with a
+    # 45-event edge series (the smallest realistic inference input).
+    driver = _load_driver()
+    rng = np.random.default_rng(9)
+    edges = rng.normal(0.3, 1.0, 45)
+    sr, dsr = driver._sharpe_and_dsr(edges, n_trials=12)
+    assert np.isfinite(sr) and np.isfinite(dsr)
+    assert 0.0 <= dsr <= 1.0  # DSR is a CDF value
+    # degenerate inputs stay NaN, never raise
+    sr2, dsr2 = driver._sharpe_and_dsr(np.array([0.5]), n_trials=3)
+    assert sr2 != sr2 and dsr2 != dsr2  # NaN, no exception
