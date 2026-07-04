@@ -36,13 +36,15 @@ Directional claim: aggressor flow combined with measured book vacuum predicts co
 | MNQ | 0.52 | 2 | 0.5200 | 2.080 | 3.080 |
 | NQ | 1.52 | 20 | 0.1520 | 0.608 | 1.608 |
 
+Excluded from this model's universe (removed 2026-07-04): CL, MCL, NG, GC, MGC, SI, HG — no authoritative instrument_specs/fee rows (fail-closed per PR #57) and no lake data in this program.
+
 Predicted edge at H must exceed the traded symbol's total hurdle or the model is
 rejected at intake (template section 4).
 
 ## 5. Classification and instrument binding
 - Class: offensive (catalog role: None; blocks_trade: False)
 - Target universe: (none declared — no target constraint; trades any valid-universe symbol)
-- Valid universe: ['ES', 'MES', 'NQ', 'MNQ', 'CL', 'MCL', 'GC', 'MGC']
+- Valid universe: ['ES', 'MES', 'NQ', 'MNQ']
 - Required leaders: none | Required sensors: none
 - max_round_trips intent: single-shot event trade (v1 evidence: multi-trip machinery mostly idle)
 

@@ -34,6 +34,7 @@ Directional claim: NQ-minus-MNQ flow divergence predicts MNQ mid moving toward t
 | symbol | fee/side $ | multiplier | fee hurdle (pts) | fee hurdle (ticks) | + 1 tick taker slippage (ticks RT) |
 |---|---|---|---|---|---|
 | MNQ | 0.52 | 2 | 0.5200 | 2.080 | 3.080 |
+| NQ | 1.52 | 20 | 0.1520 | 0.608 | 1.608 |
 
 Predicted edge at H must exceed the traded symbol's total hurdle or the model is
 rejected at intake (template section 4).

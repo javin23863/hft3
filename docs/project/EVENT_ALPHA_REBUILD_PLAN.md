@@ -74,8 +74,9 @@ the semantic contracts shipped in `model_execution_contracts.py`). Split for rev
 load: PR-0a = 32 active (27 ran + 5 lead-lag; blocks PR-1), PR-0b = remaining 33
 (parallel, non-blocking). Registry entries gain `hypothesis_spec_ref` links.
 **Horizon pre-registration (grader fix #1):** per-model H committed here MECHANICALLY —
-H = holding_period_bars × step interval from the existing envelope (= 5000ms uniformly;
-zero researcher choice). PR-1's driver refuses to run if the horizon map's git blob is
+H = modal holding_period_bars × 1s step interval from the existing envelope
+(measured distribution: 15000ms for 25 models, 5000ms/3000ms/1000ms for the rest —
+see HORIZON_MAP_PREREGISTERED.json, the committed authority; zero researcher choice). PR-1's driver refuses to run if the horizon map's git blob is
 not an ancestor of the run's commit.
 
 ### PR-1 `feat/ic-diagnostic` — THE GATE (~1,400 LOC, $0 replay spend)

@@ -41,8 +41,12 @@ Directional claim: one-sided flow under simultaneous spread stress and cancel pa
 | NQ | 1.52 | 20 | 0.1520 | 0.608 | 1.608 |
 | RTY | 1.52 | 50 | 0.0608 | 0.608 | 1.608 |
 | YM | 1.52 | 5 | 0.6080 | 0.608 | 1.608 |
-| ZB | 1.07 | 1000 | 0.0021 | 0.069 | 1.069 |
+| ZB | 1.07 | 1000 | 0.0021 | 0.068 | 1.068 |
+| ZF | 1.07 | 1000 | 0.0021 | 0.274 | 1.274 |
 | ZN | 1.07 | 1000 | 0.0021 | 0.137 | 1.137 |
+| ZT | 1.07 | 2000 | 0.0011 | 0.274 | 1.274 |
+
+Excluded from this model's universe (removed 2026-07-04): CL, MCL, NG, GC, MGC, SI, HG — no authoritative instrument_specs/fee rows (fail-closed per PR #57) and no lake data in this program.
 
 Predicted edge at H must exceed the traded symbol's total hurdle or the model is
 rejected at intake (template section 4).
@@ -50,7 +54,7 @@ rejected at intake (template section 4).
 ## 5. Classification and instrument binding
 - Class: offensive (catalog role: None; blocks_trade: False)
 - Target universe: (none declared — no target constraint; trades any valid-universe symbol)
-- Valid universe: ['ES', 'MES', 'NQ', 'MNQ', 'YM', 'MYM', 'RTY', 'M2K', 'CL', 'MCL', 'NG', 'GC', 'MGC', 'SI', 'HG', 'ZN', 'ZB', 'ZF', 'ZT']
+- Valid universe: ['ES', 'MES', 'NQ', 'MNQ', 'YM', 'MYM', 'RTY', 'M2K', 'ZN', 'ZB', 'ZF', 'ZT']
 - Required leaders: none | Required sensors: none
 - max_round_trips intent: single-shot event trade (v1 evidence: multi-trip machinery mostly idle)
 
