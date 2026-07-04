@@ -1,0 +1,167 @@
+{
+ "models": {
+  "ABSORPTION_FADE": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "AGGRESSOR_DECELERATION_FADE": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "BOOK_SLOPE_COLLAPSE": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "CANCEL_STORM_BEFORE_MOVE": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "DEPTH_REFILL_IMBALANCE": {
+   "horizon_ms": 1000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.03
+  },
+  "DOM_ILLUSION_TRAP": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "ECONOMIC_EVENT_RESTRICTION_FLATTENING": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "ES_MES_LEAD_LAG": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "ES_NQ_DIVERGENCE_SNAPBACK": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "FALSE_BREAKOUT_TRAP": {
+   "horizon_ms": 3000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.05
+  },
+  "FORCED_LIQUIDATION_CASCADE": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "ICEBERG_RELOAD_DETECTION": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "LIQUIDITY_VACUUM_CONTINUATION": {
+   "horizon_ms": 5000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.12
+  },
+  "MAX_CONTRACT_CROWDING_IN_MICROS": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "MICRO_CONTRACT_RETAIL_LAG": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "NQ_MNQ_LEAD_LAG": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "ONE_SIDED_ADD_CANCEL_IMBALANCE": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "PASSIVE_TRAP_FILL": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "PRIOR_HIGH_LOW_BREAKOUT_TRAP": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "QUEUE_DEPLETION_TRIGGER": {
+   "horizon_ms": 1000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.03
+  },
+  "ROUND_NUMBER_STOP_SWEEP": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "SECOND_WAVE_CONTINUATION": {
+   "horizon_ms": 5000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.08
+  },
+  "SPREAD_BLOWOUT_RECOMPRESSION": {
+   "horizon_ms": 1000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.02
+  },
+  "STOP_LOSS_CASCADE_CONTINUATION": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "STOP_RUN_EXHAUSTION_FADE": {
+   "horizon_ms": 3000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.05
+  },
+  "THIN_BOOK_CONTINUATION": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "VIX_DEPTH_IMBALANCE_DIRECTION": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "VIX_IMPLIED_REALIZED_GAP": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "VIX_LEVEL_CONDITIONED_CONTINUATION": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "VIX_SPIKE_EVENT_FADE": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "VWAP_DEFENSE_BREAK": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  },
+  "ZN_ZB_ES_NQ_MACRO_IMPULSE": {
+   "horizon_ms": 15000,
+   "rule": "modal holding_period_bars x 1000ms interval from envelope_rt_tox_ab.json; zero researcher choice",
+   "threshold": 0.1
+  }
+ },
+ "rule": "H = modal holding_period_bars x interval_ns(default 1s); threshold = modal signal_threshold",
+ "schema": "hft3_preregistered_horizon_map_v1",
+ "source_envelope": "runtime/stagec1/envelope_rt_tox_ab.json"
+}
