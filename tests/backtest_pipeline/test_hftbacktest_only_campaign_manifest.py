@@ -1878,3 +1878,37 @@ def test_no_required_replay_mode_keeps_all_units(tmp_path: Path) -> None:
         "CPI_2024_09_11_TIGHT",
         "PPI_2024_09_12_TIGHT",
     }
+
+
+def test_valid_universe_enforced_for_standalone_models(tmp_path: Path) -> None:
+    # Greptile P1 (PR #73): a standalone model whose registry declares only
+    # valid_instrument_universe must NOT stay admissible on a product outside
+    # it — semantic_blocker:invalid_instrument_for_model, ledgered not omitted.
+    registry = tmp_path / "model_registry.yaml"
+    registry.write_text(
+        """
+models:
+  SPREAD_BLOWOUT_RECOMPRESSION:
+    kind: hypothesis
+    legacy_id: HYP_5
+    display_name: Spread blowout/recompression
+    class: SpreadBlowoutRecompression
+    valid_instrument_universe: ["ES", "NQ"]
+""".lstrip(),
+        encoding="utf-8",
+    )
+    prepared_root = tmp_path / "prepared"
+    _write_prepared_unit(prepared_root)  # unit symbol is MES -> outside ["ES","NQ"]
+
+    rows = build_campaign_manifest_rows(
+        campaign_id="hbt_campaign_test",
+        prepared_root=prepared_root,
+        registry_path=registry,
+        adapter_status_by_model={"SPREAD_BLOWOUT_RECOMPRESSION": "available"},
+    )
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["blocker_code"] == "semantic_blocker:invalid_instrument_for_model"
+    assert row["admissibility_status"] == "semantic_blocker"
+    assert "valid_instrument_universe" in row["blocker_detail"]

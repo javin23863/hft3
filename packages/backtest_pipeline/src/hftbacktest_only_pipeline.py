@@ -2148,9 +2148,10 @@ def _semantic_guard_reasons(config: HftBacktestOnlyRunConfig) -> list[str]:
     """Reasons a non-standalone model must not run the standalone order strategy.
 
     Only the ``hypothesis_limit_order`` standalone surface is guarded here;
-    composition/other strategies are out of scope. Unknown/unresolvable slugs
-    return no reason — the manifest layer fail-closes those; this guard targets
-    KNOWN non-standalone roles reaching a direct standalone run.
+    composition/other strategies are out of scope. Fail-closed on unknown
+    slugs (Greptile P1, PR #73): the manifest's registry-aware path classifies
+    from the CALLER's registry, so a slug absent from the canonical registry
+    could otherwise reach a standalone run with zero semantic check.
     """
     if config.strategy_id != "hypothesis_limit_order":
         return []
@@ -2159,11 +2160,13 @@ def _semantic_guard_reasons(config: HftBacktestOnlyRunConfig) -> list[str]:
     try:
         contract = model_execution_contract(config.canonical_model_id)
     except KeyError:
-        # Unknown slug: the manifest layer fail-closes those with
-        # unknown_semantic_contract; this guard only rules on KNOWN roles.
+        # Unknown to the canonical registry: never runnable standalone.
         # Any other exception propagates — a broken contract layer must fail
         # loudly (runner_failed receipt), never silently skip the guard.
-        return []
+        return [
+            "semantic_blocker:unknown_semantic_contract:"
+            f"{config.canonical_model_id}"
+        ]
     if contract.is_standalone_alpha:
         return []
     # Only block a model that would OTHERWISE run standalone. A missing adapter
