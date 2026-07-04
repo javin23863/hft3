@@ -207,6 +207,13 @@ def contract_for(
     semantic verdict stays consistent with the registry the caller is using —
     the id is not resolved against the global registry. When omitted, falls back
     to the global registry lookup (raises KeyError on an unknown slug).
+
+    CAVEAT (Greptile P1, PR #73): with ``registry_entry`` supplied, a slug
+    absent from the canonical registry is classified from its declared kind —
+    the caller's registry is treated as the run's authority. The runner's
+    defense-in-depth guard (``_semantic_guard_reasons``) closes the gap: it
+    consults the CANONICAL registry only and fail-closes unknown slugs with
+    ``semantic_blocker:unknown_semantic_contract`` before any standalone run.
     """
     if registry_entry is None:
         return model_execution_contract(model_id)

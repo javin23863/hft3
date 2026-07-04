@@ -2612,3 +2612,37 @@ def test_calibrated_sizing_skips_sub_lot_entries(
     replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
     submitted = [row for row in replay["orders"] if row["event_type"] == "ORDER_SUBMITTED"]
     assert submitted == []
+
+
+def test_unknown_slug_refused_standalone(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Greptile P1 (PR #73): a slug unknown to the CANONICAL registry must
+    # never run hypothesis_limit_order — even if some run registry declared
+    # it kind: hypothesis. The runner guard fail-closes with
+    # semantic_blocker:unknown_semantic_contract before any artifact exists.
+    _install_fake_hftbacktest(monkeypatch)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz", include_trade_event=True)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "unknown_slug"
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={"model_id": "ROGUE_FAKE_HYPOTHESIS", "quantity": 1.0, "max_steps": 3},
+        canonical_model_id="ROGUE_FAKE_HYPOTHESIS",
+        legacy_aliases=(),
+        event_window={"cutoff_ts_ns": 0, "end_ts_ns": 3_000_000_000},
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "semantic_blocker"
+    assert any(
+        reason.startswith("semantic_blocker:unknown_semantic_contract")
+        for reason in result["fail_closed_reasons"]
+    )
+    assert not (out_dir / "official_replay.json").exists()
+    assert not (out_dir / "stats_summary.json").exists()
