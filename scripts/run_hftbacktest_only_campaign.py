@@ -154,17 +154,24 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
         row_key = _hash_json(row)
     run_dir = campaign_root / safe_stem(row_key)
     result_path = run_dir / "campaign_row_result.json"
-    if settings.get("resume") and result_path.is_file():
+
+    strategy_id = MODEL_SPECIFIC_STRATEGY_ID
+
+    # Blocked rows never consult the resume cache: a receipt cached under an
+    # older manifest semantics (e.g. pre semantic-routing "completed" for a row
+    # that is now semantic-blocked) must not be reused as evidence. The blocked
+    # receipt is rewritten from the CURRENT row instead — cheap and idempotent.
+    blocker_code = str(row.get("blocker_code") or "")
+    metadata_blocker = _metadata_blocker(row)
+    manifest_blocked = bool(blocker_code) or row.get("admissibility_status") not in ("", "admissible")
+    row_is_blocked = manifest_blocked or bool(metadata_blocker)
+    if settings.get("resume") and not row_is_blocked and result_path.is_file():
         cached = json.loads(result_path.read_text(encoding="utf-8"))
         if _cached_receipt_matches_run(cached, settings):
             return cached
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    strategy_id = MODEL_SPECIFIC_STRATEGY_ID
-
-    blocker_code = str(row.get("blocker_code") or "")
-    metadata_blocker = _metadata_blocker(row)
-    if blocker_code or row.get("admissibility_status") not in ("", "admissible"):
+    if manifest_blocked:
         return _write_row_result(
             result_path,
             row,

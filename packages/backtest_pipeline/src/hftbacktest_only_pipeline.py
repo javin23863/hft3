@@ -2154,11 +2154,15 @@ def _semantic_guard_reasons(config: HftBacktestOnlyRunConfig) -> list[str]:
     """
     if config.strategy_id != "hypothesis_limit_order":
         return []
-    try:
-        from backtest_pipeline.src.model_execution_contracts import model_execution_contract
+    from backtest_pipeline.src.model_execution_contracts import model_execution_contract
 
+    try:
         contract = model_execution_contract(config.canonical_model_id)
-    except Exception:
+    except KeyError:
+        # Unknown slug: the manifest layer fail-closes those with
+        # unknown_semantic_contract; this guard only rules on KNOWN roles.
+        # Any other exception propagates — a broken contract layer must fail
+        # loudly (runner_failed receipt), never silently skip the guard.
         return []
     if contract.is_standalone_alpha:
         return []
