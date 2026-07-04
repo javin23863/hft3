@@ -40,7 +40,13 @@ leader legs → `no_verdict_leader_features_absent` (first real test post-PR-2).
 - Primary family: 27 models × 1 (H, s) each, event-types/regimes POOLED.
 - BH q = 0.10 (primary); DSR num_trials = envelope sets per model.
 - Floors: ≥40 Confirmation events; ≥5 fired rows/event; censoring ≤20% at H*.
-- Spread adjustment: edge − measured half-spread at signal time;
+- Entry marking: edge = E[mid(t+H) − mid(t+L) | fired] with L = MEASURED
+  order submit→ack latency (CHI404 native probe p99, ceil to int ms,
+  runtime/latency_reports/latency_summary.json; driver refuses to run
+  unmeasured). The first L ms of a move belong to faster participants —
+  a flat 100µs assumption violated the CHI404 replay band [0.5, 10] ms
+  and overstated momentum-class edges.
+- Spread adjustment: edge − measured half-spread at ENTRY time (t+L);
   pass line = fee hurdle (instrument_specs/fee_model) + 0.5 residual ticks.
 - Inference target: the clustered t (two-way CGM, event × month) is on the
   per-event NET series `edge_i − half_spread_i − pass_line` — H0 is "the

@@ -2,8 +2,14 @@
 """IC diagnostic — the gate for the event-alpha rebuild (PR-1).
 
 Computes the repo's own hypothesis test (HYPOTHESIS_SPEC_TEMPLATE section 3)
+with latency-marked entry:
 
-    E[ mid(t + H) - mid(t) | signal(t) > s ] > hurdle
+    E[ mid(t + H) - mid(t + L) | signal(t) > s ] > hurdle
+
+where L is the MEASURED order submit->ack latency (CHI404 native probe,
+runtime/latency_reports/latency_summary.json) — the first L milliseconds of
+any move belong to faster participants and are never ours to capture. Costs
+(half-spread) are marked at entry time t+L, not at signal time.
 
 for every hypothesis model, per pre-registered horizon/threshold
 (docs/hypotheses/HORIZON_MAP_PREREGISTERED.json), with the discipline the
@@ -312,9 +318,18 @@ def _extract_signal_frame(
     return pd.DataFrame(records), tick_size
 
 
-def _process_unit(task: tuple[dict[str, Any], list[str], Mapping[str, Any]]) -> dict[str, Any]:
-    """Worker: one pipeline pass -> per-model per-event aggregates (tiny payload)."""
-    unit, model_ids, hmap = task
+def _process_unit(
+    task: tuple[dict[str, Any], list[str], Mapping[str, Any], int]
+) -> dict[str, Any]:
+    """Worker: one pipeline pass -> per-model per-event aggregates (tiny payload).
+
+    Entry marking: the capturable move is mid(t+H) - mid(t+L) with L the
+    MEASURED order submit->ack latency (task[3], ms) — never mid(t). The
+    first-L-milliseconds move after a signal belongs to faster participants;
+    a flat 100us assumption both violated the CHI404 replay latency band
+    [0.5, 10] ms and overstated momentum-class edges.
+    """
+    unit, model_ids, hmap, entry_lat_ms = task
     import numpy as np
     import pandas as pd
 
@@ -351,10 +366,23 @@ def _process_unit(task: tuple[dict[str, Any], list[str], Mapping[str, Any]]) -> 
                 "models": {}}
 
     frame = pd.DataFrame({"timestamp_ns": ts_list, "mid_price": mids})
+    lat = int(entry_lat_ms)
     horizons = sorted({int(hmap[m]["horizon_ms"]) for m in model_ids} | set(EXPLORATORY_HORIZONS_MS))
-    frame = build_labels_frame(frame, tick_size=tick_size, horizons_ms=horizons)
+    if any(h <= lat for h in horizons):
+        raise SystemExit(f"horizon_not_beyond_entry_latency:{lat}ms")
+    frame = build_labels_frame(frame, tick_size=tick_size, horizons_ms=horizons + [lat])
+    # mid(t+L) - mid(t): subtracting this from every horizon return turns
+    # E[mid(t+H)-mid(t)] into the CAPTURABLE E[mid(t+H)-mid(t+L)].
+    ret_lat = frame[f"y_return_{lat}ms"].to_numpy(dtype=np.float64)
 
     spread_ticks = spread_ticks_arr
+    # Costs are paid at entry (t+L), not at signal time: index of the first
+    # row at/after each row's entry timestamp.
+    ts_arr = np.asarray(ts_list, dtype=np.int64)
+    entry_idx = np.searchsorted(ts_arr, ts_arr + lat * 1_000_000, side="left")
+    in_bounds = entry_idx < n
+    entry_spread = np.full(n, np.nan)
+    entry_spread[in_bounds] = spread_ticks[np.clip(entry_idx[in_bounds], 0, n - 1)]
     sigma_step = float(np.nanstd(np.diff(np.asarray(mids, dtype=np.float64)) / tick_size))
     vol_med = float(np.nanmedian(np.asarray(vols, dtype=np.float64)))
 
@@ -370,14 +398,16 @@ def _process_unit(task: tuple[dict[str, Any], list[str], Mapping[str, Any]]) -> 
             sign = np.sign(sig)
             per_h: dict[str, float] = {}
             for h in horizons:
-                ret = frame[f"y_return_{h}ms"].to_numpy(dtype=np.float64)
+                ret = frame[f"y_return_{h}ms"].to_numpy(dtype=np.float64) - ret_lat
                 signed = np.where(fired, sign * ret, np.nan)
                 per_h[str(h)] = float(np.nanmean(signed)) if np.isfinite(signed).any() else float("nan")
             entry["mean_signed_by_h"] = per_h
-            ret_star = frame[f"y_return_{h_star}ms"].to_numpy(dtype=np.float64)
+            ret_star = (
+                frame[f"y_return_{h_star}ms"].to_numpy(dtype=np.float64) - ret_lat
+            )
             censored = int(np.sum(fired & ~np.isfinite(ret_star)))
             entry["censoring_rate"] = censored / n_fired
-            entry["mean_half_spread_ticks"] = float(np.nanmean(spread_ticks[fired]) / 2.0)
+            entry["mean_half_spread_ticks"] = float(np.nanmean(entry_spread[fired]) / 2.0)
             ok = fired & np.isfinite(ret_star) & np.isfinite(sig)
             if int(ok.sum()) >= 10:
                 s_r = pd.Series(sig[ok]).rank()
@@ -492,6 +522,11 @@ def main(argv: list[str] | None = None) -> int:
         help="lake root holding leader tapes <SYM>.v.0_<EVENT_ID>_mbo.npz; "
              "units without a leader tape keep the abstain path "
              "(no_verdict_leader_features_absent)")
+    parser.add_argument(
+        "--entry-latency-ms", type=float, default=None,
+        help="order submit->ack latency for entry marking; default resolves "
+             "the MEASURED p99 from runtime/latency_reports/latency_summary.json "
+             "and refuses to run if unmeasured")
     args = parser.parse_args(argv)
 
     import numpy as np
@@ -545,7 +580,29 @@ def main(argv: list[str] | None = None) -> int:
         if syms
     }
 
-    tasks = [(u, model_ids, hmap) for u in units]
+    # Entry latency: measured order submit->ack, never an assumed constant.
+    # (First runs used the MarketStatePipeline default-ish 0.1 ms — below the
+    # CHI404 replay band floor of 0.5 ms and optimistic by ~70x vs measured.)
+    from backtest_pipeline.src.chi404_latency import (
+        DEFAULT_CHI404_SUMMARY,
+        resolve_order_ack_ms,
+    )
+
+    if args.entry_latency_ms is not None:
+        entry_lat_raw = float(args.entry_latency_ms)
+        entry_lat_source = "cli"
+    else:
+        try:
+            _summary = json.loads(DEFAULT_CHI404_SUMMARY.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            raise SystemExit("entry_latency_unmeasured:no_latency_summary")
+        _ack_ms, _measured, entry_lat_source = resolve_order_ack_ms(_summary)
+        if not _measured or _ack_ms is None:
+            raise SystemExit(f"entry_latency_unmeasured:{entry_lat_source}")
+        entry_lat_raw = float(_ack_ms)
+    entry_lat_ms = max(1, int(math.ceil(entry_lat_raw)))  # labeler takes int ms; round UP (conservative)
+
+    tasks = [(u, model_ids, hmap, entry_lat_ms) for u in units]
     results: list[dict[str, Any]] = []
     if args.workers <= 1:
         for t in tasks:
@@ -726,6 +783,9 @@ def main(argv: list[str] | None = None) -> int:
                   "holdout_sealed": "2023+"},
         "holdout_excluded_events": holdout_excluded,
         "units_processed": len(units),
+        "entry_latency_ms": entry_lat_ms,
+        "entry_latency_raw_ms": entry_lat_raw,
+        "entry_latency_source": entry_lat_source,
         # No silent caps: every unit that produced no aggregates is itemized.
         "units_skipped": collections.Counter(
             str(r["skipped"]) for r in results if r.get("skipped")
