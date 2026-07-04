@@ -228,3 +228,28 @@ If `local-preflight` is anything other than `run`, report `merge-ready: no`.
 If `pr-ai-review` is `unavailable(no-pr)`, report `merge-ready: no`. If the
 owner explicitly waives the external PR AI gate, use `pr-ai-review:
 waived-by-user` and `review-surface: none(waived-by-user: <reason>)`.
+
+
+## Greptile trigger verification + cadence (measured 2026-07-04, PRs #73-#75)
+
+Do not poll blind. The connector emits two distinct signals:
+
+1. **Acceptance**: greptile-apps[bot] adds a `+1` reaction to the `@greptileai`
+   trigger comment within ~60s. Check:
+   `gh api repos/<owner>/<repo>/issues/comments/<id>/reactions`.
+   No reaction after 2-3 min -> the trigger was dropped; repost once.
+2. **Completion**: a review submission whose `commit_id` equals the CURRENT
+   head (`gh api .../pulls/<n>/reviews`). Acceptance does NOT guarantee
+   completion — accepted runs have died silently server-side.
+
+Measured cadence (this repo): accepted runs complete in **5-10 min**
+(first-ever review on a PR: up to ~26 min with T-Rex repro runs).
+
+Protocol per iteration:
+- push -> wait ~60s -> post `@greptileai`
+- +2 min: verify the `+1` reaction; absent -> repost once
+- accepted: poll reviews at T+5 / T+10 / T+15 min
+- no completion by T+15 min: the run is dead — repost the trigger
+  (max 2 reposts per head); two dead runs on one head -> escalate to owner
+- completion with new actionable findings -> fix loop (max 5 iterations
+  total per the bounded-loop rule above)

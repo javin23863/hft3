@@ -1,0 +1,202 @@
+{
+ "envelope": "C:\\Users\\MSI\\repos\\hft3-fix-wt\\runtime\\stagec1\\envelope_rt_tox_ab.json",
+ "models": {
+  "ABSORPTION_FADE": {
+   "mean_d_fill_rate": -0.2169,
+   "mean_d_net_per_run": 3.5282,
+   "mean_d_realized_per_run": 1.7158,
+   "median_d_net_per_run": 5.402,
+   "pairs": 3
+  },
+  "AGGRESSOR_DECELERATION_FADE": {
+   "mean_d_fill_rate": -0.1835,
+   "mean_d_net_per_run": 0.3815,
+   "mean_d_realized_per_run": 0.6882,
+   "median_d_net_per_run": 0.3733,
+   "pairs": 3
+  },
+  "BOOK_SLOPE_COLLAPSE": {
+   "mean_d_fill_rate": -0.1966,
+   "mean_d_net_per_run": -0.441,
+   "mean_d_realized_per_run": 0.0047,
+   "median_d_net_per_run": -0.2741,
+   "pairs": 3
+  },
+  "CANCEL_STORM_BEFORE_MOVE": {
+   "mean_d_fill_rate": 0.0571,
+   "mean_d_net_per_run": 0.1685,
+   "mean_d_realized_per_run": -0.2295,
+   "median_d_net_per_run": 0.338,
+   "pairs": 3
+  },
+  "DEPTH_REFILL_IMBALANCE": {
+   "mean_d_fill_rate": -0.2741,
+   "mean_d_net_per_run": 0.688,
+   "mean_d_realized_per_run": 0.7124,
+   "median_d_net_per_run": 0.9453,
+   "pairs": 3
+  },
+  "DOM_ILLUSION_TRAP": {
+   "mean_d_fill_rate": -0.1293,
+   "mean_d_net_per_run": 0.6913,
+   "mean_d_realized_per_run": 0.5328,
+   "median_d_net_per_run": 0.9429,
+   "pairs": 3
+  },
+  "ECONOMIC_EVENT_RESTRICTION_FLATTENING": {
+   "mean_d_fill_rate": -0.1728,
+   "mean_d_net_per_run": 0.1071,
+   "mean_d_realized_per_run": -0.0125,
+   "median_d_net_per_run": -0.0024,
+   "pairs": 3
+  },
+  "FALSE_BREAKOUT_TRAP": {
+   "mean_d_fill_rate": 0.0006,
+   "mean_d_net_per_run": 0.0402,
+   "mean_d_realized_per_run": 0.0405,
+   "median_d_net_per_run": 0.0116,
+   "pairs": 3
+  },
+  "FORCED_LIQUIDATION_CASCADE": {
+   "mean_d_fill_rate": -0.1295,
+   "mean_d_net_per_run": 0.0816,
+   "mean_d_realized_per_run": 0.0651,
+   "median_d_net_per_run": 0.0161,
+   "pairs": 3
+  },
+  "ICEBERG_RELOAD_DETECTION": {
+   "mean_d_fill_rate": -0.2307,
+   "mean_d_net_per_run": 0.7855,
+   "mean_d_realized_per_run": 0.3178,
+   "median_d_net_per_run": 1.3428,
+   "pairs": 3
+  },
+  "LIQUIDITY_VACUUM_CONTINUATION": {
+   "mean_d_fill_rate": -0.0504,
+   "mean_d_net_per_run": -0.1287,
+   "mean_d_realized_per_run": -0.0537,
+   "median_d_net_per_run": -0.0443,
+   "pairs": 3
+  },
+  "MAX_CONTRACT_CROWDING_IN_MICROS": {
+   "mean_d_fill_rate": -0.2772,
+   "mean_d_net_per_run": -1.2879,
+   "mean_d_realized_per_run": -1.6892,
+   "median_d_net_per_run": -2.0753,
+   "pairs": 3
+  },
+  "ONE_SIDED_ADD_CANCEL_IMBALANCE": {
+   "mean_d_fill_rate": -0.2749,
+   "mean_d_net_per_run": 0.902,
+   "mean_d_realized_per_run": 0.3546,
+   "median_d_net_per_run": 1.3914,
+   "pairs": 3
+  },
+  "PASSIVE_TRAP_FILL": {
+   "mean_d_fill_rate": -0.2814,
+   "mean_d_net_per_run": -0.861,
+   "mean_d_realized_per_run": -1.3353,
+   "median_d_net_per_run": -1.1435,
+   "pairs": 3
+  },
+  "PRIOR_HIGH_LOW_BREAKOUT_TRAP": {
+   "mean_d_fill_rate": 0.0231,
+   "mean_d_net_per_run": 5.1497,
+   "mean_d_realized_per_run": -0.9454,
+   "median_d_net_per_run": 7.1204,
+   "pairs": 3
+  },
+  "QUEUE_DEPLETION_TRIGGER": {
+   "mean_d_fill_rate": -0.1423,
+   "mean_d_net_per_run": 0.1132,
+   "mean_d_realized_per_run": 0.1769,
+   "median_d_net_per_run": 0.1595,
+   "pairs": 3
+  },
+  "ROUND_NUMBER_STOP_SWEEP": {
+   "mean_d_fill_rate": -0.1797,
+   "mean_d_net_per_run": 3.5642,
+   "mean_d_realized_per_run": 1.0586,
+   "median_d_net_per_run": 5.1652,
+   "pairs": 3
+  },
+  "SECOND_WAVE_CONTINUATION": {
+   "mean_d_fill_rate": -0.3972,
+   "mean_d_net_per_run": 2.1937,
+   "mean_d_realized_per_run": 2.014,
+   "median_d_net_per_run": 1.574,
+   "pairs": 3
+  },
+  "SPREAD_BLOWOUT_RECOMPRESSION": {
+   "mean_d_fill_rate": 0.0077,
+   "mean_d_net_per_run": -0.0102,
+   "mean_d_realized_per_run": -0.0102,
+   "median_d_net_per_run": -0.0055,
+   "pairs": 3
+  },
+  "STOP_LOSS_CASCADE_CONTINUATION": {
+   "mean_d_fill_rate": -0.2287,
+   "mean_d_net_per_run": -0.449,
+   "mean_d_realized_per_run": 0.0162,
+   "median_d_net_per_run": -0.5118,
+   "pairs": 3
+  },
+  "STOP_RUN_EXHAUSTION_FADE": {
+   "mean_d_fill_rate": -0.1266,
+   "mean_d_net_per_run": 0.4493,
+   "mean_d_realized_per_run": 0.349,
+   "median_d_net_per_run": 0.5774,
+   "pairs": 3
+  },
+  "THIN_BOOK_CONTINUATION": {
+   "mean_d_fill_rate": -0.0028,
+   "mean_d_net_per_run": 0.0527,
+   "mean_d_realized_per_run": 0.0581,
+   "median_d_net_per_run": 0.0524,
+   "pairs": 3
+  },
+  "VIX_DEPTH_IMBALANCE_DIRECTION": {
+   "mean_d_fill_rate": -0.2483,
+   "mean_d_net_per_run": -0.6141,
+   "mean_d_realized_per_run": 0.2161,
+   "median_d_net_per_run": -0.6659,
+   "pairs": 3
+  },
+  "VIX_IMPLIED_REALIZED_GAP": {
+   "mean_d_fill_rate": 0.9744,
+   "mean_d_net_per_run": 7.2123,
+   "mean_d_realized_per_run": -1.6341,
+   "median_d_net_per_run": 7.2123,
+   "pairs": 1
+  },
+  "VIX_LEVEL_CONDITIONED_CONTINUATION": {
+   "mean_d_fill_rate": 0.0232,
+   "mean_d_net_per_run": 5.4076,
+   "mean_d_realized_per_run": -1.2324,
+   "median_d_net_per_run": 9.5138,
+   "pairs": 3
+  },
+  "VIX_SPIKE_EVENT_FADE": {
+   "mean_d_fill_rate": 0.2222,
+   "mean_d_net_per_run": 12.8477,
+   "mean_d_realized_per_run": -0.8488,
+   "median_d_net_per_run": 21.3387,
+   "pairs": 3
+  },
+  "VWAP_DEFENSE_BREAK": {
+   "mean_d_fill_rate": -0.219,
+   "mean_d_net_per_run": 3.5805,
+   "mean_d_realized_per_run": 1.305,
+   "median_d_net_per_run": 5.1627,
+   "pairs": 3
+  }
+ },
+ "runs_jsonl": "runtime\\stagec1\\box_pull\\hbt_stagec3_a326db8f\\pass_a_runs.jsonl.gz",
+ "runs_matched": 138387,
+ "runs_unmatched": 0,
+ "schema_version": "hft3_tox_ab_report_v1",
+ "scope_note": "Measured under the v1 passive expression (99.2% timeout exits). A null kills nothing; a positive proves little. Binding toxicity decision re-runs as paired arms under expression v2 in PR-5.",
+ "sets_hashed": 390,
+ "unpaired_arms": 2,
+ "verdict_scope": "expression-v1-conditional"
+}
