@@ -245,9 +245,18 @@ def _process_unit(task: tuple[dict[str, Any], list[str], Mapping[str, Any]]) -> 
     from decision_engine.python.src.targets import build_labels_frame
 
     symbol_root = str(unit["symbol"]).split(".")[0].upper()
+    import zipfile
+
+    from research_pipeline.data_quality import NoOHLCVDataError
+
+    # Fail-soft ONLY for known data-quality / NPZ-load failures — a broken
+    # adapter or pipeline regression must still kill the diagnostic loudly
+    # rather than silently shrinking the inference population (Greptile P1
+    # on #80: bare Exception converted RuntimeError into a skip receipt).
+    _TAPE_ERRORS = (NoOHLCVDataError, OSError, EOFError, zipfile.BadZipFile)
     try:
         raw_frame, tick_size = _extract_signal_frame(unit, model_ids)
-    except Exception as exc:  # fail-soft per unit: receipt, never kill the run
+    except _TAPE_ERRORS as exc:
         return {"event_id": unit["event_id"], "symbol": symbol_root,
                 "year": unit["year"], "n_rows": 0,
                 "skipped": f"tape_load_failed:{type(exc).__name__}",
