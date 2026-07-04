@@ -308,6 +308,22 @@ def _envelope_trials_per_model(envelope_path: Path) -> dict[str, int]:
     return dict(counts)
 
 
+def _bh_over_primary_family(model_ids, report_models, *, q: float) -> list[bool]:
+    """BH mask over the FULL pre-registered primary family.
+
+    No-verdict models (insufficient_events, leader-feature gaps — no
+    ``p_raw``) enter as NaN so ``bh_reject`` counts them in the denominator
+    as p=1.0 non-rejections. Filtering them out before the call would shrink
+    the family and weaken the multiple-testing penalty for the survivors
+    (Greptile P1, PR #75 round 4 — the driver previously rebuilt the family
+    from only models that produced a p-value).
+    """
+    from research_pipeline.ic_stats import bh_reject
+
+    family_p = [report_models[m].get("p_raw", float("nan")) for m in model_ids]
+    return bh_reject(family_p, q=q)
+
+
 def _sharpe_and_dsr(edges, n_trials: int) -> tuple[float, float]:
     """Per-event Sharpe of the edge series + Bailey-Lopez de Prado deflation.
 
@@ -354,7 +370,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from backtest_pipeline.src.fee_model import FeeModel
     from backtest_pipeline.src.instrument_specs import resolve_instrument_spec
-    from research_pipeline.ic_stats import bh_reject, clustered_t_two_way, hurdle_ticks
+    from research_pipeline.ic_stats import clustered_t_two_way, hurdle_ticks
     from research_pipeline.statistics import deflated_sharpe_ratio, sharpe_ratio
 
     map_blob = _require_committed_horizon_map(args.horizon_map)
@@ -467,11 +483,10 @@ def main(argv: list[str] | None = None) -> int:
                 ]
         report_models[mid_id] = entry
 
-    # BH across the primary family (only models with a p-value)
-    with_p = [m for m in model_ids if "p_raw" in report_models[m]]
-    mask = bh_reject([report_models[m]["p_raw"] for m in with_p], q=BH_Q_PRIMARY)
-    for m, rejected_null in zip(with_p, mask):
-        report_models[m]["bh_pass"] = bool(rejected_null)
+    mask = _bh_over_primary_family(model_ids, report_models, q=BH_Q_PRIMARY)
+    for m, rejected_null in zip(model_ids, mask):
+        if "p_raw" in report_models[m]:
+            report_models[m]["bh_pass"] = bool(rejected_null)
 
     from backtest_pipeline.src.model_execution_contracts import model_execution_contract
     for m in model_ids:

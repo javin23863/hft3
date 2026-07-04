@@ -202,6 +202,23 @@ def test_driver_end_to_end_smoke(tmp_path: Path) -> None:
         assert set(entry) <= driver.KILL_LIST_ALLOWED_FIELDS
 
 
+def test_bh_family_includes_no_verdict_models() -> None:
+    # Greptile P1 (PR #75 round 4): the driver must run BH over the FULL
+    # pre-registered family. A borderline p=0.04 passes alone at q=0.05 but
+    # must NOT pass when a second (no-verdict, no p_raw) model keeps the
+    # denominator at 2: adjusted = min(1, 0.04*2/1) = 0.08 > 0.05.
+    driver = _load_driver()
+    solo = driver._bh_over_primary_family(
+        ["A"], {"A": {"p_raw": 0.04}}, q=0.05
+    )
+    assert solo == [True]
+    with_no_verdict = driver._bh_over_primary_family(
+        ["A", "B"], {"A": {"p_raw": 0.04}, "B": {"verdict_reason": "insufficient_events"}},
+        q=0.05,
+    )
+    assert with_no_verdict == [False, False]
+
+
 def test_sharpe_and_dsr_branch_call_shape() -> None:
     # Greptile P1 (PR #75): deflated_sharpe_ratio takes an observed-Sharpe
     # float + n_obs/n_trials kwargs; the MIN_EVENTS branch previously passed
