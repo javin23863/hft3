@@ -3,6 +3,7 @@
 
 models:
   SECOND_WAVE_CONTINUATION:
+    hypothesis_spec_ref: docs/hypotheses/SECOND_WAVE_CONTINUATION.md
     kind: hypothesis
     hyp_id: 1
     legacy_id: HYP_1
@@ -22,6 +23,7 @@ models:
       guardrails: ["max_drawdown", "trade_count"]
 
   STOP_RUN_EXHAUSTION_FADE:
+    hypothesis_spec_ref: docs/hypotheses/STOP_RUN_EXHAUSTION_FADE.md
     kind: hypothesis
     hyp_id: 2
     legacy_id: HYP_2
@@ -41,6 +43,7 @@ models:
       guardrails: ["sharpe", "trade_count"]
 
   LIQUIDITY_VACUUM_CONTINUATION:
+    hypothesis_spec_ref: docs/hypotheses/LIQUIDITY_VACUUM_CONTINUATION.md
     kind: hypothesis
     hyp_id: 3
     legacy_id: HYP_3
@@ -60,6 +63,7 @@ models:
       guardrails: ["max_drawdown", "trade_count"]
 
   DEPTH_REFILL_IMBALANCE:
+    hypothesis_spec_ref: docs/hypotheses/DEPTH_REFILL_IMBALANCE.md
     kind: hypothesis
     hyp_id: 4
     legacy_id: HYP_4
@@ -79,6 +83,7 @@ models:
       guardrails: ["max_drawdown", "trade_count"]
 
   SPREAD_BLOWOUT_RECOMPRESSION:
+    hypothesis_spec_ref: docs/hypotheses/SPREAD_BLOWOUT_RECOMPRESSION.md
     kind: hypothesis
     hyp_id: 5
     legacy_id: HYP_5
@@ -98,6 +103,7 @@ models:
       guardrails: ["max_drawdown", "trade_count"]
 
   AGGRESSOR_DECELERATION_FADE:
+    hypothesis_spec_ref: docs/hypotheses/AGGRESSOR_DECELERATION_FADE.md
     kind: hypothesis
     hyp_id: 6
     legacy_id: HYP_6
@@ -106,6 +112,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   FORCED_LIQUIDATION_CASCADE:
+    hypothesis_spec_ref: docs/hypotheses/FORCED_LIQUIDATION_CASCADE.md
     kind: hypothesis
     hyp_id: 7
     legacy_id: HYP_7
@@ -114,6 +121,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   FALSE_BREAKOUT_TRAP:
+    hypothesis_spec_ref: docs/hypotheses/FALSE_BREAKOUT_TRAP.md
     kind: hypothesis
     hyp_id: 8
     legacy_id: HYP_8
@@ -133,6 +141,7 @@ models:
       guardrails: ["max_drawdown", "trade_count"]
 
   CANCEL_STORM_BEFORE_MOVE:
+    hypothesis_spec_ref: docs/hypotheses/CANCEL_STORM_BEFORE_MOVE.md
     kind: hypothesis
     hyp_id: 9
     legacy_id: HYP_9
@@ -141,6 +150,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   QUEUE_DEPLETION_TRIGGER:
+    hypothesis_spec_ref: docs/hypotheses/QUEUE_DEPLETION_TRIGGER.md
     kind: hypothesis
     hyp_id: 10
     legacy_id: HYP_10
@@ -160,6 +170,7 @@ models:
       guardrails: ["max_drawdown", "trade_count"]
 
   BOOK_SLOPE_COLLAPSE:
+    hypothesis_spec_ref: docs/hypotheses/BOOK_SLOPE_COLLAPSE.md
     kind: hypothesis
     hyp_id: 11
     legacy_id: HYP_11
@@ -168,6 +179,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   ABSORPTION_FADE:
+    hypothesis_spec_ref: docs/hypotheses/ABSORPTION_FADE.md
     kind: hypothesis
     hyp_id: 12
     legacy_id: HYP_12
@@ -176,6 +188,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   ICEBERG_RELOAD_DETECTION:
+    hypothesis_spec_ref: docs/hypotheses/ICEBERG_RELOAD_DETECTION.md
     kind: hypothesis
     hyp_id: 13
     legacy_id: HYP_13
@@ -192,6 +205,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   ONE_SIDED_ADD_CANCEL_IMBALANCE:
+    hypothesis_spec_ref: docs/hypotheses/ONE_SIDED_ADD_CANCEL_IMBALANCE.md
     kind: hypothesis
     hyp_id: 15
     legacy_id: HYP_15
@@ -200,6 +214,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   ES_MES_LEAD_LAG:
+    hypothesis_spec_ref: docs/hypotheses/ES_MES_LEAD_LAG.md
     kind: hypothesis
     hyp_id: 16
     legacy_id: HYP_16
@@ -209,6 +224,7 @@ models:
     target_instrument_universe: ["MES"]
 
   NQ_MNQ_LEAD_LAG:
+    hypothesis_spec_ref: docs/hypotheses/NQ_MNQ_LEAD_LAG.md
     kind: hypothesis
     hyp_id: 17
     legacy_id: HYP_17
@@ -218,6 +234,7 @@ models:
     target_instrument_universe: ["MNQ"]
 
   ES_NQ_DIVERGENCE_SNAPBACK:
+    hypothesis_spec_ref: docs/hypotheses/ES_NQ_DIVERGENCE_SNAPBACK.md
     kind: hypothesis
     hyp_id: 18
     legacy_id: HYP_18
@@ -226,6 +243,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ"]
 
   ZN_ZB_ES_NQ_MACRO_IMPULSE:
+    hypothesis_spec_ref: docs/hypotheses/ZN_ZB_ES_NQ_MACRO_IMPULSE.md
     kind: hypothesis
     hyp_id: 19
     legacy_id: HYP_19
@@ -235,6 +253,7 @@ models:
     target_instrument_universe: ["ES", "MES", "NQ", "MNQ"]
 
   MICRO_CONTRACT_RETAIL_LAG:
+    hypothesis_spec_ref: docs/hypotheses/MICRO_CONTRACT_RETAIL_LAG.md
     kind: hypothesis
     hyp_id: 20
     legacy_id: HYP_20
@@ -244,6 +263,7 @@ models:
     target_instrument_universe: ["MES"]
 
   ROUND_NUMBER_STOP_SWEEP:
+    hypothesis_spec_ref: docs/hypotheses/ROUND_NUMBER_STOP_SWEEP.md
     kind: hypothesis
     hyp_id: 21
     legacy_id: HYP_21
@@ -252,6 +272,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   PRIOR_HIGH_LOW_BREAKOUT_TRAP:
+    hypothesis_spec_ref: docs/hypotheses/PRIOR_HIGH_LOW_BREAKOUT_TRAP.md
     kind: hypothesis
     hyp_id: 22
     legacy_id: HYP_22
@@ -268,6 +289,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   VWAP_DEFENSE_BREAK:
+    hypothesis_spec_ref: docs/hypotheses/VWAP_DEFENSE_BREAK.md
     kind: hypothesis
     hyp_id: 24
     legacy_id: HYP_24
@@ -276,6 +298,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   DOM_ILLUSION_TRAP:
+    hypothesis_spec_ref: docs/hypotheses/DOM_ILLUSION_TRAP.md
     kind: hypothesis
     hyp_id: 25
     legacy_id: HYP_25
@@ -292,6 +315,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   STOP_LOSS_CASCADE_CONTINUATION:
+    hypothesis_spec_ref: docs/hypotheses/STOP_LOSS_CASCADE_CONTINUATION.md
     kind: hypothesis
     hyp_id: 27
     legacy_id: HYP_27
@@ -356,6 +380,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   MAX_CONTRACT_CROWDING_IN_MICROS:
+    hypothesis_spec_ref: docs/hypotheses/MAX_CONTRACT_CROWDING_IN_MICROS.md
     kind: hypothesis
     hyp_id: 35
     legacy_id: HYP_35
@@ -380,6 +405,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   ECONOMIC_EVENT_RESTRICTION_FLATTENING:
+    hypothesis_spec_ref: docs/hypotheses/ECONOMIC_EVENT_RESTRICTION_FLATTENING.md
     kind: hypothesis
     hyp_id: 38
     legacy_id: HYP_38
@@ -404,6 +430,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   THIN_BOOK_CONTINUATION:
+    hypothesis_spec_ref: docs/hypotheses/THIN_BOOK_CONTINUATION.md
     kind: hypothesis
     hyp_id: 41
     legacy_id: HYP_41
@@ -412,6 +439,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   PASSIVE_TRAP_FILL:
+    hypothesis_spec_ref: docs/hypotheses/PASSIVE_TRAP_FILL.md
     kind: hypothesis
     hyp_id: 42
     legacy_id: HYP_42
@@ -444,6 +472,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_SPIKE_EVENT_FADE:
+    hypothesis_spec_ref: docs/hypotheses/VIX_SPIKE_EVENT_FADE.md
     kind: hypothesis
     hyp_id: 46
     legacy_id: HYP_46
@@ -460,6 +489,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_IMPLIED_REALIZED_GAP:
+    hypothesis_spec_ref: docs/hypotheses/VIX_IMPLIED_REALIZED_GAP.md
     kind: hypothesis
     hyp_id: 48
     legacy_id: HYP_48
@@ -468,6 +498,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_DEPTH_IMBALANCE_DIRECTION:
+    hypothesis_spec_ref: docs/hypotheses/VIX_DEPTH_IMBALANCE_DIRECTION.md
     kind: hypothesis
     hyp_id: 49
     legacy_id: HYP_49
@@ -476,6 +507,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "NG", "GC", "MGC", "SI", "HG", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_LEVEL_CONDITIONED_CONTINUATION:
+    hypothesis_spec_ref: docs/hypotheses/VIX_LEVEL_CONDITIONED_CONTINUATION.md
     kind: hypothesis
     hyp_id: 50
     legacy_id: HYP_50

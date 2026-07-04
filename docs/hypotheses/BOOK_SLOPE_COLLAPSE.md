@@ -1,0 +1,57 @@
+# BOOK_SLOPE_COLLAPSE — hypothesis spec
+
+status: draft-complete
+slug: BOOK_SLOPE_COLLAPSE
+kind: hypothesis | hyp_id: 11 | legacy: HYP_11
+class: `BookSlopeCollapse` (packages/features_engine/src/hypotheses/modules.py:243)
+execution_role: primary_alpha
+display: Book slope collapse
+
+## 1. Market mechanism
+A collapsing book slope (depth thinning with accelerating slope change) means liquidity providers are abandoning one side faster than takers consume it — MM inventory limits force withdrawal before the move. Late passive quoters left behind get run over. We trade the collapse direction, paid by the gap-through as the side fails.
+
+## 2. Signal formula
+```
+collapse = sign(book_slope) * max(0, book_slope * book_slope_change)
+signal   = tanh(5*collapse)                                     # modules.py:250-257
+```
+- Slots: `book_slope`, `book_slope_change`.
+- Range (-1,1); positive = BUY (bid side strengthening / ask collapsing by sign convention).
+
+## 3. Falsifiable prediction
+Pre-registered (mechanical, HORIZON_MAP_PREREGISTERED.json):
+
+```
+E[ mid(t + H) - mid(t) | signal(t) > s ] > hurdle
+H = 15000 ms, s = 0.1
+```
+
+Directional claim: accelerating same-sign slope change predicts continuation of mid in the slope direction over 15s. REFUTED if the spread-adjusted conditional expectancy E[sign(signal)*(mid(t+H)-mid(t)) - taker spread cost | |signal|>s] fails to exceed the section-4 hurdle on Confirmation years (2021-2022) at BH-corrected q=0.10 over >=40 events (errors two-way clustered by event x calendar month).
+
+## 4. Cost hurdle (authoritative: instrument_specs.py + fee_model.py, non-member tier)
+
+| symbol | fee/side $ | multiplier | fee hurdle (pts) | fee hurdle (ticks) | + 1 tick taker slippage (ticks RT) |
+|---|---|---|---|---|---|
+| ES | 1.52 | 50 | 0.0608 | 0.243 | 1.243 |
+| M2K | 0.52 | 5 | 0.2080 | 2.080 | 3.080 |
+| MES | 0.52 | 5 | 0.2080 | 0.832 | 1.832 |
+| MNQ | 0.52 | 2 | 0.5200 | 2.080 | 3.080 |
+| MYM | 0.52 | 0.5 | 2.0800 | 2.080 | 3.080 |
+| NQ | 1.52 | 20 | 0.1520 | 0.608 | 1.608 |
+| RTY | 1.52 | 50 | 0.0608 | 0.608 | 1.608 |
+| YM | 1.52 | 5 | 0.6080 | 0.608 | 1.608 |
+| ZB | 1.07 | 1000 | 0.0021 | 0.069 | 1.069 |
+| ZN | 1.07 | 1000 | 0.0021 | 0.137 | 1.137 |
+
+Predicted edge at H must exceed the traded symbol's total hurdle or the model is
+rejected at intake (template section 4).
+
+## 5. Classification and instrument binding
+- Class: offensive (catalog role: None; blocks_trade: False)
+- Target universe: (none declared — no target constraint; trades any valid-universe symbol)
+- Valid universe: ['ES', 'MES', 'NQ', 'MNQ', 'YM', 'MYM', 'RTY', 'M2K', 'CL', 'MCL', 'NG', 'GC', 'MGC', 'SI', 'HG', 'ZN', 'ZB', 'ZF', 'ZT']
+- Required leaders: none | Required sensors: none
+- max_round_trips intent: single-shot event trade (v1 evidence: multi-trip machinery mostly idle)
+
+## Evidence ledger
+Pass A (expression v1, flattened semantics): rows=4346, net=-568.35, realized=-1958.71, win_rate_filled=0.2499. Old-semantics/v1-expression evidence — NOT model-worth evidence.
