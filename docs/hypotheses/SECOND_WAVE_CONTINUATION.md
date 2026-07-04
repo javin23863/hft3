@@ -18,6 +18,7 @@ signal = tanh(3.0 * aggressor_volume_imbalance)          # modules.py:158-162
 - Output range [-1, 1]; positive = BUY (follow the aggressor flow).
 - No regime/event gating.
 - NOTE: single-feature momentum transform; mathematically identical in form to PASSIVE_TRAP_FILL (tanh(3*agg_imb)) — the two hypotheses are currently the same signal with different names.
+- DEGENERACY (PR-0b cross-flag): TRAILING_DRAWDOWN_PRESSURE (modules.py:770-781) is this identical formula tanh(3*agg_imb) restricted to the trend_continuation regime — a regime-slice of this slug, not an independent mechanism. Never count the three (SECOND_WAVE_CONTINUATION, PASSIVE_TRAP_FILL, TRAILING_DRAWDOWN_PRESSURE) as independent trials.
 
 ## 3. Falsifiable prediction
 Pre-registered (mechanical, HORIZON_MAP_PREREGISTERED.json):

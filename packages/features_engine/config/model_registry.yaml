@@ -197,6 +197,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   LIQUIDITY_DEFENSE_BREAK:
+    hypothesis_spec_ref: docs/hypotheses/LIQUIDITY_DEFENSE_BREAK.md
     kind: hypothesis
     hyp_id: 14
     legacy_id: HYP_14
@@ -281,6 +282,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   OPENING_CANDLE_CHASE:
+    hypothesis_spec_ref: docs/hypotheses/OPENING_CANDLE_CHASE.md
     kind: hypothesis
     hyp_id: 23
     legacy_id: HYP_23
@@ -307,6 +309,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   LATE_CANDLE_ENTRY_FADE:
+    hypothesis_spec_ref: docs/hypotheses/LATE_CANDLE_ENTRY_FADE.md
     kind: hypothesis
     hyp_id: 26
     legacy_id: HYP_26
@@ -324,6 +327,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   PANIC_MARKET_ORDER_SPREAD_TAX:
+    hypothesis_spec_ref: docs/hypotheses/PANIC_MARKET_ORDER_SPREAD_TAX.md
     kind: hypothesis
     hyp_id: 28
     legacy_id: HYP_28
@@ -332,6 +336,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   END_OF_DAY_FORCED_FLATTEN_FLOW:
+    hypothesis_spec_ref: docs/hypotheses/END_OF_DAY_FORCED_FLATTEN_FLOW.md
     kind: hypothesis
     hyp_id: 29
     legacy_id: HYP_29
@@ -340,6 +345,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   CUTOFF_PANIC_EXITS:
+    hypothesis_spec_ref: docs/hypotheses/CUTOFF_PANIC_EXITS.md
     kind: hypothesis
     hyp_id: 30
     legacy_id: HYP_30
@@ -348,6 +354,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   NO_OVERNIGHT_INVENTORY_SQUEEZE:
+    hypothesis_spec_ref: docs/hypotheses/NO_OVERNIGHT_INVENTORY_SQUEEZE.md
     kind: hypothesis
     hyp_id: 31
     legacy_id: HYP_31
@@ -356,6 +363,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   DAILY_LOSS_LIMIT_DEFENSE:
+    hypothesis_spec_ref: docs/hypotheses/DAILY_LOSS_LIMIT_DEFENSE.md
     kind: hypothesis
     hyp_id: 32
     legacy_id: HYP_32
@@ -364,6 +372,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   TRAILING_DRAWDOWN_PRESSURE:
+    hypothesis_spec_ref: docs/hypotheses/TRAILING_DRAWDOWN_PRESSURE.md
     kind: hypothesis
     hyp_id: 33
     legacy_id: HYP_33
@@ -372,6 +381,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   PROFIT_LOCK_BEHAVIOR:
+    hypothesis_spec_ref: docs/hypotheses/PROFIT_LOCK_BEHAVIOR.md
     kind: hypothesis
     hyp_id: 34
     legacy_id: HYP_34
@@ -389,6 +399,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   PROP_RESET_REOPEN_WINDOW:
+    hypothesis_spec_ref: docs/hypotheses/PROP_RESET_REOPEN_WINDOW.md
     kind: hypothesis
     hyp_id: 36
     legacy_id: HYP_36
@@ -397,6 +408,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   FRIDAY_WEEKEND_DERISKING:
+    hypothesis_spec_ref: docs/hypotheses/FRIDAY_WEEKEND_DERISKING.md
     kind: hypothesis
     hyp_id: 37
     legacy_id: HYP_37
@@ -414,6 +426,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   QUOTE_PULL_BEFORE_VOLATILITY:
+    hypothesis_spec_ref: docs/hypotheses/QUOTE_PULL_BEFORE_VOLATILITY.md
     kind: hypothesis
     hyp_id: 39
     legacy_id: HYP_39
@@ -422,6 +435,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   REQUOTE_RACE_AFTER_SHOCK:
+    hypothesis_spec_ref: docs/hypotheses/REQUOTE_RACE_AFTER_SHOCK.md
     kind: hypothesis
     hyp_id: 40
     legacy_id: HYP_40
@@ -448,6 +462,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   REBATE_TRAP_AVOIDANCE:
+    hypothesis_spec_ref: docs/hypotheses/REBATE_TRAP_AVOIDANCE.md
     kind: hypothesis
     hyp_id: 43
     legacy_id: HYP_43
@@ -456,6 +471,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   SPREAD_REGIME_CHANGE:
+    hypothesis_spec_ref: docs/hypotheses/SPREAD_REGIME_CHANGE.md
     kind: hypothesis
     hyp_id: 44
     legacy_id: HYP_44
@@ -464,6 +480,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   GHOST_ROUTE:
+    hypothesis_spec_ref: docs/hypotheses/GHOST_ROUTE.md
     kind: hypothesis
     hyp_id: 45
     legacy_id: HYP_45
@@ -481,6 +498,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   VIX_QUOTE_PULL_LIQUIDITY_VACUUM:
+    hypothesis_spec_ref: docs/hypotheses/VIX_QUOTE_PULL_LIQUIDITY_VACUUM.md
     kind: hypothesis
     hyp_id: 47
     legacy_id: HYP_47
@@ -516,6 +534,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   BOOK_PRESSURE:
+    hypothesis_spec_ref: docs/hypotheses/BOOK_PRESSURE.md
     kind: pdf_structural
     legacy_id: PDF_MODEL_1
     display_name: Limit Order Book Pressure
@@ -534,6 +553,7 @@ models:
       guardrails: ["max_drawdown", "trade_count"]
 
   CROSS_ASSET_LEAD_LAG:
+    hypothesis_spec_ref: docs/hypotheses/CROSS_ASSET_LEAD_LAG.md
     kind: pdf_structural
     legacy_id: PDF_MODEL_2
     display_name: Cross-Asset Lead-Lag
@@ -541,6 +561,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   VPIN_TOXICITY:
+    hypothesis_spec_ref: docs/hypotheses/VPIN_TOXICITY.md
     kind: pdf_structural
     legacy_id: PDF_MODEL_3
     display_name: VPIN Flow Toxicity
@@ -548,6 +569,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   HYBRID_EXECUTION:
+    hypothesis_spec_ref: docs/hypotheses/HYBRID_EXECUTION.md
     kind: pdf_structural
     legacy_id: PDF_MODEL_4
     display_name: Hybrid Defensive Execution
@@ -555,6 +577,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   DEALER_HEDGING:
+    hypothesis_spec_ref: docs/hypotheses/DEALER_HEDGING.md
     kind: pdf_structural
     legacy_id: PDF_MODEL_5
     display_name: Dealer Options Hedging
@@ -562,6 +585,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K"]
 
   DOW_YM_INDEX:
+    hypothesis_spec_ref: docs/hypotheses/DOW_YM_INDEX.md
     kind: pdf_structural
     legacy_id: PDF_MODEL_6
     display_name: Dow/YM Price-Weighted Index
@@ -569,6 +593,7 @@ models:
     valid_instrument_universe: ["YM", "MYM"]
 
   TREASURY_CTD:
+    hypothesis_spec_ref: docs/hypotheses/TREASURY_CTD.md
     kind: pdf_structural
     legacy_id: PDF_MODEL_7
     display_name: Treasury CTD / Implied Repo
@@ -576,6 +601,7 @@ models:
     valid_instrument_universe: ["ZN", "ZB", "ZF", "ZT"]
 
   TRANSFER_ENTROPY:
+    hypothesis_spec_ref: docs/hypotheses/TRANSFER_ENTROPY.md
     kind: pdf_structural
     legacy_id: PDF_MODEL_8
     display_name: Transfer Entropy Lead-Lag
@@ -583,6 +609,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   QUANTUM_SPREAD_DEFENSE:
+    hypothesis_spec_ref: docs/hypotheses/QUANTUM_SPREAD_DEFENSE.md
     kind: pdf_structural
     legacy_id: PDF_MODEL_9
     display_name: Quantum Spread Defense
@@ -590,6 +617,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   STOCHASTIC_THERMO:
+    hypothesis_spec_ref: docs/hypotheses/STOCHASTIC_THERMO.md
     kind: pdf_structural
     legacy_id: PDF_MODEL_10
     display_name: Stochastic Thermodynamics
@@ -597,6 +625,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   HAWKES_TOXIC_FLOW:
+    hypothesis_spec_ref: docs/hypotheses/HAWKES_TOXIC_FLOW.md
     kind: pdf_structural
     legacy_id: PDF_MODEL_11
     display_name: Hawkes Toxic Flow Detection
@@ -604,6 +633,7 @@ models:
     valid_instrument_universe: ["ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "ZN", "ZB", "ZF", "ZT"]
 
   RL_EXECUTION_POLICY:
+    hypothesis_spec_ref: docs/hypotheses/RL_EXECUTION_POLICY.md
     kind: reinforcement_learning
     legacy_id: RL_EXECUTION
     display_name: Reinforcement Learning Execution Policy
@@ -624,6 +654,7 @@ models:
       - "vault:decisions/2026-06-25 RL GPU training literature and budget execution rule.md"
 
   RL_DEEP_Q_EXECUTION_PROXY:
+    hypothesis_spec_ref: docs/hypotheses/RL_DEEP_Q_EXECUTION_PROXY.md
     kind: reinforcement_learning
     legacy_id: RL_DEEP_Q_PROXY
     display_name: Deep-Q Execution Proxy
@@ -646,6 +677,7 @@ models:
       - "vault:decisions/2026-06-26 RL GPU H200 manifest-backed campaign receipt.md"
 
   RL_VIX_OPTIONS_CLUE_PROXY:
+    hypothesis_spec_ref: docs/hypotheses/RL_VIX_OPTIONS_CLUE_PROXY.md
     kind: reinforcement_learning
     legacy_id: RL_VIX_OPTIONS_CLUE
     display_name: VIX Options Clue RL Proxy
@@ -668,6 +700,7 @@ models:
       - "vault:decisions/2026-06-26 VIX options RL H200 campaign receipt.md"
 
   RL_PPO_SIM_POLICY:
+    hypothesis_spec_ref: docs/hypotheses/RL_PPO_SIM_POLICY.md
     kind: reinforcement_learning
     legacy_id: RL_PPO_SIM
     display_name: PPO Simulation Policy

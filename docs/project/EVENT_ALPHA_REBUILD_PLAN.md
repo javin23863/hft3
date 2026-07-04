@@ -73,11 +73,15 @@ slugs (their specs state composition role + why they never trade standalone, mat
 the semantic contracts shipped in `model_execution_contracts.py`). Split for review
 load: PR-0a = 32 active (27 ran + 5 lead-lag; blocks PR-1), PR-0b = remaining 33
 (parallel, non-blocking). Registry entries gain `hypothesis_spec_ref` links.
-**Horizon pre-registration (grader fix #1):** per-model H committed here MECHANICALLY —
+**Horizon pre-registration (grader fix #1):** per-model H committed MECHANICALLY —
 H = modal holding_period_bars × 1s step interval from the existing envelope
 (measured distribution: 15000ms for 25 models, 5000ms/3000ms/1000ms for the rest —
-see HORIZON_MAP_PREREGISTERED.json, the committed authority; zero researcher choice). PR-1's driver refuses to run if the horizon map's git blob is
-not an ancestor of the run's commit.
+see HORIZON_MAP_PREREGISTERED.json; zero researcher choice). SCOPE: the map covers
+the PR-0a active 32 only — those are the models PR-1 tests. PR-0b slugs have no
+envelope history, so no mechanical H exists yet; their specs state H/s must be added
+mechanically (same rule) BEFORE any test if a slug is ever activated. PR-1's driver
+refuses to run if the horizon map's git blob is not an ancestor of the run's commit,
+and refuses any model absent from the map.
 
 ### PR-1 `feat/ic-diagnostic` — THE GATE (~1,400 LOC, $0 replay spend)
 Files: NEW `packages/research_pipeline/ic_stats.py` (~260, pure numpy/pandas — no
