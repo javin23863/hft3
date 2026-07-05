@@ -592,14 +592,35 @@ def main(argv: list[str] | None = None) -> int:
         entry_lat_raw = float(args.entry_latency_ms)
         entry_lat_source = "cli"
     else:
+        # Taker entry marks when the order REACHES the exchange: our
+        # measured offensive tick->send + the CC-3 decomposed
+        # new_send_to_exchange leg. The ack RETURN leg does not delay
+        # position start (run 3 used the full 9.811ms round trip — valid
+        # but conservative). Fallback when no decomposition artifact:
+        # the authoritative round trip.
+        from backtest_pipeline.src.chi404_latency import (
+            resolve_latency_model,
+            resolve_offensive_tick_to_send_us,
+        )
+
         try:
-            _summary = json.loads(DEFAULT_CHI404_SUMMARY.read_text(encoding="utf-8"))
+            _model = resolve_latency_model()
         except FileNotFoundError:
             raise SystemExit("entry_latency_unmeasured:no_latency_summary")
-        _ack_ms, _measured, entry_lat_source = resolve_order_ack_ms(_summary)
-        if not _measured or _ack_ms is None:
-            raise SystemExit(f"entry_latency_unmeasured:{entry_lat_source}")
-        entry_lat_raw = float(_ack_ms)
+        _entry_leg_ms = _model.get("order_entry_latency_ms")
+        if _entry_leg_ms is not None:
+            _offense_us = resolve_offensive_tick_to_send_us()
+            entry_lat_raw = float(_entry_leg_ms) + float(_offense_us) / 1000.0
+            entry_lat_source = (
+                f"{_model.get('order_entry_latency_source', 'chi404_decomposition')}"
+                "+offensive_tick_to_send_p99"
+            )
+        else:
+            _summary = json.loads(DEFAULT_CHI404_SUMMARY.read_text(encoding="utf-8"))
+            _ack_ms, _measured, entry_lat_source = resolve_order_ack_ms(_summary)
+            if not _measured or _ack_ms is None:
+                raise SystemExit(f"entry_latency_unmeasured:{entry_lat_source}")
+            entry_lat_raw = float(_ack_ms)
     entry_lat_ms = max(1, int(math.ceil(entry_lat_raw)))  # labeler takes int ms; round UP (conservative)
 
     tasks = [(u, model_ids, hmap, entry_lat_ms) for u in units]
