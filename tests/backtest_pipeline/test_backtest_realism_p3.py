@@ -68,12 +68,12 @@ def _config(**overrides) -> HftBacktestOnlyRunConfig:
     return HftBacktestOnlyRunConfig(**base)
 
 
-def test_latency_constant_default_resolves_from_config_ns() -> None:
+def test_latency_constant_resolves_explicit_in_band_config_ns() -> None:
     entry_ns, resp_ns = _resolve_latency_ns(
-        _config(entry_latency_ns=250_000, response_latency_ns=500_000)
+        _config(entry_latency_ns=2_500_000, response_latency_ns=5_000_000)
     )
-    assert entry_ns == 250_000
-    assert resp_ns == 500_000
+    assert entry_ns == 2_500_000
+    assert resp_ns == 5_000_000
 
 
 def test_latency_chi404_fails_closed_when_unmeasured(monkeypatch) -> None:
@@ -100,8 +100,10 @@ def test_latency_chi404_measured_resolves_via_probe(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(chi404_latency, "resolve_latency_model", _fake_resolve)
+    monkeypatch.setattr(chi404_latency, "resolve_offensive_tick_to_send_us", lambda: 60.894)
     entry_ns, resp_ns = _resolve_latency_ns(_config(latency_model="chi404_measured:normal"))
-    assert entry_ns == 3_100_000
+    # Entry leg carries the owner-measured offensive tick->send p99 add-on.
+    assert entry_ns == 3_100_000 + 60_894
     assert resp_ns == 3_200_000
 
 

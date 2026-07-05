@@ -156,8 +156,10 @@ def _config(
         contract_size=5.0,
         maker_fee=0.47,
         taker_fee=0.47,
-        entry_latency_ns=100_000,
-        response_latency_ns=100_000,
+        # In-band explicit constants (band law [0.5, 10] ms): the pipeline
+        # refuses silent/out-of-band constant replay latencies.
+        entry_latency_ns=2_000_000,
+        response_latency_ns=2_000_000,
         event_window=event_window or {},
     )
 

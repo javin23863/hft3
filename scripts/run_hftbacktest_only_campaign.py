@@ -46,13 +46,33 @@ def run_campaign(
     maker_fee: float | None = None,
     taker_fee: float | None = None,
     required_feature_backend: str = "cpp",
-    entry_latency_ns: int = 100_000,
-    response_latency_ns: int = 100_000,
+    latency_model: str = "chi404_measured",
+    entry_latency_ns: int | None = None,
+    response_latency_ns: int | None = None,
 ) -> dict[str, Any]:
     required_feature_backend = str(required_feature_backend or "").strip().lower()
     if required_feature_backend not in {"", "cpp", "python"}:
         raise ValueError(
             f"required_feature_backend must be '', 'cpp' or 'python'; got {required_feature_backend!r}"
+        )
+    latency_model = str(latency_model or "").strip() or "chi404_measured"
+    if latency_model == "constant_order_latency":
+        if entry_latency_ns is None or response_latency_ns is None:
+            raise ValueError(
+                "latency_model=constant_order_latency requires BOTH --entry-latency-ns and "
+                "--response-latency-ns explicitly (replay band [0.5, 10] ms); omit them and "
+                "use --latency-model chi404_measured to inject the owner-measured CHI404 "
+                "latencies (runtime/latency_reports/latency_summary.json + latency_truth.json)"
+            )
+        # Refuse the whole paid campaign up front, not row-by-row.
+        from backtest_pipeline.src.chi404_latency import validate_replay_latency_ms
+
+        validate_replay_latency_ms(int(entry_latency_ns) / 1_000_000, source="cli_constant")
+        validate_replay_latency_ms(int(response_latency_ns) / 1_000_000, source="cli_constant")
+    elif entry_latency_ns is not None or response_latency_ns is not None:
+        raise ValueError(
+            "--entry-latency-ns/--response-latency-ns only apply to "
+            f"--latency-model constant_order_latency; got latency_model={latency_model!r}"
         )
     first_row = _first_jsonl_row(manifest_path)
     campaign_id = str(first_row.get("campaign_id") or "hbt_campaign")
@@ -68,7 +88,15 @@ def run_campaign(
         "maker_fee": maker_fee,
         "taker_fee": taker_fee,
         "required_feature_backend": str(required_feature_backend or ""),
-        "economics_stamp": _economics_stamp(maker_fee, taker_fee, required_feature_backend),
+        "economics_stamp": _economics_stamp(
+            maker_fee,
+            taker_fee,
+            required_feature_backend,
+            latency_model=latency_model,
+            entry_latency_ns=entry_latency_ns,
+            response_latency_ns=response_latency_ns,
+        ),
+        "latency_model": latency_model,
         "entry_latency_ns": entry_latency_ns,
         "response_latency_ns": response_latency_ns,
     }
@@ -120,6 +148,9 @@ def run_campaign(
         "requested_strategy_id": str(strategy_id or MODEL_SPECIFIC_STRATEGY_ID),
         "required_feature_backend": required_feature_backend,
         "strategy_override_ignored": str(strategy_id or MODEL_SPECIFIC_STRATEGY_ID) != MODEL_SPECIFIC_STRATEGY_ID,
+        "latency_model": latency_model,
+        "entry_latency_ns": entry_latency_ns,
+        "response_latency_ns": response_latency_ns,
         "dry_run": dry_run,
         "status_counts": dict(sorted(status_counts.items())),
         "blocker_counts": dict(sorted(blocker_counts.items())),
@@ -224,8 +255,15 @@ def _run_row_task(task: tuple[dict[str, Any], str, Mapping[str, Any]]) -> dict[s
         required_feature_backend=str(settings.get("required_feature_backend") or ""),
         cross_asset_npz={str(k): str(v) for k, v in (row.get("cross_asset_npz") or {}).items()},
         sensor_feature_npz={str(k): str(v) for k, v in (row.get("sensor_feature_npz") or {}).items()},
-        entry_latency_ns=int(settings.get("entry_latency_ns") or 100_000),
-        response_latency_ns=int(settings.get("response_latency_ns") or 100_000),
+        # Measured latency law: the default is the owner-measured CHI404 model;
+        # constant mode reaches here only with explicit, band-checked values.
+        latency_model=str(settings.get("latency_model") or "chi404_measured"),
+        entry_latency_ns=(
+            None if settings.get("entry_latency_ns") is None else int(settings["entry_latency_ns"])
+        ),
+        response_latency_ns=(
+            None if settings.get("response_latency_ns") is None else int(settings["response_latency_ns"])
+        ),
         event_window=dict(row.get("event_window") or {}),
     )
     try:
@@ -299,15 +337,24 @@ def _economics_stamp(
     maker_fee: float | None,
     taker_fee: float | None,
     required_feature_backend: str = "",
+    latency_model: str = "chi404_measured",
+    entry_latency_ns: int | None = None,
+    response_latency_ns: int | None = None,
 ) -> str:
     """Cache key for row receipts. Receipts priced under different fee or
-    tick/multiplier resolution rules — or produced by a different feature
-    backend — must never satisfy --resume; receipts written before this
-    stamp existed always mismatch and re-run."""
+    tick/multiplier resolution rules, a different feature backend, or a
+    different replay latency model must never satisfy --resume; receipts
+    written before this stamp existed always mismatch and re-run."""
     maker = "resolved" if maker_fee is None else f"{float(maker_fee):g}"
     taker = "resolved" if taker_fee is None else f"{float(taker_fee):g}"
     backend = str(required_feature_backend or "") or "any"
-    return f"{INSTRUMENT_ECONOMICS_VERSION}:maker={maker}:taker={taker}:backend={backend}"
+    latency = str(latency_model or "chi404_measured")
+    if latency == "constant_order_latency":
+        latency = f"{latency}@{int(entry_latency_ns or 0)}/{int(response_latency_ns or 0)}"
+    return (
+        f"{INSTRUMENT_ECONOMICS_VERSION}:maker={maker}:taker={taker}"
+        f":latency={latency}:backend={backend}"
+    )
 
 
 def _cached_receipt_matches_run(cached: Mapping[str, Any], settings: Mapping[str, Any]) -> bool:
@@ -507,8 +554,31 @@ def main(argv: list[str] | None = None) -> int:
         help="Feature backend evidence receipts must carry (cpp/python); "
         "empty string accepts any (local smokes only).",
     )
-    parser.add_argument("--entry-latency-ns", type=int, default=100_000)
-    parser.add_argument("--response-latency-ns", type=int, default=100_000)
+    parser.add_argument(
+        "--latency-model",
+        default="chi404_measured",
+        help=(
+            "chi404_measured[:regime] (default) injects the owner-measured CHI404 "
+            "native-probe latencies (entry leg includes the measured offensive "
+            "tick->send p99); constant_order_latency requires BOTH "
+            "--entry-latency-ns and --response-latency-ns explicitly, "
+            "band-checked against [0.5, 10] ms."
+        ),
+    )
+    parser.add_argument(
+        "--entry-latency-ns",
+        type=int,
+        default=None,
+        help="Explicit constant entry latency; required (with --response-latency-ns) "
+        "for --latency-model constant_order_latency, forbidden otherwise.",
+    )
+    parser.add_argument(
+        "--response-latency-ns",
+        type=int,
+        default=None,
+        help="Explicit constant response latency; required (with --entry-latency-ns) "
+        "for --latency-model constant_order_latency, forbidden otherwise.",
+    )
     args = parser.parse_args(argv)
     if args.max_tasks_per_child < 0:
         parser.error("--max-tasks-per-child must be >= 0")
@@ -527,6 +597,7 @@ def main(argv: list[str] | None = None) -> int:
         maker_fee=args.maker_fee,
         taker_fee=args.taker_fee,
         required_feature_backend=args.required_feature_backend,
+        latency_model=args.latency_model,
         entry_latency_ns=args.entry_latency_ns,
         response_latency_ns=args.response_latency_ns,
     )
