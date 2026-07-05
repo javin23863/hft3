@@ -1,6 +1,6 @@
 ---
 date: 2026-07-04
-status: approved
+status: CLOSED 2026-07-05 — owner decision after IC run 4 (0/32 pass at measured latency; kill rule engaged; WIDE re-purchase declined). Outcome + carry-forward — docs/project/EVENT_ALPHA_LESSONS_LEARNED.md; repeatable pipeline — docs/project/IC_GATE_RUNBOOK.md; data reuse — docs/project/DATA_LAKE_HANDOFF.md
 area: hftbacktest, ic-diagnostic, execution-expression, cross-asset, composition
 repo_worktree: C:/Users/MSI/repos/hft3-fix-wt
 branch: docs/spec-pack-active
