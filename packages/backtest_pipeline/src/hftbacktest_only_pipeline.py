@@ -67,6 +67,11 @@ _STRUCTURAL_SIGNAL_FIELDS_BY_CLASS = {
 HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION = "hypothesis_limit_order_event_scan_v2"
 HYPOTHESIS_LIMIT_ORDER_EXIT_LEG_SURFACE_VERSION = "hypothesis_limit_order_event_scan_v3_exit_leg"
 HYPOTHESIS_LIMIT_ORDER_MULTI_TRIP_SURFACE_VERSION = "hypothesis_limit_order_event_scan_v4_multi_trip"
+HYPOTHESIS_LIMIT_ORDER_EXPRESSION_SURFACE_VERSION = "hypothesis_limit_order_event_scan_v5_expression"
+SMOKE_LIMIT_ORDER_EXPRESSION_SURFACE_VERSION = "smoke_limit_order_event_scan_v5_expression"
+# EWMA decay for the point-in-time per-step mid-price tick-volatility
+# estimator used by the expression-v2 tick barriers.
+_VOL_EWMA_LAMBDA = 0.97
 
 
 class HftBacktestOnlyPipelineError(ValueError):
@@ -654,6 +659,42 @@ def write_promotion_decision(out_dir: Path, *, stats_summary: Mapping[str, Any] 
 
 
 def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, Any], list[str]]:
+    """Run the minimal single-instrument strategy surface against hftbacktest.
+
+    Execution expression v2 (optional, additive — legacy behavior untouched
+    when the params below are absent):
+
+    Volatility-scaled tick barriers (``pt_vol_mult`` / ``sl_vol_mult``):
+      A point-in-time EWMA (lambda = 0.97) of squared per-step mid-price
+      changes in TICKS is maintained inside the step loop, using only data
+      observed up to the current step. At the first observed entry fill,
+      ``sigma_step_at_entry = sqrt(ewma_var)`` and
+      ``sigma_H = sigma_step_at_entry * sqrt(holding_steps)``; the barriers
+      ``barrier_pt_ticks = clamp(pt_vol_mult * sigma_H, min_barrier_ticks,
+      max_barrier_ticks)`` (same for ``sl_vol_mult``) are FROZEN for the
+      life of the trip and written to the run receipt. While fewer than
+      ``vol_warmup_steps`` (default 30) EWMA observations exist, entries are
+      skipped and counted in ``vol_warmup_skipped_entries``. Clamp bounds:
+      ``min_barrier_ticks`` default 2, ``max_barrier_ticks`` default 40.
+      Providing a vol multiplier together with ``stop_loss_pct`` /
+      ``take_profit_pct`` fails the run closed with
+      ``barrier_units_conflict`` (no order is queued).
+
+    Entry hurdle gate (``entry_hurdle_ticks``):
+      Purely mechanical cost gate — no signal-strength proxy is invented.
+      What is compared, exactly: the configured hurdle (``entry_hurdle_ticks``,
+      the minimum expected edge in ticks the caller demands from this
+      surface, supplied by the envelope layer) versus the LIVE spread cost
+      paid at entry, ``spread_cost_ticks = (best_ask - best_bid) / tick_size``
+      observed at the entry decision step when ``price_mode == "cross_spread"``,
+      and ``0.0`` when the entry is passive (``passive_best_bid_or_ask`` pays
+      no spread at entry). The entry is SKIPPED (counted in
+      ``hurdle_skipped_entries``) when ``spread_cost_ticks >=
+      entry_hurdle_ticks``; it proceeds when the configured hurdle strictly
+      exceeds the live spread cost. In cross mode an unobservable or crossed
+      book also skips (fail closed). ``entry_hurdle_ticks`` absent or <= 0
+      disables the gate.
+    """
     params = dict(config.strategy_params)
     signal_lookup: Callable[[int | None], float] | None = None
     signal_meta: dict[str, Any] = {}
@@ -693,17 +734,59 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         max_round_trips = _positive_int(
             params.get("max_round_trips", 1), "strategy_params.max_round_trips"
         )
+        pt_vol_mult = (
+            _positive_float(params.get("pt_vol_mult"), "strategy_params.pt_vol_mult")
+            if params.get("pt_vol_mult") is not None
+            else None
+        )
+        sl_vol_mult = (
+            _positive_float(params.get("sl_vol_mult"), "strategy_params.sl_vol_mult")
+            if params.get("sl_vol_mult") is not None
+            else None
+        )
+        min_barrier_ticks = _positive_float(
+            params.get("min_barrier_ticks", 2), "strategy_params.min_barrier_ticks"
+        )
+        max_barrier_ticks = _positive_float(
+            params.get("max_barrier_ticks", 40), "strategy_params.max_barrier_ticks"
+        )
+        vol_warmup_steps = _positive_int(
+            params.get("vol_warmup_steps", 30), "strategy_params.vol_warmup_steps"
+        )
+        entry_hurdle_ticks = (
+            _non_negative_float(params.get("entry_hurdle_ticks"), "strategy_params.entry_hurdle_ticks")
+            if params.get("entry_hurdle_ticks") is not None
+            else None
+        )
     except HftBacktestOnlyPipelineError as exc:
         reason = str(exc)
+        return _not_run_replay(reason, config), [reason]
+    vol_barriers_enabled = pt_vol_mult is not None or sl_vol_mult is not None
+    hurdle_enabled = entry_hurdle_ticks is not None and entry_hurdle_ticks > 0.0
+    tick_size = float(config.tick_size or 0.0)
+    # Barrier units are exclusive: percent-of-entry-price barriers and
+    # volatility-scaled tick barriers on the same run is a config error, not
+    # a resolvable preference — fail closed before any order can queue.
+    if vol_barriers_enabled and (stop_loss_pct is not None or take_profit_pct is not None):
+        return _not_run_replay("barrier_units_conflict", config), ["barrier_units_conflict"]
+    if vol_barriers_enabled and min_barrier_ticks > max_barrier_ticks:
+        reason = "expression_barrier_clamp_invalid"
+        return _not_run_replay(reason, config), [reason]
+    if (vol_barriers_enabled or hurdle_enabled) and tick_size <= 0.0:
+        reason = "expression_requires_positive_tick_size"
         return _not_run_replay(reason, config), [reason]
     # Exit leg: closes the filled position with a second marketable order on
     # stop-loss / take-profit / holding expiry, producing closed-trade
     # realized PnL. Off by default: without exit params the surface keeps the
     # exact v2 semantics (hold, then cancel leaves; position never closed).
     # stop_loss_pct/take_profit_pct are percent of the entry execution price
-    # (VectorBT screen parity).
+    # (VectorBT screen parity). Vol-scaled tick barriers (expression v2)
+    # likewise require the exit leg to realize their stops/targets.
     exit_leg_enabled = (
-        stop_loss_pct is not None or take_profit_pct is not None or exit_at_holding
+        stop_loss_pct is not None
+        or take_profit_pct is not None
+        or exit_at_holding
+        or vol_barriers_enabled
     )
     # Re-entry only exists on top of a closed trade: without the exit leg the
     # position can never go flat inside the window, so a multi-trip request
@@ -784,6 +867,34 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     trip_index = 0
     current_trip_recorded = False
     completed_trades: list[dict[str, Any]] = []
+    # Expression-v2 state (inert unless vol barriers / hurdle configured).
+    # EWMA variance of per-step mid changes in ticks, point-in-time: updated
+    # once per loop step BEFORE any entry/exit decision of that step, from
+    # the depth observed at that step only.
+    vol_ewma_var = 0.0
+    vol_prev_mid: float | None = None
+    vol_obs_count = 0
+    vol_warmup_skipped_entries = 0
+    hurdle_skipped_entries = 0
+    entry_spread_ticks: float | None = None
+    barrier_pt_ticks: float | None = None
+    barrier_sl_ticks: float | None = None
+    sigma_step_at_entry: float | None = None
+
+    def freeze_entry_barriers() -> None:
+        # Freeze the tick barriers at the FIRST observed entry fill of the
+        # trip from the vol estimate available at that moment; later vol
+        # changes must never move a live trip's barriers.
+        nonlocal barrier_pt_ticks, barrier_sl_ticks, sigma_step_at_entry
+        if not vol_barriers_enabled or sigma_step_at_entry is not None:
+            return
+        sigma_step = math.sqrt(max(vol_ewma_var, 0.0))
+        sigma_h = sigma_step * math.sqrt(float(holding_steps))
+        sigma_step_at_entry = sigma_step
+        if pt_vol_mult is not None:
+            barrier_pt_ticks = min(max(pt_vol_mult * sigma_h, min_barrier_ticks), max_barrier_ticks)
+        if sl_vol_mult is not None:
+            barrier_sl_ticks = min(max(sl_vol_mult * sigma_h, min_barrier_ticks), max_barrier_ticks)
 
     def record_order_state(event_type: str, state: Any, step: int) -> None:
         nonlocal last_recorded_exec_qty, order_snapshot, entry_fill_ts_ns
@@ -872,10 +983,32 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             max_abs_position = max(max_abs_position, abs(step_position))
             positions.append({"step": step, "position": step_position, "balance": _float_field(state, "balance"), "fee": _float_field(state, "fee")})
             equity.append({"step": step, "net_pnl": _float_field(state, "balance")})
+            if vol_barriers_enabled:
+                # PIT vol update: only this step's book, before any decision.
+                vol_depth = hbt.depth(0)
+                api_calls.append("HashMapMarketDepthBacktest.depth")
+                vol_bid = _float_field(vol_depth, "best_bid", math.nan)
+                vol_ask = _float_field(vol_depth, "best_ask", math.nan)
+                if (
+                    not math.isnan(vol_bid)
+                    and not math.isnan(vol_ask)
+                    and vol_bid > 0
+                    and vol_ask > 0
+                ):
+                    step_mid = (vol_bid + vol_ask) / 2.0
+                    if vol_prev_mid is not None:
+                        delta_ticks = (step_mid - vol_prev_mid) / tick_size
+                        vol_ewma_var = (
+                            _VOL_EWMA_LAMBDA * vol_ewma_var
+                            + (1.0 - _VOL_EWMA_LAMBDA) * delta_ticks * delta_ticks
+                        )
+                        vol_obs_count += 1
+                    vol_prev_mid = step_mid
             if submitted:
                 record_order_state("ORDER_STATE_AFTER_ELAPSE", state, step)
                 if entry_fill_step is None and last_recorded_exec_qty > 0:
                     entry_fill_step = step
+                    freeze_entry_barriers()
                 if exit_submitted:
                     record_exit_order_state("EXIT_ORDER_STATE_AFTER_ELAPSE", state, step)
                     _maybe_call(hbt, "clear_inactive_orders", 0)
@@ -885,7 +1018,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                         trip_entry_px = float(order_snapshot.get("exec_price") or 0.0)
                         trip_exit_px = float(exit_snapshot.get("exec_price") or 0.0)
                         trip_closed_qty = min(last_recorded_exec_qty, last_exit_exec_qty)
-                        completed_trades.append(
+                        trade_row = (
                             {
                                 "trip": trip_index,
                                 "side": side,
@@ -910,6 +1043,12 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                                 * contract_multiplier,
                             }
                         )
+                        if vol_barriers_enabled:
+                            # Per-trip audit of the frozen entry barriers.
+                            trade_row["barrier_pt_ticks"] = barrier_pt_ticks
+                            trade_row["barrier_sl_ticks"] = barrier_sl_ticks
+                            trade_row["sigma_step_at_entry"] = sigma_step_at_entry
+                        completed_trades.append(trade_row)
                         current_trip_recorded = True
                         if len(completed_trades) >= max_round_trips or step + 1 >= entry_scan_steps:
                             break
@@ -937,6 +1076,14 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                         exit_response_ret = None
                         exit_reason = ""
                         current_trip_recorded = False
+                        # Expression v2: the next trip freezes fresh barriers
+                        # at its own entry fill; the vol EWMA itself carries
+                        # over (it is point-in-time market state, not trip
+                        # state).
+                        barrier_pt_ticks = None
+                        barrier_sl_ticks = None
+                        sigma_step_at_entry = None
+                        entry_spread_ticks = None
                         continue
                     if (
                         exit_submitted_step is not None
@@ -976,11 +1123,20 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                         last_mid = (best_bid + best_ask) / 2.0
                     if entry_avg_px > 0 and last_mid is not None:
                         direction = 1.0 if side == "BUY" else -1.0
-                        pnl_frac = direction * (last_mid - entry_avg_px) / entry_avg_px
-                        if stop_loss_pct is not None and pnl_frac <= -stop_loss_pct / 100.0:
-                            exit_reason = "stop_loss"
-                        elif take_profit_pct is not None and pnl_frac >= take_profit_pct / 100.0:
-                            exit_reason = "take_profit"
+                        if vol_barriers_enabled:
+                            # Expression v2: barriers in ticks, frozen at the
+                            # entry fill — never re-derived from current vol.
+                            pnl_ticks = direction * (last_mid - entry_avg_px) / tick_size
+                            if barrier_sl_ticks is not None and pnl_ticks <= -barrier_sl_ticks:
+                                exit_reason = "stop_loss"
+                            elif barrier_pt_ticks is not None and pnl_ticks >= barrier_pt_ticks:
+                                exit_reason = "take_profit"
+                        else:
+                            pnl_frac = direction * (last_mid - entry_avg_px) / entry_avg_px
+                            if stop_loss_pct is not None and pnl_frac <= -stop_loss_pct / 100.0:
+                                exit_reason = "stop_loss"
+                            elif take_profit_pct is not None and pnl_frac >= take_profit_pct / 100.0:
+                                exit_reason = "take_profit"
                     if not exit_reason and time_exit_due:
                         exit_reason = "max_holding"
                     if exit_reason:
@@ -1049,6 +1205,12 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
                 if abs(signal_value) < signal_threshold:
                     continue
                 side = "BUY" if signal_value > 0 else "SELL"
+            if vol_barriers_enabled and vol_obs_count < vol_warmup_steps:
+                # PIT vol estimator not yet warmed up: barriers would be
+                # meaningless, so the entry opportunity is skipped, never
+                # taken on a degenerate sigma.
+                vol_warmup_skipped_entries += 1
+                continue
             _maybe_call(hbt, "clear_inactive_orders", 0)
             api_calls.append("HashMapMarketDepthBacktest.clear_inactive_orders")
             depth = hbt.depth(0)
@@ -1056,6 +1218,29 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             price = _price_from_depth(depth, side, price_mode)
             if price is None:
                 continue
+            if hurdle_enabled:
+                # Mechanical hurdle gate (see function docstring): configured
+                # hurdle vs live spread cost at entry, nothing else.
+                spread_cost_ticks = 0.0
+                if price_mode == "cross_spread":
+                    hurdle_bid = _float_field(depth, "best_bid", math.nan)
+                    hurdle_ask = _float_field(depth, "best_ask", math.nan)
+                    if (
+                        math.isnan(hurdle_bid)
+                        or math.isnan(hurdle_ask)
+                        or hurdle_bid <= 0
+                        or hurdle_ask <= 0
+                        or hurdle_ask < hurdle_bid
+                    ):
+                        # Spread cost unobservable while crossing: fail the
+                        # entry closed rather than assume a free cross.
+                        hurdle_skipped_entries += 1
+                        continue
+                    spread_cost_ticks = (hurdle_ask - hurdle_bid) / tick_size
+                if spread_cost_ticks >= entry_hurdle_ticks:
+                    hurdle_skipped_entries += 1
+                    continue
+                entry_spread_ticks = spread_cost_ticks
             entry_quantity = quantity
             if size_lookup is not None:
                 # Probability-calibrated bet sizing: fractional size from the
@@ -1098,6 +1283,7 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             record_order_state("ORDER_STATE", state, step)
             if entry_fill_step is None and last_recorded_exec_qty > 0:
                 entry_fill_step = step
+                freeze_entry_barriers()
         if submitted and float(order_snapshot.get("leaves_qty") or 0.0) > 0 and hasattr(hbt, "cancel"):
             cancel_step = min(max_loop_steps, int(submitted_step or 0) + holding_steps)
             cancel_ret = int(hbt.cancel(0, order_id, False))
@@ -1325,6 +1511,18 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "total_fees": _float_field(final_state, "fee"),
         "fail_closed_reasons": reasons,
     }
+    # Expression-v2 receipt fields are additive and only present when the
+    # feature is configured, so legacy-path receipts stay byte-identical.
+    if vol_barriers_enabled:
+        replay["barrier_pt_ticks"] = barrier_pt_ticks
+        replay["barrier_sl_ticks"] = barrier_sl_ticks
+        replay["sigma_step_at_entry"] = sigma_step_at_entry
+        replay["vol_warmup_steps"] = vol_warmup_steps
+        replay["vol_warmup_skipped_entries"] = vol_warmup_skipped_entries
+    if hurdle_enabled:
+        replay["entry_hurdle_ticks"] = entry_hurdle_ticks
+        replay["entry_spread_ticks"] = entry_spread_ticks
+        replay["hurdle_skipped_entries"] = hurdle_skipped_entries
     return replay, reasons
 
 
@@ -2684,7 +2882,31 @@ def _positive_float(value: Any, name: str) -> float:
     return parsed
 
 
+def _non_negative_float(value: Any, name: str) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise HftBacktestOnlyPipelineError(f"{name} must be a non-negative number") from exc
+    if parsed < 0.0 or not math.isfinite(parsed):
+        raise HftBacktestOnlyPipelineError(f"{name} must be a non-negative number")
+    return parsed
+
+
 def _strategy_surface_version(strategy_id: str, params: Mapping[str, Any] | None = None) -> str:
+    # Expression v2 (vol-scaled tick barriers / entry hurdle gate) is a new
+    # strategy surface: any resume receipt produced by an older surface must
+    # invalidate when these params are present.
+    expression = bool(params) and (
+        params.get("pt_vol_mult") is not None
+        or params.get("sl_vol_mult") is not None
+        or params.get("entry_hurdle_ticks") is not None
+    )
+    if expression:
+        return (
+            HYPOTHESIS_LIMIT_ORDER_EXPRESSION_SURFACE_VERSION
+            if strategy_id == "hypothesis_limit_order"
+            else SMOKE_LIMIT_ORDER_EXPRESSION_SURFACE_VERSION
+        )
     exit_leg = bool(params) and (
         params.get("stop_loss_pct") is not None
         or params.get("take_profit_pct") is not None
