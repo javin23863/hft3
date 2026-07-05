@@ -8,6 +8,7 @@ from typing import Any
 
 _REPO = Path(__file__).resolve().parents[3]
 DEFAULT_CHI404_SUMMARY = _REPO / "runtime" / "latency_reports" / "latency_summary.json"
+DEFAULT_LATENCY_TRUTH = _REPO / "runtime" / "latency_reports" / "latency_truth.json"
 
 PAPER_ORDER_MIN_PAIRED = 1000
 
@@ -37,6 +38,25 @@ def validate_replay_latency_ms(latency_ms: float, *, source: str) -> float:
             f"[{LATENCY_BAND_MIN_MS}, {LATENCY_BAND_MAX_MS}] ms"
         )
     return ms
+
+
+def resolve_offensive_tick_to_send_us(truth_path: Path = DEFAULT_LATENCY_TRUTH) -> float:
+    """Owner-measured offensive tick->send p99 (us) from latency_truth.json.
+
+    This is OUR fire path (tick observed -> order on the wire) and must be
+    ADDED to the replay entry leg; the round-trip ack campaign only measures
+    send->ack. Fails loud when unmeasured — never a silent zero.
+    """
+    truth_path = Path(truth_path)
+    if not truth_path.is_file():
+        raise FileNotFoundError(f"latency truth missing: {truth_path}")
+    truth = json.loads(truth_path.read_text(encoding="utf-8"))
+    block = truth.get("live_placement") if isinstance(truth.get("live_placement"), dict) else truth
+    offensive = block.get("offensive_us") or {}
+    p99 = offensive.get("tick_to_send_p99")
+    if not isinstance(p99, (int, float)) or float(p99) <= 0:
+        raise ValueError(f"offensive_us.tick_to_send_p99 unmeasured in {truth_path}")
+    return float(p99)
 
 
 def resolve_order_ack_ms(summary: dict[str, Any]) -> tuple[float | None, bool, str]:

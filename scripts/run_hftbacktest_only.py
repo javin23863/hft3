@@ -89,8 +89,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--contract-size", type=float, default=None)
     parser.add_argument("--maker-fee", type=float, default=None)
     parser.add_argument("--taker-fee", type=float, default=None)
-    parser.add_argument("--entry-latency-ns", type=int, default=100_000)
-    parser.add_argument("--response-latency-ns", type=int, default=100_000)
+    # No silent constants: constant_order_latency requires both values
+    # explicitly (band [0.5, 10] ms) and fails closed in the pipeline
+    # otherwise; chi404_measured ignores them.
+    parser.add_argument("--entry-latency-ns", type=int, default=None)
+    parser.add_argument("--response-latency-ns", type=int, default=None)
     parser.add_argument("--exchange-fill-model", default="NoPartialFillExchange")
     parser.add_argument("--queue-model", default="L3FIFOQueueModel")
     parser.add_argument(

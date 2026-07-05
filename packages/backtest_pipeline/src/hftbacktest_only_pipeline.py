@@ -95,8 +95,12 @@ class HftBacktestOnlyRunConfig:
     contract_size: float | None = None
     maker_fee: float | None = None
     taker_fee: float | None = None
-    entry_latency_ns: int = 100_000
-    response_latency_ns: int = 100_000
+    # Replay order latencies. None means "no explicit constant declared":
+    # constant_order_latency then fails closed instead of injecting a silent
+    # default; chi404_measured ignores these and resolves from the owner's
+    # measured CHI404 probe artifacts.
+    entry_latency_ns: int | None = None
+    response_latency_ns: int | None = None
     exchange_fill_model: str = "NoPartialFillExchange"
     queue_model: str = "L3FIFOQueueModel"
     fee_model: str = "trading_qty_fee_model"
@@ -1903,32 +1907,87 @@ def _hbt_current_timestamp(hbt: Any) -> int | None:
         return None
 
 
-def _resolve_latency_ns(config: HftBacktestOnlyRunConfig) -> tuple[int, int]:
-    """Resolve (entry_ns, response_ns) for the declared latency model.
+# hftbacktest's constant order-latency model applies the same entry/response
+# latencies to cancels; cancel->ack is still UNMEASURED live (all placement
+# test cancels hit cancel_ack_timeout), so the replay proxies pending-state
+# risk with the measured send->ack legs until cancel_to_ack is measured.
+CANCEL_LATENCY_POLICY = "send_to_ack_proxy_until_cancel_ack_measured"
 
-    - "constant_order_latency" (default): entry/response ns from the config.
+
+def _resolve_latency_receipt(config: HftBacktestOnlyRunConfig) -> dict[str, Any]:
+    """Resolve replay latencies + provenance receipt for the declared model.
+
+    - "constant_order_latency": requires EXPLICIT entry/response ns on the
+      config (no silent defaults) and band-validates each leg.
     - "chi404_measured" or "chi404_measured:<regime>": measured CHI404
-      native-probe latency via chi404_latency.resolve_latency_model. Fails
-      closed when the probe summary is missing or unmeasured — never a
-      silent fallback to the constant default.
+      native-probe latency via chi404_latency.resolve_latency_model, plus the
+      owner-measured offensive tick->send p99 added to the entry leg (our own
+      fire path). Fails closed when any measurement is missing — never a
+      silent fallback to a constant default.
     """
+    from backtest_pipeline.src.chi404_latency import validate_replay_latency_ms
+
     declared = str(config.latency_model)
     if declared == "constant_order_latency":
-        return int(config.entry_latency_ns), int(config.response_latency_ns)
+        if config.entry_latency_ns is None or config.response_latency_ns is None:
+            raise HftBacktestOnlyPipelineError(
+                "constant_order_latency requires explicit entry_latency_ns and "
+                "response_latency_ns (band [0.5, 10] ms); pass both "
+                "--entry-latency-ns/--response-latency-ns or use "
+                "latency_model=chi404_measured for the owner-measured latencies"
+            )
+        entry_ns = int(config.entry_latency_ns)
+        response_ns = int(config.response_latency_ns)
+        validate_replay_latency_ms(entry_ns / 1_000_000, source="cli_constant")
+        validate_replay_latency_ms(response_ns / 1_000_000, source="cli_constant")
+        return {
+            "latency_model": declared,
+            "entry_latency_ns": entry_ns,
+            "response_latency_ns": response_ns,
+            "entry_latency_source": "cli_constant",
+            "response_latency_source": "cli_constant",
+            "offensive_tick_to_send_us_added": 0.0,
+            "cancel_latency_policy": CANCEL_LATENCY_POLICY,
+        }
     if declared == "chi404_measured" or declared.startswith("chi404_measured:"):
         regime = declared.split(":", 1)[1] if ":" in declared else "stress"
         try:
-            from backtest_pipeline.src.chi404_latency import resolve_latency_model
+            from backtest_pipeline.src.chi404_latency import (
+                resolve_latency_model,
+                resolve_offensive_tick_to_send_us,
+            )
 
             model = resolve_latency_model(regime=regime)
+            tick_to_send_us = resolve_offensive_tick_to_send_us()
         except (FileNotFoundError, ValueError) as exc:
             raise HftBacktestOnlyPipelineError(f"chi404_latency_unmeasured:{exc}") from exc
         entry_ms = model.get("order_entry_latency_ms")
         resp_ms = model.get("order_response_latency_ms")
         if not isinstance(entry_ms, (int, float)) or not isinstance(resp_ms, (int, float)):
             raise HftBacktestOnlyPipelineError("chi404_latency_model_missing_components")
-        return int(float(entry_ms) * 1_000_000), int(float(resp_ms) * 1_000_000)
+        entry_source = str(model.get("order_entry_latency_source") or "chi404_measured")
+        response_source = str(model.get("order_response_latency_source") or "chi404_measured")
+        # Our fire path (tick observed -> order on the wire) is in ADDITION to
+        # the probe's send->ack legs, so it belongs on the entry leg.
+        entry_ms = float(entry_ms) + tick_to_send_us / 1000.0
+        validate_replay_latency_ms(entry_ms, source=f"{entry_source}+offensive_tick_to_send_p99")
+        validate_replay_latency_ms(float(resp_ms), source=response_source)
+        return {
+            "latency_model": declared,
+            "entry_latency_ns": round(entry_ms * 1_000_000),
+            "response_latency_ns": round(float(resp_ms) * 1_000_000),
+            "entry_latency_source": f"{entry_source}+offensive_tick_to_send_p99",
+            "response_latency_source": response_source,
+            "offensive_tick_to_send_us_added": float(tick_to_send_us),
+            "cancel_latency_policy": CANCEL_LATENCY_POLICY,
+        }
     raise HftBacktestOnlyPipelineError(f"unsupported_latency_model:{declared}")
+
+
+def _resolve_latency_ns(config: HftBacktestOnlyRunConfig) -> tuple[int, int]:
+    """Resolve (entry_ns, response_ns) for the declared latency model."""
+    receipt = _resolve_latency_receipt(config)
+    return int(receipt["entry_latency_ns"]), int(receipt["response_latency_ns"])
 
 
 def _apply_latency(asset: Any, config: HftBacktestOnlyRunConfig) -> None:
@@ -2029,12 +2088,17 @@ def _normalized_input_manifest(config: HftBacktestOnlyRunConfig, validation: Map
 
 
 def _latency_report(config: HftBacktestOnlyRunConfig) -> dict[str, Any]:
+    receipt = _resolve_latency_receipt(config)
     return {
         "schema_version": "hft3_hftbacktest_only_latency_report_v1",
-        "latency_model": config.latency_model,
+        "latency_model": receipt["latency_model"],
         "feed_latency_source": "event_local_ts_minus_exch_ts",
-        "order_entry_latency_ns": config.entry_latency_ns,
-        "order_response_latency_ns": config.response_latency_ns,
+        "order_entry_latency_ns": receipt["entry_latency_ns"],
+        "order_response_latency_ns": receipt["response_latency_ns"],
+        "order_entry_latency_source": receipt["entry_latency_source"],
+        "order_response_latency_source": receipt["response_latency_source"],
+        "offensive_tick_to_send_us_added": receipt["offensive_tick_to_send_us_added"],
+        "cancel_latency_policy": receipt["cancel_latency_policy"],
         "latency_components_separate": True,
         "latency_sensitivity_ns": [50_000, 100_000, 250_000, 500_000, 1_000_000],
     }

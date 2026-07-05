@@ -31,6 +31,10 @@ def _config(**overrides) -> HftBacktestOnlyRunConfig:
         strategy_id="hypothesis_limit_order",
         canonical_model_id="SECOND_WAVE_CONTINUATION",
         strategy_params={"quantity": 1.0, "take_profit_pct": 1.0, "stop_loss_pct": 0.5},
+        # Explicit in-band constants: constant_order_latency no longer has
+        # silent defaults and band-checks each leg against [0.5, 10] ms.
+        entry_latency_ns=2_000_000,
+        response_latency_ns=2_000_000,
     )
     base.update(overrides)
     return HftBacktestOnlyRunConfig(**base)
