@@ -819,6 +819,47 @@ def _data_vs_pipeline_action_detail(
     return _data_vs_pipeline_explanation(label)
 
 
+def _coverage_policy_calibration(
+    *,
+    label: str,
+    candidate_count: int,
+    observed_surface_cells: int,
+    measured_row_count: int,
+    cell_summary: Mapping[str, int],
+) -> dict[str, Any]:
+    missing = int(cell_summary.get("missing_parameter_cells") or 0)
+    insufficient = int(cell_summary.get("insufficient_trade_cells") or 0)
+    expected = observed_surface_cells + missing
+    usable = max(observed_surface_cells - insufficient, 0)
+    usable_ratio = round(usable / expected, 6) if expected else 0.0
+    insufficient_ratio = round(insufficient / expected, 6) if expected else 0.0
+    recommendation = "not_applicable"
+    if label == "fix_pipeline_measurement_or_gate" and expected:
+        if candidate_count > 0 and usable_ratio >= 0.9 and missing <= 256 and insufficient <= 512:
+            recommendation = "policy_review_candidate"
+        elif candidate_count > 0 and usable_ratio >= 0.75 and insufficient <= 2000:
+            recommendation = "targeted_backfill_or_policy_review"
+        elif usable_ratio < 0.1:
+            recommendation = "reject_or_retune_signal_density"
+        else:
+            recommendation = "retune_before_backfill"
+    return {
+        "schema": "hft3_coverage_policy_calibration_v1",
+        "diagnostic_only": True,
+        "hftbacktest_route_allowed": False,
+        "recommendation": recommendation,
+        "candidate_count": candidate_count,
+        "expected_cells_est": expected,
+        "observed_surface_cells": observed_surface_cells,
+        "measured_row_count": measured_row_count,
+        "usable_cells_est": usable,
+        "usable_ratio": usable_ratio,
+        "insufficient_trade_ratio": insufficient_ratio,
+        "missing_parameter_cells": missing,
+        "insufficient_trade_cells": insufficient,
+    }
+
+
 def _build_data_vs_pipeline_audit(
     *,
     run_id: str,
@@ -862,6 +903,16 @@ def _build_data_vs_pipeline_audit(
             measurement_or_gate_evidence=measurement_or_gate_evidence,
             cell_summary=cell_summary,
         )
+        candidate_count = len(family_candidates)
+        measured_row_count = len(measured_rows)
+        observed_surface_cells = int(family_row.get("observed_surface_cells") or measured_row_count)
+        coverage_policy_calibration = _coverage_policy_calibration(
+            label=label,
+            candidate_count=candidate_count,
+            observed_surface_cells=observed_surface_cells,
+            measured_row_count=measured_row_count,
+            cell_summary=cell_summary,
+        )
         audit_rows.append(
             {
                 "family_id": family_id,
@@ -876,6 +927,7 @@ def _build_data_vs_pipeline_audit(
                 "rejected_events": rejected_events,
                 "measurement_gate_subdiagnosis": measurement_gate_subdiagnosis,
                 "measurement_gate_cell_summary": cell_summary,
+                "coverage_policy_calibration": coverage_policy_calibration,
                 "zero_or_insufficient_trade_evidence": zero_or_insufficient_trade_evidence,
                 "missing_data_evidence": missing_data_evidence,
                 "surface_shape_evidence": surface_shape_evidence,
@@ -905,7 +957,7 @@ def _build_data_vs_pipeline_audit(
                     ),
                 },
                 "diagnostic_row_context": {
-                    "candidate_count": len(family_candidates),
+                    "candidate_count": candidate_count,
                     "candidate_ids": [row.get("candidate_id") for row in family_candidates],
                     "candidate_validator_reasons": sorted(
                         {
@@ -914,7 +966,7 @@ def _build_data_vs_pipeline_audit(
                             for reason in row.get("validator_reasons") or []
                         }
                     ),
-                    "measured_row_count": len(measured_rows),
+                    "measured_row_count": measured_row_count,
                     "measured_trade_counts": [
                         row.trade_count for row in measured_rows if row.trade_count is not None
                     ],
@@ -925,6 +977,10 @@ def _build_data_vs_pipeline_audit(
     counts = Counter(str(row["final_diagnosis_label"]) for row in audit_rows)
     for label in DATA_VS_PIPELINE_LABELS:
         counts.setdefault(label, 0)
+    coverage_counts = Counter(
+        str((row.get("coverage_policy_calibration") or {}).get("recommendation") or "missing")
+        for row in audit_rows
+    )
     return {
         "schema": DATA_VS_PIPELINE_AUDIT_SCHEMA,
         "run_id": run_id,
@@ -934,6 +990,7 @@ def _build_data_vs_pipeline_audit(
         "summary": {
             "family_count": len(audit_rows),
             "families_by_final_diagnosis": dict(sorted(counts.items())),
+            "families_by_coverage_policy_recommendation": dict(sorted(coverage_counts.items())),
             "hftbacktest_route_created": False,
         },
         "families": audit_rows,
@@ -962,17 +1019,21 @@ def _build_data_vs_pipeline_markdown(audit: Mapping[str, Any]) -> str:
         lines.extend(["None.", ""])
         return "\n".join(lines).rstrip() + "\n"
     lines.append(
-        "| Final diagnosis | Subdiagnosis | Family | Bucket | Primary reason | Missing parameter cells | Insufficient-trade cells |"
+        "| Final diagnosis | Subdiagnosis | Coverage calibration | Family | Bucket | Primary reason | Missing parameter cells | Insufficient-trade cells |"
     )
-    lines.append("|---|---|---|---|---|---:|---:|")
+    lines.append("|---|---|---|---|---|---|---:|---:|")
     for row in rows:
         cell_summary = row.get("measurement_gate_cell_summary")
         if not isinstance(cell_summary, Mapping):
             cell_summary = {}
+        coverage_policy = row.get("coverage_policy_calibration")
+        if not isinstance(coverage_policy, Mapping):
+            coverage_policy = {}
         lines.append(
-            "| {label} | {subdiagnosis} | {family} | {bucket} | {reason} | {missing} | {insufficient} |".format(
+            "| {label} | {subdiagnosis} | {coverage} | {family} | {bucket} | {reason} | {missing} | {insufficient} |".format(
                 label=_markdown_cell(row.get("final_diagnosis_label")),
                 subdiagnosis=_markdown_cell(row.get("measurement_gate_subdiagnosis")),
+                coverage=_markdown_cell(coverage_policy.get("recommendation")),
                 family=_markdown_cell(row.get("family_id")),
                 bucket=_markdown_cell(row.get("family_classification_bucket")),
                 reason=_markdown_cell(row.get("primary_failure_reason")),
