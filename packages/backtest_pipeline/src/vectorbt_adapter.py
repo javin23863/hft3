@@ -1907,14 +1907,6 @@ def _run_budget_fail_closed_reason(
     if feature_set_count > budget.max_feature_sets:
         return "RUN_BUDGET_REACHED", {**counts, "budget_field": "max_feature_sets"}
     if budget.max_peak_memory_mb_or_null is not None:
-        # Per Codex review finding 8: memory caps are currently
-        # unsupported-fail-closed.  tracemalloc / resource measurement is not
-        # wired into the screening loop, so any non-null memory budget is
-        # treated as an immediate stop (fail-closed) rather than being
-        # enforced at runtime.  This fail-closed behavior is intentional and
-        # must NOT be relaxed until peak-memory measurement is actually wired.
-        # max_peak_memory_mb_or_null must be left null (None) for all runs
-        # until that measurement is available.
         return "MEMORY_BUDGET_REACHED", {
             **counts,
             "budget_field": "max_peak_memory_mb_or_null",
@@ -2031,30 +2023,20 @@ def _default_data_loader(
         c = np.zeros(n_bars)
         v = np.zeros(n_bars)
 
-        # Per Codex review finding 12: replace the per-bar O(n*m) mask scan with
-        # a vectorized np.searchsorted bar-boundary lookup.  Each bar b covers
-        # [bar_start, bar_end); searchsorted gives the half-open event index
-        # range [lo, hi) for each bar, preserving the same causal semantics
-        # (each bar uses only events whose timestamps fall in [bar_start,
-        # bar_end)).  ts is assumed non-decreasing (the upstream validator
-        # already rejects non-monotonic local_ts).
-        bar_starts = start_ts + np.arange(n_bars, dtype=np.int64) * bar_interval_ns
-        # lo[b] = first event index with ts >= bar_starts[b]
-        lo = np.searchsorted(ts, bar_starts, side="left")
-        # hi[b] = first event index with ts >= bar_starts[b] + bar_interval_ns
-        bar_ends = bar_starts + bar_interval_ns
-        hi = np.searchsorted(ts, bar_ends, side="left")
         for i in range(n_bars):
-            s = int(lo[i])
-            e = int(hi[i])
-            if s >= e:
+            bar_start = start_ts + i * bar_interval_ns
+            bar_end = bar_start + bar_interval_ns
+            mask = (ts >= bar_start) & (ts < bar_end)
+            if not mask.any():
                 o[i] = c[i - 1] if i > 0 else px[0]
                 h[i] = o[i]
                 l[i] = o[i]
                 c[i] = o[i]
                 continue
-            bar_px = px[s:e]
-            bar_qty = qty[s:e]
+            idx = np.where(mask)[0]
+            bar_px = px[idx]
+            bar_qty = qty[idx]
+            bar_buy = buy_mask[idx]
             o[i] = bar_px[0]
             h[i] = bar_px.max()
             l[i] = bar_px.min()

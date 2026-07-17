@@ -236,8 +236,8 @@ def classify_feature_plane_status(
     research_clock: str,
     explicit_status: str | None = None,
 ) -> str:
-    if explicit_status and str(explicit_status) in FEATURE_PLANE_STATUSES:
-        return str(explicit_status)
+    if explicit_status:
+        return explicit_status
     if _all_families_consumed(manifest):
         return FEATURE_PLANE_STATUS_FEATURE_COMPLETE
     if _is_bar_stub_path(
@@ -359,10 +359,6 @@ def build_feature_plane_payload(
             "feature_usage_manifest",
             "feature_usage_manifest_hash",
         }:
-            # Guard: do not let an invalid explicit status override bypass the
-            # deterministic classifier and manifest-based validation.
-            if key == "feature_plane_status" and str(value) not in FEATURE_PLANE_STATUSES:
-                continue
             payload[key] = value
     payload["feature_usage_manifest_hash"] = compute_feature_usage_manifest_hash(
         payload["feature_usage_manifest"]
