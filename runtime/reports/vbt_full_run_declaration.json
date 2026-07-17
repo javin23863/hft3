@@ -1,13 +1,17 @@
 {
-  "host_vcpu": 256,
-  "reserved_vcpu": 26,
-  "workers_requested": 230,
-  "expected_work_units": 72950,
-  "units_source": "Vast on-host: events TIGHT x CME M6 x active models, --require-runnable-npz (NPZ pre-filter)",
-  "stall_minutes": 30,
   "abort_on_failed_units": true,
-  "git_head": "5407cc4f49d47c4dd40425fc0c173ebf5f79d8cc",
+  "batch_timeout_seconds": 1800,
   "events_csv_hash": "bfa4911d8de2d07821563c16160f9388",
+  "expected_work_units": 172098,
+  "git_head": "826db909cdb9fee5621a7596583f28583fff5503",
+  "host_vcpu": 256,
   "lake_manifest_hash": "cc910af8129266cb37ff078fd527fa15",
-  "smoke_units_per_hour": 89.7823
+  "reserved_vcpu": 26,
+  "stall_minutes": 30,
+  "units_source": "stage_a_survivors_cme_m6_runnable_npz",
+  "workers_requested": 217,
+  "ssh_host": "root@ssh8.vast.ai",
+  "ssh_port": 19001,
+  "tmux_session": "vbt_full",
+  "run_id": "paid_full_20260626T035237Z"
 }

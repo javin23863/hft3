@@ -11,6 +11,16 @@ from .base import BaseStructuralModel, ModelOutput
 from .types import QuantumSpreadOutput
 
 
+def _trapezoid_integral(y: np.ndarray, x: np.ndarray) -> float:
+    trapezoid = getattr(np, "trapezoid", None)
+    if trapezoid is not None:
+        return float(trapezoid(y, x))
+    trapz = getattr(np, "trapz", None)
+    if trapz is not None:
+        return float(trapz(y, x))
+    return float(np.sum((x[1:] - x[:-1]) * (y[1:] + y[:-1]) * 0.5))
+
+
 def bessel_i0(x: float, n_steps: int = 64) -> float:
     """I_0(x) = (1/pi) integral_0^pi exp(x cos phi) dphi."""
     if x < 0:
@@ -19,7 +29,7 @@ def bessel_i0(x: float, n_steps: int = 64) -> float:
         return math.exp(x) / math.sqrt(2.0 * math.pi * x)
     phis = np.linspace(0.0, math.pi, n_steps)
     integrand = np.exp(x * np.cos(phis))
-    return float(np.trapz(integrand, phis) / math.pi)
+    return float(_trapezoid_integral(integrand, phis) / math.pi)
 
 
 def spread_params(xi1: float, kappa1: float) -> tuple[float, float]:

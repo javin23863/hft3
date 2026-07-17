@@ -1,10 +1,10 @@
 {
   "ready_for_full_run": true,
-  "evaluated_at_utc": "2026-06-20T00:26:59.529144+00:00",
-  "pilot_artifact": "C:\\Users\\MSI\\Documents\\New project\\research_cards\\pipeline_runs\\pipeline_20260619T225717Z_1ab4db61\\screening_artifact.json",
-  "smoke_manifest": "C:\\Users\\MSI\\Documents\\New project\\research_cards\\pipeline_runs\\paid_smoke_v2_20260619T232402Z\\paid_screen_run_manifest.json",
+  "evaluated_at_utc": "2026-06-25T21:44:21.496327+00:00",
+  "pilot_artifact": "C:\\Users\\MSI\\repos\\hft3\\research_cards\\pipeline_runs\\pipeline_20260625T214330Z_4a4ff7ba\\screening_artifact.json",
+  "smoke_manifest": "C:\\Users\\MSI\\repos\\hft3\\research_cards\\pipeline_runs\\paid_smoke_small_fresh_pr20_20260625T214049Z\\paid_screen_run_manifest.json",
   "feature_family_gate": {
-    "manifest_path": "C:\\Users\\MSI\\Documents\\New project\\docs\\project\\FEATURE_FAMILY_STATUS_MANIFEST.yaml",
+    "manifest_path": "C:\\Users\\MSI\\repos\\hft3\\docs\\project\\FEATURE_FAMILY_STATUS_MANIFEST.yaml",
     "paid_screen_gate_allowed": true,
     "required_pilot_fields": [
       "feature_recipe_hash",
@@ -21,7 +21,7 @@
       "hftbacktest_handoff_status"
     ],
     "resolved_fields": {
-      "feature_recipe_hash": "2bffc531a142e2c392b0a39770d50ebd9ff9caeb89d50f4af43be22193a0d76f",
+      "feature_recipe_hash": "1f43e924b5bbbdc9736f832557b93fa60411a8e0712defa31861933d52a8e5a1",
       "feature_usage_manifest": "present",
       "cross_asset_alignment_status": "not_measured",
       "vix_sensor_status": "not_used",
@@ -30,7 +30,7 @@
       "macro_context_ablation_status": "not_measured",
       "continuous_clock_status": "out_of_scope",
       "latency_feature_status": "not_used",
-      "vectorbt_result": "trials_completed",
+      "vectorbt_result": "screen_pass",
       "robustness_result": "not_run_pilot_scope",
       "hftbacktest_handoff_status": "recipe_hash_handoff_ready"
     }
@@ -45,8 +45,8 @@
     "expected_work_units": 12,
     "completed_work_units": 12,
     "failed_work_units": 0,
-    "units_per_hour": 89.7823
+    "units_per_hour": 707.3079
   },
   "errors": [],
-  "lookahead_pytest_tail": ".                                                                        [100%]\n1 passed in 2.17s"
+  "lookahead_pytest_tail": ".                                                                        [100%]\n1 passed in 1.59s"
 }

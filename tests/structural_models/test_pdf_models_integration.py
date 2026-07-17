@@ -88,6 +88,23 @@ class TestStructuralModelOutputTypes:
         assert result.payload.spread_probability >= 0.0
         assert isinstance(result.payload.cancel_all_quotes, bool)
 
+    def test_quantum_spread_does_not_require_numpy_trapz(self, monkeypatch):
+        from features_engine.src.structural_models import model_09_quantum_spread as quantum_spread
+
+        calls = {"trapezoid": 0}
+
+        def fake_trapezoid(y, x):
+            calls["trapezoid"] += 1
+            return float(np.sum((x[1:] - x[:-1]) * (y[1:] + y[:-1]) * 0.5))
+
+        monkeypatch.setattr(quantum_spread.np, "trapezoid", fake_trapezoid, raising=False)
+        monkeypatch.delattr(quantum_spread.np, "trapz", raising=False)
+
+        result = quantum_spread.QuantumSpreadDefenseModel().evaluate(spread_ticks=2.0)
+
+        assert result.payload.spread_probability >= 0.0
+        assert calls["trapezoid"] > 0
+
     def test_hawkes_toxic_produces_valid_output(self):
         models = get_structural_models()
         hk = next((m for m in models if getattr(m, "model_id", "") == "HAWKES_TOXIC_FLOW"), None)

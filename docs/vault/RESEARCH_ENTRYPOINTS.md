@@ -277,7 +277,17 @@ default. For new VectorBT/HftBacktest research, use the primary handoff above.
 PDF hybrid replay notes remain in [PDF_HYBRID_REPLAY.md](../structural_models/PDF_HYBRID_REPLAY.md)
 for artifact interpretation only.
 
-## 6. Microstructure workbench (unified 51-model research)
+## 6. Microstructure workbench (offline diagnostics and robustness)
+
+**Current status (2026-07-02):** The workbench is not the active paid HBT
+campaign runner. Treat it as a local/offline diagnostics, latency viability,
+and robustness lane. The old direct-workbench universe wording
+(`44 HYP + 7 PDF`, "51-model") is not the paid HBT campaign identity. For the
+active Vast campaign, the authoritative identity is the canonical HBT registry
+slug universe from `packages/features_engine/config/model_registry.yaml`,
+including hypothesis, structural, and reinforcement-learning policy/proxy
+entries. Missing HBT order adapters are blockers, not permission to skip models
+or treat local workbench output as tradability evidence.
 
 **When:** Latency viability, break-even analysis, robustness pack, and audit artifacts for any `HYP_*` or `PDF_MODEL_*`.
 
@@ -298,7 +308,9 @@ streamlit run workbench/ui/app.py
 python -m workbench campaign --model HYP_5 --symbol MES.v.0 --dry-run
 ```
 
-- Unified registry: `workbench/config/models.yaml` + `workbench/src/registry/unified_registry.py` (44 HYP + 7 PDF)
+- Direct workbench registry: `workbench/config/models.yaml` +
+  `workbench/src/registry/unified_registry.py` (historical `44 HYP + 7 PDF`
+  direct-workbench surface)
 - Artifacts: `research_cards/workbench_runs/<run_id>/`
 
 **Verify (scope-green):** `python -m pytest tests/test_workbench/ -q`

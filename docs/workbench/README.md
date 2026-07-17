@@ -4,6 +4,24 @@ Microstructure backtests on MBO NPZ event windows with **C++-measured latency au
 
 Read [GETTING_STARTED.md §7–8](../GETTING_STARTED.md) first for setup order.
 
+## Current status
+
+As of 2026-07-02, this lane is local/offline diagnostics and robustness work.
+It is not the active paid Vast HBT campaign runner, and its artifacts do not
+substitute for campaign evidence or tradability receipts.
+
+The paid HBT campaign is resumed on Vast instance `42609000` from
+`/data/hbt_vast_20260629_587e7f2` with output root
+`hbt_full_parameter_surface_runs_078fa690`. Current paid-run issue is
+receipt-level resume catch-up: the runner is hot and watchdog sees manifest
+scan progress, but row receipts are stalled at `3,123,439 / 3,950,895`.
+
+Historical workbench docs may describe a direct `44 HYP + 7 PDF` or
+"51-model" surface. For paid HBT campaign identity, use the canonical registry
+slug universe in `packages/features_engine/config/model_registry.yaml`,
+including reinforcement-learning policy/proxy entries. Missing uniform HBT
+order adapters are blockers, not permission to skip registry models.
+
 ## Reading order (this lane)
 
 | Order | Doc | Content |
