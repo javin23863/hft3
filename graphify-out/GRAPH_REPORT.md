@@ -1,16 +1,16 @@
-# Graph Report - hft3-pr-vbt-hbt  (2026-06-18)
+# Graph Report - hft3-pr-vbt-hbt  (2026-07-17)
 
 ## Corpus Check
 - 5227 files · ~2,681,982 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1173 nodes · 2849 edges · 57 communities (50 shown, 7 thin omitted)
-- Extraction: 85% EXTRACTED · 15% INFERRED · 0% AMBIGUOUS · INFERRED: 424 edges (avg confidence: 0.77)
+- 1174 nodes · 2873 edges · 62 communities (55 shown, 7 thin omitted)
+- Extraction: 85% EXTRACTED · 15% INFERRED · 0% AMBIGUOUS · INFERRED: 423 edges (avg confidence: 0.77)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `18e8676e`
+- Built from commit: `6700eee4`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -72,6 +72,11 @@
 - [[_COMMUNITY_Community 54|Community 54]]
 - [[_COMMUNITY_Community 55|Community 55]]
 - [[_COMMUNITY_Community 56|Community 56]]
+- [[_COMMUNITY_Community 57|Community 57]]
+- [[_COMMUNITY_Community 58|Community 58]]
+- [[_COMMUNITY_Community 59|Community 59]]
+- [[_COMMUNITY_Community 60|Community 60]]
+- [[_COMMUNITY_Community 61|Community 61]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `Any` - 70 edges
@@ -86,18 +91,18 @@
 10. `_run_vectorbt_simulation()` - 30 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `test_replay_pass_without_source_lock_is_refused()` --calls--> `validate_replay_summary()`  [INFERRED]
-  tests/backtest_pipeline/test_hftbacktest_realism_hbt0.py → packages/backtest_pipeline/src/hftbacktest_realism.py
-- `test_replay_summary_certification_allowed_requires_non_accelerated_official_replay()` --calls--> `validate_replay_summary()`  [INFERRED]
-  tests/backtest_pipeline/test_hftbacktest_realism_hbt0.py → packages/backtest_pipeline/src/hftbacktest_realism.py
-- `_severity()` --references--> `str`  [EXTRACTED]
-  packages/backtest_pipeline/src/ontology_gate.py → scripts/run_ontology_gate.py
 - `bool` --uses--> `HftBacktestRealismArtifactError`  [INFERRED]
   tests/backtest_pipeline/test_hftbacktest_realism_hbt0.py → packages/backtest_pipeline/src/hftbacktest_realism.py
+- `screening_artifact_shell()` --calls--> `build_feature_plane_payload()`  [INFERRED]
+  tests/backtest_pipeline/hft_screening_fixtures.py → packages/backtest_pipeline/src/feature_plane.py
 - `MonkeyPatch` --uses--> `HftBacktestRealismArtifactError`  [INFERRED]
   tests/backtest_pipeline/test_hftbacktest_realism_hbt0.py → packages/backtest_pipeline/src/hftbacktest_realism.py
+- `Path` --uses--> `HftBacktestRealismArtifactError`  [INFERRED]
+  tests/backtest_pipeline/test_hftbacktest_realism_hbt0.py → packages/backtest_pipeline/src/hftbacktest_realism.py
+- `str` --uses--> `HftBacktestRealismArtifactError`  [INFERRED]
+  tests/backtest_pipeline/test_hftbacktest_realism_hbt0.py → packages/backtest_pipeline/src/hftbacktest_realism.py
 
-## Communities (57 total, 7 thin omitted)
+## Communities (62 total, 7 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.11
@@ -113,7 +118,7 @@ Nodes (33): _cell(), _flat_grid_2d(), Tests for the VBT-3 surface-stability prod
 
 ### Community 3 - "Community 3"
 Cohesion: 0.06
-Nodes (128): TestVectorbtAdapterIntegration, CandidateModel, Any, bool, float, int, ndarray, Path (+120 more)
+Nodes (128): TestVectorbtAdapterIntegration, CandidateModel, ndarray, Any, bool, float, int, Path (+120 more)
 
 ### Community 4 - "Community 4"
 Cohesion: 0.28
@@ -200,16 +205,16 @@ Cohesion: 0.20
 Nodes (7): _full_passing_input(), Complete robustness input where all gates pass.      Includes stress decompositi, TestAllGatesPass, TestDeterminism, TestOutputShape, compute_robustness_evidence(), Given robustness raw input data, call producers and return artifact fields.
 
 ### Community 29 - "Community 29"
-Cohesion: 0.07
-Nodes (103): test_replay_summary_accelerated_mode_fails_closed(), Any, bool, float, int, Path, str, _append_metric_discrepancy() (+95 more)
+Cohesion: 0.13
+Nodes (39): Any, str, _canonical_json(), classify_hftbacktest_events(), compute_replay_summary_hash(), detect_hftbacktest_installation(), _hash_without_keys(), _is_nonnegative_number() (+31 more)
 
 ### Community 30 - "Community 30"
 Cohesion: 0.14
 Nodes (13): _failing_pbo_matrix(), _passing_cscv_matrix(), _passing_expectancies(), Random CSCV matrix → PBO >= 0.5 (fail)., Only DSR data (no PBO matrix) → DSR runs, PBO stays not_run., DSR data also triggers bootstrap_ci., Only CSCV matrix → PBO runs, DSR stays not_run., Per-event expectancies with high SNR → DSR + all §10 producers pass. (+5 more)
 
 ### Community 31 - "Community 31"
-Cohesion: 0.23
-Nodes (23): Any, _all_families_consumed(), build_data_scope_skip_manifest(), build_feature_plane_payload(), build_feature_usage_manifest(), _canonical_json(), classify_feature_plane_status(), compute_feature_usage_manifest_hash() (+15 more)
+Cohesion: 0.13
+Nodes (38): Any, ArgumentParser, _bar_stub_payload(), Tests for VectorBT feature-plane contract enforcement., TestFeaturePlaneValidation, TestFeatureUsageManifest, Any, bool (+30 more)
 
 ### Community 32 - "Community 32"
 Cohesion: 0.29
@@ -224,24 +229,24 @@ Cohesion: 0.29
 Nodes (11): native_probe_latency_fields(), passing_section10_evidence_maps(), Shared HftBacktest realism test fixtures (§10 evidence + native hot-path pins)., Top-level screening artifact with hash for HBT handoff tests., Latency artifact fields pointing at hash-backed CHI404 native probe evidence., §10 robustness maps that pass staleness (from robustness_bridge golden input)., Promoted screening row with replay-eligibility fields + §10 evidence., replay_eligible_promoted_candidate() (+3 more)
 
 ### Community 36 - "Community 36"
-Cohesion: 0.09
-Nodes (23): TestCitationTracer, bool, Path, _applicable_invariants(), _check_vendor_lock(), CitationResult, DriftResult, _list_paper_ids() (+15 more)
+Cohesion: 0.13
+Nodes (19): TestCitationTracer, Path, _check_vendor_lock(), CitationResult, _list_paper_ids(), Ontology Gate Agent — deterministic fail-closed checkpoint for hft3.  Implements, Result of :func:`trace_citation`.      ``backed`` is True when the claim resolve, Resolve a ``spec_file.md::section::lines`` style reference.      Accepts plain f (+11 more)
 
 ### Community 37 - "Community 37"
 Cohesion: 0.06
 Nodes (30): 0. Fable Mindset (MANDATORY — load before any gate action), 0A. The Fable Loop (run every gate cycle, in order, no skipping), 0B. Why the Fable loop matters for financial code, 0C. Fable gate entry checklist (must be confirmed before Step 1), 10. Summary, 1. Purpose, 2. Ontology Model (Palantir-style: data + actions + logic), 2A. Data (Nouns) (+22 more)
 
 ### Community 38 - "Community 38"
-Cohesion: 0.17
-Nodes (8): If Fable checklist fails, gate must reject regardless of other results., TestGateDecision, TestScopeHonesty, check_scope_honesty(), gate_decision(), Enforce scope honesty (spec GATE_RULES §8).      - Subset pytest ≠ scope-green, Aggregate all results and emit PASS or REJECT with reasons.      Any red finding, ScopeHonestyResult
+Cohesion: 0.15
+Nodes (9): If Fable checklist fails, gate must reject regardless of other results., TestGateDecision, TestScopeHonesty, check_scope_honesty(), gate_decision(), GateVerdict, Enforce scope honesty (spec GATE_RULES §8).      - Subset pytest ≠ scope-green, Aggregate all results and emit PASS or REJECT with reasons.      Any red finding (+1 more)
 
 ### Community 39 - "Community 39"
-Cohesion: 0.18
-Nodes (9): TestFableEntryChecklist, TestRunGate, FableChecklist, GateVerdict, Run the full gate pipeline and return the aggregate verdict.      Convenience en, Result of the 5-checkbox Fable entry checklist (spec §0C)., Validate the 5 mandatory Fable entry checkboxes.      If any checkbox is false t, run_gate() (+1 more)
+Cohesion: 0.19
+Nodes (8): TestFableEntryChecklist, TestRunGate, FableChecklist, Run the full gate pipeline and return the aggregate verdict.      Convenience en, Result of the 5-checkbox Fable entry checklist (spec §0C)., Validate the 5 mandatory Fable entry checkboxes.      If any checkbox is false t, run_gate(), validate_fable_entry_checklist()
 
 ### Community 40 - "Community 40"
-Cohesion: 0.15
-Nodes (8): Docs area has no applicable invariants — all should be na/pass., Unknown area defaults to full B1-B8 per charter., TestInvariantChecker, int, check_invariants(), InvariantCheck, InvariantResult, Apply B1-B8 for a code area, citing authority for each check.      ``invariant_r
+Cohesion: 0.22
+Nodes (6): Docs area has no applicable invariants — all should be na/pass., Unknown area defaults to full B1-B8 per charter., TestInvariantChecker, check_invariants(), InvariantCheck, Apply B1-B8 for a code area, citing authority for each check.      ``invariant_r
 
 ### Community 41 - "Community 41"
 Cohesion: 0.18
@@ -252,16 +257,16 @@ Cohesion: 0.27
 Nodes (5): Artifact claiming feature_complete without consumption proof fails., TestArtifactValidation, ArtifactResult, Validate a screening/feature-plane artifact schema.      Delegates to :func:`val, validate_artifact_schema()
 
 ### Community 43 - "Community 43"
-Cohesion: 0.16
-Nodes (7): Tests for the Ontology Gate Agent (ontology_gate.py).  Every test exercises a re, Pilot scope is allowed to use numba engine., Minimal valid screening artifact for schema validation tests., TestToolUsageChecker, valid_artifact(), check_tool_usage(), Verify a VectorBT or HftBacktest API call site matches official signatures.
+Cohesion: 0.29
+Nodes (4): Pilot scope is allowed to use numba engine., TestToolUsageChecker, check_tool_usage(), Verify a VectorBT or HftBacktest API call site matches official signatures.
 
 ### Community 44 - "Community 44"
-Cohesion: 0.29
-Nodes (5): _bar_stub_payload(), _bar_stub_payload_raw(), Tests for VectorBT feature-plane contract enforcement., TestFeaturePlaneValidation, TestFeatureUsageManifest
+Cohesion: 0.14
+Nodes (30): bool, float, _append_metric_discrepancy(), build_discrepancy_comparison_artifact(), _candidate_from_screening(), _contains_sha256_digest(), _expected_event_dtype(), _first_numeric() (+22 more)
 
 ### Community 45 - "Community 45"
-Cohesion: 0.15
-Nodes (38): _screening_artifact(), test_hbt0_cli_writes_fail_closed_artifacts(), test_hbt0_code_does_not_name_retired_replay_entrypoints(), test_hbt0_derives_rust_requirement_from_broad_screening_scope(), test_hbt0_missing_screening_artifact_path_still_writes_fail_closed_summary(), test_hbt0_refuses_malformed_nonterminal_screening_artifact(), test_hbt0_refuses_missing_terminal_screening_hash(), test_hbt0_refuses_required_non_rust_screening_artifact() (+30 more)
+Cohesion: 0.17
+Nodes (35): _screening_artifact(), test_hbt0_cli_writes_fail_closed_artifacts(), test_hbt0_code_does_not_name_retired_replay_entrypoints(), test_hbt0_derives_rust_requirement_from_broad_screening_scope(), test_hbt0_missing_screening_artifact_path_still_writes_fail_closed_summary(), test_hbt0_refuses_malformed_nonterminal_screening_artifact(), test_hbt0_refuses_missing_terminal_screening_hash(), test_hbt0_refuses_required_non_rust_screening_artifact() (+27 more)
 
 ### Community 46 - "Community 46"
 Cohesion: 0.22
@@ -284,8 +289,8 @@ Cohesion: 0.05
 Nodes (37): actual_verdict, issues, severity, valid, clean, detected_patterns, severity, expected_until (+29 more)
 
 ### Community 51 - "Community 51"
-Cohesion: 0.33
-Nodes (8): ArgumentParser, _build_parser(), _load_json(), main(), _parse_fable(), _parse_invariants(), int, Accept GROUNDED-style or grounded-style keys.
+Cohesion: 0.15
+Nodes (6): bool, int, _applicable_invariants(), DriftResult, InvariantResult, ToolUsageResult
 
 ### Community 52 - "Community 52"
 Cohesion: 0.18
@@ -299,6 +304,26 @@ Nodes (5): all_rejected, authority, claims_audited, generated_at_utc, results
 Cohesion: 0.67
 Nodes (3): _audit_one(), main(), int
 
+### Community 57 - "Community 57"
+Cohesion: 0.24
+Nodes (10): Path, default_hftbacktest_upstream_ref(), HftBacktestRealismArtifactError, _optional_list_arg(), Load pinned HftBacktest upstream + PyPI coordinates from vendor/hftbacktest/VEND, Return the vendor-lock upstream tag used for source-lock verification., Raised when a HftBacktest realism artifact violates the HBT contract., read_hftbacktest_vendor_lock() (+2 more)
+
+### Community 58 - "Community 58"
+Cohesion: 0.24
+Nodes (10): _is_positive_number(), _official_replay_builder_queue_model_type(), _official_replay_not_run_artifact(), Run one explicit, non-accelerated official HftBacktest replay., Return reasons when the declared contract is not what the official runner execut, Validate the explicit order intent used for the minimal official HBT replay., run_minimal_official_hftbacktest_replay(), _selected_hbt4_order_intent() (+2 more)
+
+### Community 59 - "Community 59"
+Cohesion: 0.28
+Nodes (9): int, count_l3_orphans(), _event_constants(), _event_type_counts(), _field_value(), _float_field(), _hbt_order_snapshot(), _int_field() (+1 more)
+
+### Community 60 - "Community 60"
+Cohesion: 0.25
+Nodes (8): test_replay_pass_without_source_lock_is_refused(), test_replay_summary_accelerated_mode_fails_closed(), test_replay_summary_certification_allowed_requires_non_accelerated_official_replay(), test_replay_summary_missing_accelerated_metadata_fails_closed(), _is_raw_sha256_digest(), Return replay-summary validation reasons, including PASS source-lock refusal., validate_replay_summary(), bool
+
+### Community 61 - "Community 61"
+Cohesion: 0.33
+Nodes (3): Tests for the Ontology Gate Agent (ontology_gate.py).  Every test exercises a re, Minimal valid screening artifact for schema validation tests., valid_artifact()
+
 ## Knowledge Gaps
 - **100 isolated node(s):** `code:powershell ($env:HFT3_VAULT_ROOT = "$env:USERPROFILE\Desktop\Obsidian Va)`, `Required pipeline order (canonical)`, `code:block2 ([ONTOLOGY])`, `Vault authority`, `code:block3 (invariant: B1=pass,B2=pass,B3=pass,B4=pass,B5=pass,B6=na,B7=)` (+95 more)
   These have ≤1 connection - possible missing edges or undocumented components.
@@ -308,14 +333,14 @@ Nodes (3): _audit_one(), main(), int
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `compute_robustness_evidence()` connect `Community 28` to `Community 32`, `Community 33`, `Community 34`, `Community 0`, `Community 4`, `Community 3`, `Community 30`?**
-  _High betweenness centrality (0.346) - this node is a cross-community bridge._
+  _High betweenness centrality (0.341) - this node is a cross-community bridge._
 - **Why does `_normalise_promoted_screening_row()` connect `Community 3` to `Community 0`, `Community 28`?**
-  _High betweenness centrality (0.323) - this node is a cross-community bridge._
-- **Why does `_validate_screening_artifact_hash()` connect `Community 29` to `Community 3`, `Community 31`?**
-  _High betweenness centrality (0.225) - this node is a cross-community bridge._
+  _High betweenness centrality (0.316) - this node is a cross-community bridge._
+- **Why does `compute_screening_artifact_hash()` connect `Community 3` to `Community 29`, `Community 35`, `Community 45`?**
+  _High betweenness centrality (0.180) - this node is a cross-community bridge._
 - **Are the 31 inferred relationships involving `compute_robustness_evidence()` (e.g. with `.test_all_status_fields_pass()` and `.test_bootstrap_ci_has_pass_status()`) actually correct?**
   _`compute_robustness_evidence()` has 31 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `code:powershell ($env:HFT3_VAULT_ROOT = "$env:USERPROFILE\Desktop\Obsidian Va)`, `Required pipeline order (canonical)`, `code:block2 ([ONTOLOGY])` to the rest of the system?**
+- **What connects `Feature-plane contract for VectorBT screening artifacts.  Separates catalog el`, `Build per-family manifest separating catalog eligibility from model consumption.`, `Emit the feature-plane block required on every VectorBT screening artifact.` to the rest of the system?**
   _332 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.11264367816091954 - nodes in this community are weakly interconnected._
