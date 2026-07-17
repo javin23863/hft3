@@ -1,16 +1,16 @@
-# Graph Report - hft3-hbt-depth-price-fix  (2026-07-01)
+# Graph Report - hft3-hbt-depth-price-fix  (2026-07-17)
 
 ## Corpus Check
-- 5063 files · ~2,619,770 words
+- 5063 files · ~2,620,241 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 148006 nodes · 179669 edges · 16977 communities (16345 shown, 632 thin omitted)
-- Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 13832 edges (avg confidence: 0.62)
+- 147996 nodes · 179560 edges · 17014 communities (16382 shown, 632 thin omitted)
+- Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 13815 edges (avg confidence: 0.62)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a6424fc1`
+- Built from commit: `b4308a6d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -3967,6 +3967,7 @@
 - [[_COMMUNITY_Community 3949|Community 3949]]
 - [[_COMMUNITY_Community 3950|Community 3950]]
 - [[_COMMUNITY_Community 3951|Community 3951]]
+- [[_COMMUNITY_Community 3952|Community 3952]]
 - [[_COMMUNITY_Community 3953|Community 3953]]
 - [[_COMMUNITY_Community 3954|Community 3954]]
 - [[_COMMUNITY_Community 3955|Community 3955]]
@@ -4988,6 +4989,7 @@
 - [[_COMMUNITY_Community 4971|Community 4971]]
 - [[_COMMUNITY_Community 4972|Community 4972]]
 - [[_COMMUNITY_Community 4973|Community 4973]]
+- [[_COMMUNITY_Community 4974|Community 4974]]
 - [[_COMMUNITY_Community 4975|Community 4975]]
 - [[_COMMUNITY_Community 4976|Community 4976]]
 - [[_COMMUNITY_Community 4977|Community 4977]]
@@ -5122,6 +5124,7 @@
 - [[_COMMUNITY_Community 5106|Community 5106]]
 - [[_COMMUNITY_Community 5107|Community 5107]]
 - [[_COMMUNITY_Community 5108|Community 5108]]
+- [[_COMMUNITY_Community 5109|Community 5109]]
 - [[_COMMUNITY_Community 5110|Community 5110]]
 - [[_COMMUNITY_Community 5111|Community 5111]]
 - [[_COMMUNITY_Community 5112|Community 5112]]
@@ -5236,6 +5239,7 @@
 - [[_COMMUNITY_Community 5221|Community 5221]]
 - [[_COMMUNITY_Community 5222|Community 5222]]
 - [[_COMMUNITY_Community 5223|Community 5223]]
+- [[_COMMUNITY_Community 5224|Community 5224]]
 - [[_COMMUNITY_Community 5225|Community 5225]]
 - [[_COMMUNITY_Community 5226|Community 5226]]
 - [[_COMMUNITY_Community 5227|Community 5227]]
@@ -5301,6 +5305,7 @@
 - [[_COMMUNITY_Community 5287|Community 5287]]
 - [[_COMMUNITY_Community 5288|Community 5288]]
 - [[_COMMUNITY_Community 5289|Community 5289]]
+- [[_COMMUNITY_Community 5290|Community 5290]]
 - [[_COMMUNITY_Community 5291|Community 5291]]
 - [[_COMMUNITY_Community 5292|Community 5292]]
 - [[_COMMUNITY_Community 5293|Community 5293]]
@@ -5325,6 +5330,7 @@
 - [[_COMMUNITY_Community 5312|Community 5312]]
 - [[_COMMUNITY_Community 5313|Community 5313]]
 - [[_COMMUNITY_Community 5314|Community 5314]]
+- [[_COMMUNITY_Community 5315|Community 5315]]
 - [[_COMMUNITY_Community 5316|Community 5316]]
 - [[_COMMUNITY_Community 5317|Community 5317]]
 - [[_COMMUNITY_Community 5318|Community 5318]]
@@ -5376,6 +5382,7 @@
 - [[_COMMUNITY_Community 5364|Community 5364]]
 - [[_COMMUNITY_Community 5365|Community 5365]]
 - [[_COMMUNITY_Community 5366|Community 5366]]
+- [[_COMMUNITY_Community 5367|Community 5367]]
 - [[_COMMUNITY_Community 5368|Community 5368]]
 - [[_COMMUNITY_Community 5369|Community 5369]]
 - [[_COMMUNITY_Community 5370|Community 5370]]
@@ -5386,10 +5393,12 @@
 - [[_COMMUNITY_Community 5375|Community 5375]]
 - [[_COMMUNITY_Community 5376|Community 5376]]
 - [[_COMMUNITY_Community 5377|Community 5377]]
+- [[_COMMUNITY_Community 5378|Community 5378]]
 - [[_COMMUNITY_Community 5379|Community 5379]]
 - [[_COMMUNITY_Community 5380|Community 5380]]
 - [[_COMMUNITY_Community 5381|Community 5381]]
 - [[_COMMUNITY_Community 5382|Community 5382]]
+- [[_COMMUNITY_Community 5383|Community 5383]]
 - [[_COMMUNITY_Community 5384|Community 5384]]
 - [[_COMMUNITY_Community 5385|Community 5385]]
 - [[_COMMUNITY_Community 5386|Community 5386]]
@@ -5398,6 +5407,7 @@
 - [[_COMMUNITY_Community 5389|Community 5389]]
 - [[_COMMUNITY_Community 5390|Community 5390]]
 - [[_COMMUNITY_Community 5391|Community 5391]]
+- [[_COMMUNITY_Community 5392|Community 5392]]
 - [[_COMMUNITY_Community 5393|Community 5393]]
 - [[_COMMUNITY_Community 5394|Community 5394]]
 - [[_COMMUNITY_Community 5395|Community 5395]]
@@ -5699,7 +5709,9 @@
 - [[_COMMUNITY_Community 5691|Community 5691]]
 - [[_COMMUNITY_Community 5692|Community 5692]]
 - [[_COMMUNITY_Community 5693|Community 5693]]
+- [[_COMMUNITY_Community 5694|Community 5694]]
 - [[_COMMUNITY_Community 5695|Community 5695]]
+- [[_COMMUNITY_Community 5696|Community 5696]]
 - [[_COMMUNITY_Community 5697|Community 5697]]
 - [[_COMMUNITY_Community 5698|Community 5698]]
 - [[_COMMUNITY_Community 5699|Community 5699]]
@@ -5732,6 +5744,7 @@
 - [[_COMMUNITY_Community 5726|Community 5726]]
 - [[_COMMUNITY_Community 5727|Community 5727]]
 - [[_COMMUNITY_Community 5728|Community 5728]]
+- [[_COMMUNITY_Community 5729|Community 5729]]
 - [[_COMMUNITY_Community 5730|Community 5730]]
 - [[_COMMUNITY_Community 5731|Community 5731]]
 - [[_COMMUNITY_Community 5732|Community 5732]]
@@ -5778,6 +5791,7 @@
 - [[_COMMUNITY_Community 5773|Community 5773]]
 - [[_COMMUNITY_Community 5774|Community 5774]]
 - [[_COMMUNITY_Community 5775|Community 5775]]
+- [[_COMMUNITY_Community 5776|Community 5776]]
 - [[_COMMUNITY_Community 5777|Community 5777]]
 - [[_COMMUNITY_Community 5778|Community 5778]]
 - [[_COMMUNITY_Community 5779|Community 5779]]
@@ -5814,6 +5828,7 @@
 - [[_COMMUNITY_Community 5810|Community 5810]]
 - [[_COMMUNITY_Community 5811|Community 5811]]
 - [[_COMMUNITY_Community 5812|Community 5812]]
+- [[_COMMUNITY_Community 5813|Community 5813]]
 - [[_COMMUNITY_Community 5814|Community 5814]]
 - [[_COMMUNITY_Community 5815|Community 5815]]
 - [[_COMMUNITY_Community 5816|Community 5816]]
@@ -5860,6 +5875,7 @@
 - [[_COMMUNITY_Community 5857|Community 5857]]
 - [[_COMMUNITY_Community 5858|Community 5858]]
 - [[_COMMUNITY_Community 5859|Community 5859]]
+- [[_COMMUNITY_Community 5860|Community 5860]]
 - [[_COMMUNITY_Community 5861|Community 5861]]
 - [[_COMMUNITY_Community 5863|Community 5863]]
 - [[_COMMUNITY_Community 5864|Community 5864]]
@@ -6268,6 +6284,8 @@
 - [[_COMMUNITY_Community 6267|Community 6267]]
 - [[_COMMUNITY_Community 6268|Community 6268]]
 - [[_COMMUNITY_Community 6269|Community 6269]]
+- [[_COMMUNITY_Community 6270|Community 6270]]
+- [[_COMMUNITY_Community 6271|Community 6271]]
 - [[_COMMUNITY_Community 6272|Community 6272]]
 - [[_COMMUNITY_Community 6273|Community 6273]]
 - [[_COMMUNITY_Community 6274|Community 6274]]
@@ -6282,6 +6300,7 @@
 - [[_COMMUNITY_Community 6283|Community 6283]]
 - [[_COMMUNITY_Community 6284|Community 6284]]
 - [[_COMMUNITY_Community 6285|Community 6285]]
+- [[_COMMUNITY_Community 6286|Community 6286]]
 - [[_COMMUNITY_Community 6287|Community 6287]]
 - [[_COMMUNITY_Community 6288|Community 6288]]
 - [[_COMMUNITY_Community 6289|Community 6289]]
@@ -6562,6 +6581,7 @@
 - [[_COMMUNITY_Community 6564|Community 6564]]
 - [[_COMMUNITY_Community 6565|Community 6565]]
 - [[_COMMUNITY_Community 6566|Community 6566]]
+- [[_COMMUNITY_Community 6567|Community 6567]]
 - [[_COMMUNITY_Community 6568|Community 6568]]
 - [[_COMMUNITY_Community 6569|Community 6569]]
 - [[_COMMUNITY_Community 6570|Community 6570]]
@@ -6614,6 +6634,7 @@
 - [[_COMMUNITY_Community 6618|Community 6618]]
 - [[_COMMUNITY_Community 6620|Community 6620]]
 - [[_COMMUNITY_Community 6621|Community 6621]]
+- [[_COMMUNITY_Community 6622|Community 6622]]
 - [[_COMMUNITY_Community 6623|Community 6623]]
 - [[_COMMUNITY_Community 6624|Community 6624]]
 - [[_COMMUNITY_Community 6625|Community 6625]]
@@ -15082,9 +15103,11 @@
 - [[_COMMUNITY_Community 15090|Community 15090]]
 - [[_COMMUNITY_Community 15091|Community 15091]]
 - [[_COMMUNITY_Community 15092|Community 15092]]
+- [[_COMMUNITY_Community 15093|Community 15093]]
 - [[_COMMUNITY_Community 15094|Community 15094]]
 - [[_COMMUNITY_Community 15095|Community 15095]]
 - [[_COMMUNITY_Community 15096|Community 15096]]
+- [[_COMMUNITY_Community 15097|Community 15097]]
 - [[_COMMUNITY_Community 15098|Community 15098]]
 - [[_COMMUNITY_Community 15099|Community 15099]]
 - [[_COMMUNITY_Community 15100|Community 15100]]
@@ -16430,6 +16453,7 @@
 - [[_COMMUNITY_Community 16440|Community 16440]]
 - [[_COMMUNITY_Community 16441|Community 16441]]
 - [[_COMMUNITY_Community 16442|Community 16442]]
+- [[_COMMUNITY_Community 16443|Community 16443]]
 - [[_COMMUNITY_Community 16444|Community 16444]]
 - [[_COMMUNITY_Community 16445|Community 16445]]
 - [[_COMMUNITY_Community 16446|Community 16446]]
@@ -16886,9 +16910,22 @@
 - [[_COMMUNITY_Community 16909|Community 16909]]
 - [[_COMMUNITY_Community 16911|Community 16911]]
 - [[_COMMUNITY_Community 16912|Community 16912]]
+- [[_COMMUNITY_Community 17001|Community 17001]]
+- [[_COMMUNITY_Community 17002|Community 17002]]
+- [[_COMMUNITY_Community 17003|Community 17003]]
+- [[_COMMUNITY_Community 17004|Community 17004]]
+- [[_COMMUNITY_Community 17005|Community 17005]]
+- [[_COMMUNITY_Community 17006|Community 17006]]
+- [[_COMMUNITY_Community 17007|Community 17007]]
+- [[_COMMUNITY_Community 17008|Community 17008]]
+- [[_COMMUNITY_Community 17009|Community 17009]]
+- [[_COMMUNITY_Community 17010|Community 17010]]
+- [[_COMMUNITY_Community 17011|Community 17011]]
+- [[_COMMUNITY_Community 17012|Community 17012]]
+- [[_COMMUNITY_Community 17013|Community 17013]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `datetime` - 931 edges
+1. `datetime` - 925 edges
 2. `MarketState` - 166 edges
 3. `MBOEvent` - 142 edges
 4. `SlowTierConfig` - 138 edges
@@ -16900,90 +16937,90 @@
 10. `PromotionGate` - 111 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `float` --uses--> `HftBacktestOnlyRunConfig`  [INFERRED]
+  scripts/run_hftbacktest_only_campaign.py → packages/backtest_pipeline/src/hftbacktest_only_pipeline.py
+- `test_certification_runner_main_exit_code()` --calls--> `_result()`  [INFERRED]
+  tests/test_backtester_certification_governance.py → packages/backtest_pipeline/src/hftbacktest_only_pipeline.py
 - `bool` --uses--> `DatabentoResearchClient`  [INFERRED]
   apps/cockpit/backend/control.py → packages/data_system/src/databento_client.py
 - `Any` --uses--> `datetime`  [INFERRED]
   apps/cockpit/backend/paths.py → packages/economic_event_universe/timezone.py
 - `str` --uses--> `datetime`  [INFERRED]
   apps/llm_slow_tier/cli.py → packages/economic_event_universe/timezone.py
-- `SlowTierConfig` --uses--> `SlowTierConfig`  [INFERRED]
-  tests/test_slow_tier/test_golden.py → apps/llm_slow_tier/src/config.py
-- `bool` --uses--> `SlowTierConfig`  [INFERRED]
-  tests/test_slow_tier/test_golden_seed.py → apps/llm_slow_tier/src/config.py
 
-## Communities (16977 total, 632 thin omitted)
+## Communities (17014 total, 632 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.01
-Nodes (337): CrossAssetLeadLagOutput, DealerHedgingOutput, DowYMIndexOutput, HawkesToxicOutput, HybridExecutionOutput, Any, BookPressureOutput, float (+329 more)
+Nodes (306): CrossAssetLeadLagOutput, DealerHedgingOutput, DowYMIndexOutput, HawkesToxicOutput, HybridExecutionOutput, Any, BookPressureOutput, float (+298 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.02
-Nodes (181): BaseHypothesis, AbsorptionFade, AggressorDecelerationFade, BaseHypothesis, BookSlopeCollapse, CancelStormBeforeMove, CutoffPanicExits, DailyLossLimitDefense (+173 more)
+Cohesion: 0.01
+Nodes (224): BaseHypothesis, AbsorptionFade, AggressorDecelerationFade, BaseHypothesis, BookSlopeCollapse, CancelStormBeforeMove, CutoffPanicExits, DailyLossLimitDefense (+216 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.02
-Nodes (160): EventContextEngine, build_l3_event_tensor(), _capture_row(), _default_snapshot_offsets_from_yaml(), L3SnapshotRow, Phase 4 — multi-symbol Level-3 MBO event snapshot tensor at anchor offsets., Build MBO-derived snapshot tensor rows for all requested symbols., Write parquet tensor + meta json under runtime/event_snapshots/. (+152 more)
+Cohesion: 0.01
+Nodes (226): MBOEvent, ndarray, str, Temporal leakage audit module for MBO feature extraction., generate_test_events(), PerturbationResult, Runtime temporal leakage auditor for MBOFeatureExtractor — verifies F_t filtrati, Generate a deterministic sequence of synthetic MBO events that exercises     al (+218 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.02
-Nodes (151): BatchingKey, BoundedLRUCache, bool, int, PathLike, RunProfiler, UnitScreeningResult, float (+143 more)
+Nodes (244): _build_filter_result(), _build_promoted_candidate_with_robustness(), _passing_cscv_matrix(), _passing_expectancies(), _passing_wfc_cfg(), _passing_wfc_rows(), Tests for the VBT-4 robustness integration bridge.  Verifies that ``backtest_p, WFC CONDITIONAL should count as fail, not pass. (+236 more)
 
 ### Community 4 - "Community 4"
 Cohesion: 0.02
-Nodes (207): HftBacktestSimulatedExchangeAdapter, HftBacktest-backed simulated exchange adapter., Wraps HftBacktest order API; synthesizes lifecycle events from position/state de, True while any tracked order may still produce events.          The replay loo, _TrackedOrder, LiveBrokerAdapter, Live broker adapter stub (explicit LIVE mode only; not wired to gateway hot path, PaperBrokerAdapter (+199 more)
+Nodes (188): _TrackedOrder, CancelIntent, ExecutionAdapter, new_intent_id(), OrderEvent, OrderEventType, OrderIntent, Order intent, lifecycle events, and adapter protocols. (+180 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.06
-Nodes (61): CampaignMetrics, build_combined_scenarios(), CombinedReplaySpec, Stage 4 finalist-only combined replay., Build Stage-4 combined scenarios from finalist individual scenarios., Run shared-account combined replay for finalists.      Combined replay intenti, run_combined_replay(), CampaignMetrics (+53 more)
+Cohesion: 0.05
+Nodes (66): CampaignMetrics, build_combined_scenarios(), CombinedReplaySpec, Stage 4 finalist-only combined replay., Build Stage-4 combined scenarios from finalist individual scenarios., Run shared-account combined replay for finalists.      Combined replay intenti, run_combined_replay(), CampaignMetrics (+58 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.05
-Nodes (70): _build_filter_result(), _build_promoted_candidate_with_robustness(), _failing_pbo_matrix(), _full_passing_input(), _passing_cscv_matrix(), _passing_expectancies(), _passing_wfc_cfg(), _passing_wfc_rows() (+62 more)
+Cohesion: 0.08
+Nodes (37): _failing_pbo_matrix(), _full_passing_input(), Random CSCV matrix → PBO >= 0.5 (fail)., Complete robustness input where all gates pass.      Includes stress decomposi, WFC ERROR should count as fail., Input with all empty/None values → all not_run., Malformed per_event_expectancies → DSR fail-closed with reason., Malformed cscv_matrix → PBO fail-closed. (+29 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.02
-Nodes (166): AblationResult, Phase 8 — cross-asset MBO ablation harness (tests groups; does not assume alpha), run_ablation_for_event(), _verdict(), write_ablation_report(), BaseException, Any, ArgumentParser (+158 more)
+Cohesion: 0.03
+Nodes (158): BaseException, Any, ArgumentParser, bool, datetime, Exception, float, int (+150 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.06
-Nodes (50): AccountState, ClockDriftMonitor, DailyLossLimitFlatten, DisconnectMonitor, get_orchestrator(), HaltAction, PositionMismatchGuard, pre_trade_check() (+42 more)
+Cohesion: 0.05
+Nodes (71): ClockDriftMonitor, DailyLossLimitFlatten, DisconnectMonitor, get_orchestrator(), HaltAction, PositionMismatchGuard, pre_trade_check(), ProductionSafetyOrchestrator (+63 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.04
-Nodes (90): MBOEvent, ndarray, str, Temporal leakage audit module for MBO feature extraction., generate_test_events(), PerturbationResult, Runtime temporal leakage auditor for MBOFeatureExtractor — verifies F_t filtrati, Generate a deterministic sequence of synthetic MBO events that exercises     al (+82 more)
+Cohesion: 0.07
+Nodes (39): _event_side(), _event_type(), events_list(), iter_mbo_events(), load_npz_events(), NoOHLCVDataError, Load HftBacktest NPZ MBO events into pipeline MBOEvent objects., Fallback when research_pipeline is not on sys.path. (+31 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.02
-Nodes (111): minimal_npz(), minimal_npz_tmp(), Shared fixtures for backtester validation tiers., FillRecord, Any, BacktestResult, BaseHypothesis, float (+103 more)
+Nodes (124): minimal_npz(), minimal_npz_tmp(), Shared fixtures for backtester validation tiers., FillRecord, Any, BacktestResult, BaseHypothesis, float (+116 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.02
-Nodes (148): HypothesisAdapter, Adapter: BaseHypothesis -> WorkbenchModel., OptionsLaneAdapter, Adapter: options_lane fixture backtest for PDF_MODEL_5 / DEALER_HEDGING (equitie, Runs options_lane.pipeline fixture-backtest; artifacts under research_cards/pari, Adapter: BaseStructuralModel -> WorkbenchModel., StructuralModelAdapter, Any (+140 more)
+Cohesion: 0.03
+Nodes (122): ABC, HypothesisAdapter, Adapter: BaseHypothesis -> WorkbenchModel., OptionsLaneAdapter, Adapter: options_lane fixture backtest for PDF_MODEL_5 / DEALER_HEDGING (equitie, Runs options_lane.pipeline fixture-backtest; artifacts under research_cards/pari, Adapter: BaseStructuralModel -> WorkbenchModel., StructuralModelAdapter (+114 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.20
 Nodes (17): Decimal, derive_snapshots_from_events(), DerivedSnapshot, _mbo_event_from_normalized(), _parse_offset_entry(), Post-replay feature snapshot derivation from normalized MBO events., Replay MBO events and capture snapshots at configured offsets., snapshots_to_dicts() (+9 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.04
-Nodes (97): PaidScreenUnit, Path, str, WorkerContext, _assert_batch_key_compatible(), batching_key_for_unit(), build_batching_key(), _build_candidate_model() (+89 more)
+Cohesion: 0.03
+Nodes (104): PaidScreenUnit, Path, RunProfiler, str, WorkerContext, _assert_batch_key_compatible(), batching_key_for_unit(), build_batching_key() (+96 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.03
-Nodes (203): TestPartialInput, TestProducerErrorHandling, Any, bool, CandidateModel, FilterResult, float, int (+195 more)
+Cohesion: 0.04
+Nodes (153): Tests for closed three-category research_clock enum (Gate 8)., TestCanonicalValues, TestFailClosed, object, str, Any, bool, CandidateModel (+145 more)
 
 ### Community 15 - "Community 15"
 Cohesion: 0.01
 Nodes (74): AccountUpdateInfo, AggregatorInfo, AgreementListInfo, AskInfo, AssignedUserListInfo, AuxRefDataInfo, BarInfo, BarReplayInfo (+66 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.05
-Nodes (81): LaneRegistry, Lane, Asset class / execution lane., LaneRegistration, LaneRegistry, LaneRegistry: single source of truth for lane -> adapter/validator/test-path map, A lane's registered adapter, config loader, and validator., Singleton registry. Use LaneRegistry.instance() to access. (+73 more)
+Cohesion: 0.03
+Nodes (134): CMEBacktester, CMEConfig, load_cme_config(), CME futures lane adapter.  Wraps the existing CME backtester (ReplaySession, s, CME lane LaneConfig. Loaded from events.csv., Load CME lane config. Optionally inspect events.csv to populate windows., Backtester Protocol implementation for CME.      run() delegates to the existi, CME options lane adapter (Phases 0-1: research-only).  Wraps the CME options l (+126 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.03
-Nodes (42): Queue, _copy_valid_unit_artifact(), _declaration_run_id(), _die_budget_then_echo_worker(), _echo_fast_fail_worker(), _FakeProcess, _immediate_worker_exit(), _invoke_main() (+34 more)
+Cohesion: 0.04
+Nodes (34): Queue, _copy_valid_unit_artifact(), _declaration_run_id(), _die_budget_then_echo_worker(), _echo_fast_fail_worker(), _FakeProcess, _immediate_worker_exit(), _invoke_main() (+26 more)
 
 ### Community 18 - "Community 18"
 Cohesion: 0.05
@@ -16995,31 +17032,31 @@ Nodes (80): datetime, float, int, str, business_time_years(), business_vol_from_
 
 ### Community 20 - "Community 20"
 Cohesion: 0.03
-Nodes (110): ABC, Any, str, Any, float, bool, int, MBOEvent (+102 more)
+Nodes (127): Any, str, Any, float, Any, bool, CompositionTrace, DefensiveStub (+119 more)
 
 ### Community 21 - "Community 21"
-Cohesion: 0.04
-Nodes (96): str, bool, datetime, float, int, DataFrame, str, _build_parser() (+88 more)
+Cohesion: 0.07
+Nodes (68): DataFrame, str, _build_parser(), _download_and_convert(), _load_events(), main(), _manifest_record(), _npz_ok() (+60 more)
 
 ### Community 22 - "Community 22"
 Cohesion: 0.06
-Nodes (64): ChainQuote, ChainSim, _default_style_fn(), Fill, FillStatus, _instrument_key(), Order, _pos_key() (+56 more)
+Nodes (62): ChainQuote, ChainSim, _default_style_fn(), Fill, FillStatus, _instrument_key(), Order, _pos_key() (+54 more)
 
 ### Community 23 - "Community 23"
 Cohesion: 0.07
-Nodes (78): Any, bytes, float, Path, str, backtester_version(), str, int (+70 more)
+Nodes (77): Any, bytes, float, Path, str, backtester_version(), str, int (+69 more)
 
 ### Community 24 - "Community 24"
-Cohesion: 0.04
-Nodes (127): int, str, Any, str, Any, bool, float, int (+119 more)
+Cohesion: 0.09
+Nodes (67): Any, Path, str, Any, bool, Exception, int, ModelComposition (+59 more)
 
 ### Community 25 - "Community 25"
-Cohesion: 0.04
-Nodes (90): bool, float, Enum, ArtifactBundleResult, Result of validating an artifact bundle., data_class_rank(), DataClass, DataResolutionTag (+82 more)
+Cohesion: 0.07
+Nodes (75): Any, bool, float, str, Enum, GateCategory, data_class_rank(), DataClass (+67 more)
 
 ### Community 26 - "Community 26"
 Cohesion: 0.07
-Nodes (104): FileHandler, Handler, LogRecord, _apply_gate_profile_thresholds(), _apply_pipeline_runtime_defaults(), _apply_registry_gate_profile(), _apply_validation_summary_to_results(), _bool_default() (+96 more)
+Nodes (104): Handler, LogRecord, parse_event_ids(), Parse repeated and comma-separated event ids, preserving order., _apply_gate_profile_thresholds(), _apply_pipeline_runtime_defaults(), _apply_registry_gate_profile(), _apply_validation_summary_to_results() (+96 more)
 
 ### Community 27 - "Community 27"
 Cohesion: 0.05
@@ -17027,23 +17064,23 @@ Nodes (85): Permanent placement-speed and acknowledgment-latency baseline tools.
 
 ### Community 28 - "Community 28"
 Cohesion: 0.03
-Nodes (99): MonkeyPatch, Path, Tests for VectorBT paid screen gate and unit generation., Empty parquet authority must fail closed instead of silently zeroing units., Event filtering must not convert empty parquet authority into a zero-unit run., Missing parquet authority must report the missing file, not empty records., Explicit missing JSON manifest authority must not fall back to stray NPZ files., CLI should print ERROR and exit 1 instead of a raw traceback. (+91 more)
+Nodes (120): bytes, int, MonkeyPatch, object, Path, str, Tests for VectorBT paid screen gate and unit generation., Empty parquet authority must fail closed instead of silently zeroing units. (+112 more)
 
 ### Community 29 - "Community 29"
-Cohesion: 0.12
-Nodes (66): Any, bool, CompositionTrace, CppLatencyProfile, float, int, LatencyViability, ModelComposition (+58 more)
+Cohesion: 0.06
+Nodes (104): Any, bool, CompositionTrace, CppLatencyProfile, float, int, LatencyViability, ModelComposition (+96 more)
 
 ### Community 30 - "Community 30"
 Cohesion: 0.05
-Nodes (70): int, str, build_inventory(), _classify_mbo_status(), _events_symbols(), _load_hot_universe(), _npz_index(), _priority_rank() (+62 more)
+Nodes (68): int, str, build_inventory(), _classify_mbo_status(), _events_symbols(), _load_hot_universe(), _npz_index(), _priority_rank() (+60 more)
 
 ### Community 31 - "Community 31"
 Cohesion: 0.08
 Nodes (100): Any, int, Path, SlowTierConfig, str, Assumption, BaseModel, DataRequirement (+92 more)
 
 ### Community 32 - "Community 32"
-Cohesion: 0.03
-Nodes (68): bool, float, int, str, float, DataFrame, float, int (+60 more)
+Cohesion: 0.06
+Nodes (38): float, DataFrame, float, int, MultiLossObjective, Calculates the combined loss., Multi-target loss function as specified in the blueprint.     Combines return,, _eval_model() (+30 more)
 
 ### Community 33 - "Community 33"
 Cohesion: 0.07
@@ -17051,11 +17088,11 @@ Nodes (101): Zone aggregators — each builds one dashboard zone from existing a
 
 ### Community 34 - "Community 34"
 Cohesion: 0.06
-Nodes (116): test_vendor_lock_matches_upstream_repo_and_version(), Any, bool, float, int, Path, str, _append_metric_discrepancy() (+108 more)
+Nodes (120): test_replay_summary_accelerated_mode_fails_closed(), test_vendor_lock_matches_upstream_repo_and_version(), Any, bool, float, int, Path, str (+112 more)
 
 ### Community 35 - "Community 35"
-Cohesion: 0.06
-Nodes (96): FilterFn, HftFn, Any, bool, CandidateModel, int, ParsedHypothesis, Path (+88 more)
+Cohesion: 0.07
+Nodes (93): FilterFn, HftFn, Any, CandidateModel, int, ParsedHypothesis, Path, str (+85 more)
 
 ### Community 36 - "Community 36"
 Cohesion: 0.08
@@ -17063,27 +17100,27 @@ Nodes (101): _accepted_non_blocking_skip_reasons(), _active_run_artifact_mismatc
 
 ### Community 37 - "Community 37"
 Cohesion: 0.04
-Nodes (62): Any, bool, float, int, PaidScreenUnit, Path, PathLike, str (+54 more)
+Nodes (55): Any, bool, int, PaidScreenUnit, Path, PathLike, str, _aggregate_provenance_hash() (+47 more)
 
 ### Community 38 - "Community 38"
 Cohesion: 0.05
-Nodes (73): CMEBacktester, CMEConfig, load_cme_config(), CME futures lane adapter.  Wraps the existing CME backtester (ReplaySession, s, CME lane LaneConfig. Loaded from events.csv., Load CME lane config. Optionally inspect events.csv to populate windows., Backtester Protocol implementation for CME.      run() delegates to the existi, CMEOptionsBacktester (+65 more)
+Nodes (34): HftBacktestSimulatedExchangeAdapter, HftBacktest-backed simulated exchange adapter., Wraps HftBacktest order API; synthesizes lifecycle events from position/state de, True while any tracked order may still produce events.          The replay loo, LiveBrokerAdapter, Live broker adapter stub (explicit LIVE mode only; not wired to gateway hot path, PaperBrokerAdapter, Paper broker adapter (R|Trader trial lane protocol; no live routing). (+26 more)
 
 ### Community 39 - "Community 39"
 Cohesion: 0.05
-Nodes (87): Path, str, Any, bool, ModelComposition, Path, str, Any (+79 more)
+Nodes (89): Path, str, Any, bool, ModelComposition, Path, str, Any (+81 more)
 
 ### Community 40 - "Community 40"
-Cohesion: 0.05
-Nodes (28): TestVectorbtAdapterIntegration, compute_screening_artifact_hash(), filter_candidates(), _json_primitive_screening_payload(), persist_screening_artifact(), Validate the terminal VectorBT screening artifact and fail closed., Run VectorBT filter on candidates. Returns promoted+rejected lists.      If Ve, Hash terminal screening artifact content excluding identity timestamps/hash. (+20 more)
+Cohesion: 0.07
+Nodes (18): TestVectorbtAdapterIntegration, compute_screening_artifact_hash(), filter_candidates(), Validate the terminal VectorBT screening artifact and fail closed., Run VectorBT filter on candidates. Returns promoted+rejected lists.      If Ve, Hash terminal screening artifact content excluding identity timestamps/hash., Hash terminal screening artifact content excluding identity timestamps/hash., validate_screening_artifact() (+10 more)
 
 ### Community 41 - "Community 41"
-Cohesion: 0.09
-Nodes (44): build_hashes(), Content hashing for deterministic MBO lane artifacts., sha256_file(), sha256_json_payload(), import_release_window(), Import pipeline: classify → parse → validate → store release_event_path., Full MBO-only import for one release × symbol., Persist the normalized events into the MBO release slot and return the     rele (+36 more)
+Cohesion: 0.10
+Nodes (43): build_hashes(), Content hashing for deterministic MBO lane artifacts., sha256_file(), sha256_json_payload(), import_release_window(), Full MBO-only import for one release × symbol., Persist the normalized events into the MBO release slot and return the     rele, write_release_artifact() (+35 more)
 
 ### Community 42 - "Community 42"
-Cohesion: 0.06
-Nodes (79): Any, bool, date, EventSpec, int, Path, str, _action_for_status() (+71 more)
+Cohesion: 0.15
+Nodes (42): Any, bool, date, EventSpec, int, Path, str, _action_for_status() (+34 more)
 
 ### Community 43 - "Community 43"
 Cohesion: 0.06
@@ -17095,15 +17132,15 @@ Nodes (53): Any, date, int, Path, SlowTierConfig, str, check_capture_problems(),
 
 ### Community 45 - "Community 45"
 Cohesion: 0.04
-Nodes (52): _build_sl_tp_arrays(), _chunk_parameter_trials(), _param_chunk_hash(), Split the flat parameter trial list into bounded chunks.      Each yielded chu, Deterministic SHA-256 hash of a parameter chunk for cache keying.      The has, Build per-column ``sl_stop`` / ``tp_stop`` arrays from the chunk.      VectorB, Return per-column ``sl_stop`` / ``tp_stop`` as 1-D ``float64`` arrays.      Ma, _sl_tp_for_portfolio() (+44 more)
+Nodes (48): _build_sl_tp_arrays(), _param_chunk_hash(), Deterministic SHA-256 hash of a parameter chunk for cache keying.      The has, Build per-column ``sl_stop`` / ``tp_stop`` arrays from the chunk.      VectorB, Return per-column ``sl_stop`` / ``tp_stop`` as 1-D ``float64`` arrays.      Ma, _sl_tp_for_portfolio(), _complete_vbt_stats(), _FakeColumnPortfolio (+40 more)
 
 ### Community 46 - "Community 46"
 Cohesion: 0.02
-Nodes (144): test_enrich_latency_model_probe_evidence_from_summary(), _event_meta(), _events(), Tests for defensive-layer toggles on PDF hybrid strategy., test_as_baseline_zeros_drift(), test_defensive_config_mode_ids(), test_defensive_conflicts_with_use_ofi_kwarg(), test_quote_refresh_skips_redundant_submits() (+136 more)
+Nodes (123): Resolve replay NPZ paths for Rithmic trial vs Databento event windows., Return Databento MBO NPZ path for a macro event_id from events.csv., Return quarantined Rithmic trial replay NPZ for a capture session date., resolve_event_npz(), resolve_trial_npz(), test_enrich_latency_model_probe_evidence_from_summary(), _event_meta(), _events() (+115 more)
 
 ### Community 47 - "Community 47"
-Cohesion: 0.03
-Nodes (61): float, int, str, _make_records(), Tests for slippage_stress_for_cell and latency_stress_for_cell (R6).  Covers (, Varying per-event expectancies → stress values are means., Per-event tick_value may differ (different products)., stress_pass (= slip_x2_pass) flips correctly at the boundary. (+53 more)
+Cohesion: 0.04
+Nodes (53): _make_records(), Tests for slippage_stress_for_cell and latency_stress_for_cell (R6).  Covers (, Varying per-event expectancies → stress values are means., Per-event tick_value may differ (different products)., stress_pass (= slip_x2_pass) flips correctly at the boundary., gross - fee - tv > 0 → slip_x2_expectancy > 0 → stress_pass True., slip_x2_expectancy < 0 → stress_pass False., slip_x2_expectancy == 0 → NOT > 0 → stress_pass False. (+45 more)
 
 ### Community 48 - "Community 48"
 Cohesion: 0.12
@@ -17111,19 +17148,19 @@ Nodes (65): as_path(), build_context(), collect_key_values(), default_target_sta
 
 ### Community 49 - "Community 49"
 Cohesion: 0.08
-Nodes (47): GateCategory, Any, bool, float, GateResult, Path, str, HFT3 autonomous research runner (Phase 2). (+39 more)
+Nodes (45): Any, bool, GateResult, Path, str, HFT3 autonomous research runner (Phase 2)., _artifact_completeness_gate(), _atomic_write_text() (+37 more)
 
 ### Community 50 - "Community 50"
-Cohesion: 0.04
-Nodes (60): ExpiryKind, bool, date, datetime, int, str, _all_weekday_dates(), exercise_style() (+52 more)
+Cohesion: 0.05
+Nodes (59): ExpiryKind, bool, date, datetime, int, str, _all_weekday_dates(), exercise_style() (+51 more)
 
 ### Community 51 - "Community 51"
 Cohesion: 0.07
 Nodes (89): _allowed_backfill_landing_zone(), _as_dict(), _bounded_file_summary(), build_data_scope_manifest(), build_q001_cme_data_inventory(), build_report(), _coerce_int(), _copy_destination() (+81 more)
 
 ### Community 52 - "Community 52"
-Cohesion: 0.09
-Nodes (87): Path, TradeManagerOrderIntent, TradeManagerOrderTransition, TradeManagerRiskDecision, Any, bool, float, int (+79 more)
+Cohesion: 0.05
+Nodes (147): AccountState, Any, Path, str, TradeManagerOrderIntent, TradeManagerOrderTransition, TradeManagerRiskDecision, Any (+139 more)
 
 ### Community 53 - "Community 53"
 Cohesion: 0.25
@@ -17131,19 +17168,19 @@ Nodes (25): _constant_latency_model(), _event_contract(), _event_row(), hbt4_con
 
 ### Community 54 - "Community 54"
 Cohesion: 0.10
-Nodes (84): Any, bool, float, int, Path, str, _active_all_lanes_run_dir(), _active_models_from_payload() (+76 more)
+Nodes (85): Any, bool, float, int, Path, str, _active_all_lanes_run_dir(), _active_models_from_payload() (+77 more)
 
 ### Community 55 - "Community 55"
-Cohesion: 0.02
-Nodes (211): bool, int, Path, str, _accepted_owner_decision(), _accepted_q001_values(), _allow_screening_validation(), _full_universe_cli_args() (+203 more)
+Cohesion: 0.03
+Nodes (17): _lifecycle_fixture(), Cockpit backend tests — aggregator shape, graceful-missing, API auth.  Run fro, BLUEPRINT §8: explicit holdout research_split must not yield VectorBT Screen OK., Write registry + optional transitions; align submit_gate lifecycle dir., system zone lanes.registered must include 'cme_options'; its capability profile, test_lanes_registered_contains_cme_options(), test_lifecycle_degraded_red_blocked(), test_lifecycle_degraded_routed_has_route_fields() (+9 more)
 
 ### Community 56 - "Community 56"
 Cohesion: 0.05
 Nodes (68): int, Namespace, str, Path, Any, bool, Path, SlowTierConfig (+60 more)
 
 ### Community 57 - "Community 57"
-Cohesion: 0.06
-Nodes (83): _failing_dsr_expectancies(), Per-event expectancies with very low SNR → DSR fails., FableChecklist, int, Any, bool, float, Path (+75 more)
+Cohesion: 0.04
+Nodes (121): _failing_dsr_expectancies(), Per-event expectancies with very low SNR → DSR fails., FableChecklist, Any, bool, int, str, Any (+113 more)
 
 ### Community 58 - "Community 58"
 Cohesion: 0.02
@@ -17154,36 +17191,36 @@ Cohesion: 0.08
 Nodes (63): Direction, _event_at_or_after(), _event_by_time(), _event_log_row(), _markout_ticks(), _micro_reprice_time(), _mid_price(), Event-time Ghost Route backtest wrapper. (+55 more)
 
 ### Community 60 - "Community 60"
-Cohesion: 0.09
-Nodes (67): _aggregate_results(), _append_checkpoint_result(), _apply_corrections(), apply_shard(), _atomic_write_text(), build_work_units(), _checkpoint_context(), _checkpoint_context_path() (+59 more)
+Cohesion: 0.08
+Nodes (75): float, str, bool, _aggregate_results(), _append_checkpoint_result(), _apply_corrections(), apply_shard(), _atomic_write_text() (+67 more)
 
 ### Community 61 - "Community 61"
-Cohesion: 0.04
-Nodes (36): Tests for holm_bh_correction and null_strategy_battery (R6 robustness layer)., Holm adjusted p-values are analytically derivable; verify against formula., BH (FDR) is more permissive than Holm (FWER) on the same family., alpha=0.0001 is below the smallest corrected p -> no rejections., Pure functions: repeated calls produce identical results., Fail-closed on empty / invalid input., Required keys present with correct types., All-positive expectancies -> observed_mean far from the null mass -> pass. (+28 more)
+Cohesion: 0.07
+Nodes (16): Holm adjusted p-values are analytically derivable; verify against formula., BH (FDR) is more permissive than Holm (FWER) on the same family., alpha=0.0001 is below the smallest corrected p -> no rejections., Pure functions: repeated calls produce identical results., Fail-closed on empty / invalid input., Required keys present with correct types., BH adjusted p-values are analytically derivable; verify against formula., Output positions must align with the original (unsorted) input. (+8 more)
 
 ### Community 62 - "Community 62"
-Cohesion: 0.05
-Nodes (90): ArgumentParser, int, Namespace, str, bool, EventSpec, Exception, float (+82 more)
+Cohesion: 0.10
+Nodes (36): ArgumentParser, int, Namespace, str, bool, EventSpec, Exception, float (+28 more)
 
 ### Community 63 - "Community 63"
 Cohesion: 0.05
-Nodes (56): ArbFill, MultiLegParityBacktester, ParityBacktestResult, _PendingArb, Multi-leg parity arb backtest with latency deferral., write_research_card(), align_quotes(), Event-time quote alignment for parity groups (filtration-safe). (+48 more)
+Nodes (63): ArbFill, MultiLegParityBacktester, ParityBacktestResult, _PendingArb, Multi-leg parity arb backtest with latency deferral., write_research_card(), _fair_quotes(), _futures_group() (+55 more)
 
 ### Community 64 - "Community 64"
-Cohesion: 0.13
-Nodes (71): Any, float, Any, bool, float, Path, str, _advance_hbt() (+63 more)
+Cohesion: 0.11
+Nodes (69): Any, float, ndarray, bool, int, str, _advance_hbt(), _apply_exchange_and_queue() (+61 more)
 
 ### Community 65 - "Community 65"
-Cohesion: 0.07
-Nodes (43): CConnectionConfig, CMarketDataEvent, COrderEvent, MarketDataEvent, OrderEvent, _now_ns(), Direct R|API Plus connector for the Rithmic test environment.      Loads confi, RithmicApiConnector (+35 more)
+Cohesion: 0.10
+Nodes (35): CConnectionConfig, CMarketDataEvent, COrderEvent, Direct R|API Plus connector for the Rithmic test environment.      Loads confi, RithmicApiConnector, Structure, _FakeBridge, _has_bridge() (+27 more)
 
 ### Community 66 - "Community 66"
-Cohesion: 0.07
-Nodes (34): _compute_parameter_stability(), _mean_expectancy_at_threshold(), Re-evaluate mean cell expectancy for (hyp_id, event_type) at a perturbed thresho, R7 — Compute parameter_stability_score for each surviving cell.      For each, _feature_index_hash_value(), _make_feature_store_npz(), _make_survivor(), _make_unit_result() (+26 more)
+Cohesion: 0.08
+Nodes (29): _compute_parameter_stability(), _mean_expectancy_at_threshold(), Re-evaluate mean cell expectancy for (hyp_id, event_type) at a perturbed thresho, R7 — Compute parameter_stability_score for each surviving cell.      For each, _feature_index_hash_value(), _make_feature_store_npz(), _make_survivor(), _make_unit_result() (+21 more)
 
 ### Community 67 - "Community 67"
-Cohesion: 0.06
-Nodes (65): Any, bool, datetime, int, Path, str, Any, bool (+57 more)
+Cohesion: 0.07
+Nodes (59): Any, bool, datetime, int, Path, str, Any, bool (+51 more)
 
 ### Community 68 - "Community 68"
 Cohesion: 0.06
@@ -17202,12 +17239,12 @@ Cohesion: 0.08
 Nodes (42): Any, bool, Path, SlowTierConfig, str, _append_review_queue(), _check_corroboration(), _eval_one_date() (+34 more)
 
 ### Community 72 - "Community 72"
-Cohesion: 0.10
-Nodes (58): Any, bool, CandidateModel, float, int, ParsedHypothesis, str, _bayesian_prior_indexes() (+50 more)
+Cohesion: 0.07
+Nodes (68): bool, CandidateModel, int, ParsedHypothesis, str, Any, bool, CandidateModel (+60 more)
 
 ### Community 73 - "Community 73"
-Cohesion: 0.07
-Nodes (54): Resolve a Lane from a model_id prefix.          Recognized prefixes:, float, Any, Any, Any, bool, float, Path (+46 more)
+Cohesion: 0.08
+Nodes (52): float, Any, Any, bool, float, Path, str, int (+44 more)
 
 ### Community 74 - "Community 74"
 Cohesion: 0.09
@@ -17218,8 +17255,8 @@ Cohesion: 0.08
 Nodes (67): Any, bool, int, Path, str, Any, bool, Path (+59 more)
 
 ### Community 76 - "Community 76"
-Cohesion: 0.06
-Nodes (113): Any, bool, float, int, Path, str, _allowed_entrypoint(), _allowed_entrypoint_position() (+105 more)
+Cohesion: 0.16
+Nodes (46): Any, bool, int, Path, str, _allowed_entrypoint(), _allowed_entrypoint_position(), _blocked_deep_rl_artifact() (+38 more)
 
 ### Community 77 - "Community 77"
 Cohesion: 0.13
@@ -17227,7 +17264,7 @@ Nodes (44): Any, bool, int, str, Any, bool, bytes, int (+36 more)
 
 ### Community 78 - "Community 78"
 Cohesion: 0.03
-Nodes (40): bool, CandidateModel, int, ParsedHypothesis, str, generate_candidates(), Generate candidate models from a parsed hypothesis., Yield param variants for primary model and keyword-adjacent slugs.      When e (+32 more)
+Nodes (72): Any, bool, float, ParsedHypothesis, Path, str, _add_unique(), _canonicalize_instrument() (+64 more)
 
 ### Community 79 - "Community 79"
 Cohesion: 0.06
@@ -17246,24 +17283,24 @@ Cohesion: 0.06
 Nodes (41): Any, bool, int, Path, SlowTierConfig, str, _format_headlines(), generate_brief() (+33 more)
 
 ### Community 83 - "Community 83"
-Cohesion: 0.08
-Nodes (55): Any, Any, bool, float, Path, str, _cme_lane_scorecard(), _options_lane_scorecard() (+47 more)
+Cohesion: 0.10
+Nodes (37): bool, float, _cme_lane_scorecard(), _options_lane_scorecard(), bool, MonkeyPatch, Path, str (+29 more)
 
 ### Community 84 - "Community 84"
-Cohesion: 0.04
-Nodes (42): PC3 + PC4 revival tests for the prop-cohort hypothesis family.  Covers:   - m, HYP 20: institutional_flow_score replaced with ES aggressor flow., No cross-asset ES → single-symbol replay → return 0., ES imbalance zero → leader hasn't moved → no lag signal., ES bullish, micro neutral (not yet caught up) → positive signal         (follow, ES bearish → signal should be negative (follow the leader down)., Signal structure: tanh(es_imb*2) * (1 - tanh(|div|)).          The (1 - tanh(|, Verify the fix: hypothesis must not crash or misbehave when         institution (+34 more)
+Cohesion: 0.06
+Nodes (30): bool, float, int, str, Any, bool, float, int (+22 more)
 
 ### Community 85 - "Community 85"
-Cohesion: 0.08
-Nodes (40): LiveCapture, convert_to_npz(), _has_mbo(), Any, bool, float, Path, str (+32 more)
+Cohesion: 0.06
+Nodes (53): LiveCapture, FixtureConnector, Synthetic trial events for CI and offline pipeline tests., convert_to_npz(), _has_mbo(), Any, Path, str (+45 more)
 
 ### Community 86 - "Community 86"
 Cohesion: 0.06
 Nodes (33): _cell(), _flat_grid_2d(), Tests for the VBT-3 surface-stability producer.  Authority: ``docs/project/ROB, Build a grid cell with a performance value and trade count., A flat 2-D grid where every cell has the same performance., The producer output must be recognised as 'defined' by the adapter., TestAdapterValidatorCompatibility, TestCliffDistance (+25 more)
 
 ### Community 87 - "Community 87"
-Cohesion: 0.05
-Nodes (32): Tests for planted_alpha_synthetic_control and adversarial_perturbation (R6)., No-edge expectancies should not produce a false planted_pass via the     baseli, The demeaned baseline of any series has mean exactly 0, so the null         bat, Across varied inputs the demeaned baseline (mean==0) yields a high         base, Same seed -> same result; independent of global RNG state., Different seeds produce (very likely) different planted_p_value., Required keys present with correct types., A strong edge with low perturbation should survive (adversarial_pass=True). (+24 more)
+Cohesion: 0.08
+Nodes (16): Tests for planted_alpha_synthetic_control and adversarial_perturbation (R6)., A strong edge with low perturbation should survive (adversarial_pass=True)., A weak edge with high perturbation should fail (adversarial_pass=False)., More perturbation -> lower (or equal) survival rate., perturbation_fraction=0 leaves the series untouched -> always survives, A negative observed mean -> perturbed_mean stays negative -> 0 survival., Same seed -> same result; independent of global RNG state., Required keys present with correct types. (+8 more)
 
 ### Community 88 - "Community 88"
 Cohesion: 0.06
@@ -17271,7 +17308,7 @@ Nodes (29): NamedTuple, float, box_price(), financing_curve(), FinancingPoint, i
 
 ### Community 89 - "Community 89"
 Cohesion: 0.05
-Nodes (62): CalendarViolation, _fair_quotes(), _futures_group(), T0: filtration / no-lookahead (options parity engine)., test_filtration_quote_at_t_plus_one_not_visible(), float, LegQuote, ParityGroup (+54 more)
+Nodes (55): CalendarViolation, float, LegQuote, ParityGroup, str, bool, float, int (+47 more)
 
 ### Community 90 - "Community 90"
 Cohesion: 0.13
@@ -17294,8 +17331,8 @@ Cohesion: 0.11
 Nodes (59): Any, bool, int, Path, str, _available_data_scope_fields(), _binding_execution_symbol(), build_all_lanes_plan() (+51 more)
 
 ### Community 95 - "Community 95"
-Cohesion: 0.08
-Nodes (43): _capability_failures(), check_candidate_lane_coverage(), check_lane_coverage(), _event_type_matches(), LaneCoverageResult, Lane-aware promotion coverage check.  Extends the CME-only _scorecard_covers i, Check if an event_id matches any coverage event type. Supports wildcard match., Check whether a candidate's symbol/event/latency are covered by the given lane. (+35 more)
+Cohesion: 0.06
+Nodes (55): _capability_failures(), check_candidate_lane_coverage(), check_lane_coverage(), _event_type_matches(), LaneCoverageResult, Lane-aware promotion coverage check.  Extends the CME-only _scorecard_covers i, Check if an event_id matches any coverage event type. Supports wildcard match., Check whether a candidate's symbol/event/latency are covered by the given lane. (+47 more)
 
 ### Community 96 - "Community 96"
 Cohesion: 0.27
@@ -17314,8 +17351,8 @@ Cohesion: 0.14
 Nodes (58): test_number_rejects_non_finite_values(), MeasuredRow, _build_data_vs_pipeline_audit(), _build_data_vs_pipeline_markdown(), build_evidence_ledger(), _build_markdown_report(), build_parser(), _candidate_event_id() (+50 more)
 
 ### Community 100 - "Community 100"
-Cohesion: 0.07
-Nodes (49): Any, str, Any, float, int, str, str, test_canonical_slug_resolution_accepts_descriptive_slugs() (+41 more)
+Cohesion: 0.16
+Nodes (15): Any, str, Any, float, int, str, canonical_params_json(), param_hash_from_dict() (+7 more)
 
 ### Community 101 - "Community 101"
 Cohesion: 0.09
@@ -17326,20 +17363,20 @@ Cohesion: 0.06
 Nodes (56): _make_manifest(), _make_npz(), _ns(), Any, bool, int, Path, str (+48 more)
 
 ### Community 103 - "Community 103"
-Cohesion: 0.07
-Nodes (48): Any, bool, float, int, Path, Series, str, _audit_complete() (+40 more)
+Cohesion: 0.10
+Nodes (35): Any, bool, float, int, Path, Series, str, _audit_complete() (+27 more)
 
 ### Community 104 - "Community 104"
 Cohesion: 0.12
 Nodes (57): Any, bool, Path, str, _adapter_status(), _blocker_prepared_unit_count(), _build_parameter_surface_row(), _build_row() (+49 more)
 
 ### Community 105 - "Community 105"
-Cohesion: 0.09
-Nodes (53): Any, bool, float, int, str, Any, float, str (+45 more)
+Cohesion: 0.13
+Nodes (42): Any, bool, float, int, str, _cfg(), _metric_dict(), _multi_fold_rows() (+34 more)
 
 ### Community 106 - "Community 106"
-Cohesion: 0.08
-Nodes (48): Any, int, LatencyViability, Path, str, Any, bool, float (+40 more)
+Cohesion: 0.11
+Nodes (37): Any, bool, float, int, str, int, T2: robustness pack smoke., test_robustness_pack_runs_on_constant_pnl() (+29 more)
 
 ### Community 107 - "Community 107"
 Cohesion: 0.06
@@ -17350,20 +17387,20 @@ Cohesion: 0.12
 Nodes (37): Any, float, int, ndarray, Path, str, build_fs_v1_signal_computer(), compute_fs_v1_raw_signal_series() (+29 more)
 
 ### Community 109 - "Community 109"
-Cohesion: 0.11
-Nodes (28): main(), render_markdown(), Any, PaperLatencyRecordV1, Path, str, Any, float (+20 more)
+Cohesion: 0.07
+Nodes (47): main(), render_markdown(), load_records(), main(), promote_from_records(), Promote paper_latency daemon NDJSON into trial latency reports., Synthetic event list for latency_profile dimensional stats., records_to_events() (+39 more)
 
 ### Community 110 - "Community 110"
 Cohesion: 0.04
 Nodes (56): legacy_to_slug, HYP_1, HYP_10, HYP_11, HYP_12, HYP_13, HYP_14, HYP_15 (+48 more)
 
 ### Community 111 - "Community 111"
-Cohesion: 0.05
-Nodes (34): _cpp_available(), _CppExtractorSpy, _make_pipeline(), _make_pipeline_with_spy(), bool, float, str, Tests for MarketStatePipeline C++ backend (HFT3_FEATURE_BACKEND=cpp).  These t (+26 more)
+Cohesion: 0.06
+Nodes (55): bool, int, str, _allow_screening_validation(), _hftbacktest_source_lock(), _point_vbt_tracking_paths(), v2-only scoped run must not stay AMBER because historical M6 stages are missing., Validated replay count may match promoted_count while tracking is noncanonical. (+47 more)
 
 ### Community 112 - "Community 112"
-Cohesion: 0.12
-Nodes (17): Any, deflated_sharpe_for_cell(), _get_deflated_sharpe_cdf(), Compute deflated Sharpe statistics for a single (hyp, event_type, band) cell., Return the deflated_sharpe_cdf callable (the inline implementation)., _make_expecs(), Tests for deflated_sharpe_for_cell.  Covers:   - monotone: higher observed Sh, Guard conditions: n < 3, zero variance, n_trials edge cases. (+9 more)
+Cohesion: 0.09
+Nodes (25): Any, float, int, str, _deflated_sharpe_cdf_inline(), deflated_sharpe_for_cell(), _get_deflated_sharpe_cdf(), Robustness metric producers for the CME event-universe Stage B pipeline.  Prod (+17 more)
 
 ### Community 113 - "Community 113"
 Cohesion: 0.04
@@ -17374,8 +17411,8 @@ Cohesion: 0.06
 Nodes (35): Any, bool, float, int, Path, str, build_digest(), _collect_prior_trade_counts() (+27 more)
 
 ### Community 115 - "Community 115"
-Cohesion: 0.11
-Nodes (55): _content_backed_native_evidence(), _cpp_receipt(), _fake_hftbacktest_install(), _native_latency_receipt(), _screening_artifact(), test_hbt0_cli_writes_fail_closed_artifacts(), test_hbt0_code_does_not_name_retired_replay_entrypoints(), test_hbt0_derives_rust_requirement_from_broad_screening_scope() (+47 more)
+Cohesion: 0.12
+Nodes (51): _content_backed_native_evidence(), _cpp_receipt(), _fake_hftbacktest_install(), _native_latency_receipt(), _screening_artifact(), test_hbt0_cli_writes_fail_closed_artifacts(), test_hbt0_code_does_not_name_retired_replay_entrypoints(), test_hbt0_derives_rust_requirement_from_broad_screening_scope() (+43 more)
 
 ### Community 116 - "Community 116"
 Cohesion: 0.07
@@ -17398,28 +17435,28 @@ Cohesion: 0.10
 Nodes (54): Any, bool, datetime, float, int, Namespace, ndarray, Path (+46 more)
 
 ### Community 121 - "Community 121"
-Cohesion: 0.10
-Nodes (31): Path, str, bool, Any, bool, float, int, Path (+23 more)
+Cohesion: 0.11
+Nodes (31): build_connector(), normalize_event(), normalize_file(), _parse_exchange_ts(), Path, str, Any, int (+23 more)
 
 ### Community 122 - "Community 122"
-Cohesion: 0.09
-Nodes (43): Any, int, Path, str, Any, datetime, str, compute_manifest_hash() (+35 more)
+Cohesion: 0.07
+Nodes (52): Any, int, Path, str, Any, datetime, int, str (+44 more)
 
 ### Community 123 - "Community 123"
-Cohesion: 0.13
-Nodes (54): _active_model_ids(), _candidate_npz_paths(), _default_negative_control_policy(), _display_name_for_slug(), _filter_events_to_runnable_npz(), _filter_runnable_npz_units(), _first_symbol(), _format_thesis() (+46 more)
+Cohesion: 0.12
+Nodes (57): _active_model_ids(), _candidate_npz_paths(), _default_negative_control_policy(), _display_name_for_slug(), _filter_events_to_runnable_npz(), _filter_runnable_npz_units(), _first_symbol(), _format_thesis() (+49 more)
 
 ### Community 124 - "Community 124"
 Cohesion: 0.07
-Nodes (52): _crypto_pipeline_coverage(), Workbench evidence snapshot coverage., test_active_run_blocks_legacy_artifact_sources(), test_active_run_manifest_makes_all_lanes_default(), test_all_lanes_snapshot_requires_active_run_and_terminal_states(), test_catalog_feature_fabric_generation_passes_all_lanes(), test_catalog_feature_fabric_rejects_unsafe_cme_instrument(), test_cme_rithmic_snapshot_surfaces_paper_endpoint_readiness() (+44 more)
+Nodes (53): _crypto_pipeline_coverage(), Workbench evidence snapshot coverage., test_active_run_blocks_legacy_artifact_sources(), test_active_run_manifest_makes_all_lanes_default(), test_all_lanes_snapshot_requires_active_run_and_terminal_states(), test_catalog_feature_fabric_generation_passes_all_lanes(), test_catalog_feature_fabric_rejects_unsafe_cme_instrument(), test_cme_rithmic_snapshot_surfaces_paper_endpoint_readiness() (+45 more)
 
 ### Community 125 - "Community 125"
 Cohesion: 0.08
 Nodes (34): datetime, EssviSurface, float, EssviSlice, EssviSurface, Collection of eSSVI slices forming a term structure of total variance.      Sl, Per-expiry eSSVI slice.      Parameters     ----------     t     : time to e, apply_overlay() (+26 more)
 
 ### Community 126 - "Community 126"
-Cohesion: 0.05
-Nodes (83): CatalogWindow, catalog_window_to_events_csv_row(), events_csv_path(), is_manual_events_csv_row(), iter_backtest_scope_windows(), iter_campaign_scope_windows(), iter_events_csv_rows(), iter_macro_releases_scope_windows() (+75 more)
+Cohesion: 0.06
+Nodes (76): CatalogWindow, catalog_window_to_events_csv_row(), events_csv_path(), is_manual_events_csv_row(), iter_backtest_scope_windows(), iter_campaign_scope_windows(), iter_events_csv_rows(), iter_macro_releases_scope_windows() (+68 more)
 
 ### Community 127 - "Community 127"
 Cohesion: 0.11
@@ -17430,20 +17467,20 @@ Cohesion: 0.04
 Nodes (51): EventContextEngineCpp, FeatureExtractorCpp, add_vol_, apply_book_event, ask_add_, ask_cancel_, asks_, best_ask_ (+43 more)
 
 ### Community 129 - "Community 129"
-Cohesion: 0.08
-Nodes (44): Any, bool, CandidateModel, float, int, ParsedHypothesis, str, Any (+36 more)
+Cohesion: 0.09
+Nodes (38): Any, bool, CandidateModel, float, int, ParsedHypothesis, str, Any (+30 more)
 
 ### Community 130 - "Community 130"
 Cohesion: 0.06
 Nodes (28): Tests for parameter_perturbation producer (§10 line 286, gap matrix #3)., Hand-verified mathematical expectations., Determinism guarantees., Cells with strong positive expectancy should survive 10% perturbation., Output schema validation., All required keys present on success., Guard keys present even on failure., Input fractions echoed in output. (+20 more)
 
 ### Community 131 - "Community 131"
-Cohesion: 0.08
-Nodes (32): ConnectorInterface, FixtureConnector, Synthetic trial events for CI and offline pipeline tests., build_connector(), ConnectionConfig, RithmicApiLibraryNotFoundError, _parse_comma_log_line(), _parse_csv_row() (+24 more)
+Cohesion: 0.09
+Nodes (31): _parse_comma_log_line(), _parse_csv_row(), _parse_export_timestamp(), _parse_log_line(), R|Trader export: timestamp,Trade,MES,5000.00,1, Watch R|Trader Pro export/log files (Wine on CHI404 only)., Parse R|Trader export prefix: 2026-05-30 01:00:00.000000, RTraderBridgeConnector (+23 more)
 
 ### Community 132 - "Community 132"
-Cohesion: 0.07
-Nodes (46): mbo_predictive_r2(), ols_r2(), Predictive metrics for cross-asset MBO ablation (exploratory, not alpha)., R² for y ~ const + x columns; requires n > number of regressors., OLS R² of forward returns on MBO snapshot predictors at anchor offset.     One, build_cross_asset_l3_features(), _first_equity_imbalance_ordinal(), _first_row() (+38 more)
+Cohesion: 0.06
+Nodes (55): mbo_predictive_r2(), ols_r2(), Predictive metrics for cross-asset MBO ablation (exploratory, not alpha)., R² for y ~ const + x columns; requires n > number of regressors., OLS R² of forward returns on MBO snapshot predictors at anchor offset.     One, AblationResult, Phase 8 — cross-asset MBO ablation harness (tests groups; does not assume alpha), run_ablation_for_event() (+47 more)
 
 ### Community 133 - "Community 133"
 Cohesion: 0.08
@@ -17478,8 +17515,8 @@ Cohesion: 0.12
 Nodes (44): ofstream, OrderEvent, string, vector, append_intp_sample_jsonl(), append_sample_jsonl(), apply_runtime_tuning(), BurstTracker (+36 more)
 
 ### Community 141 - "Community 141"
-Cohesion: 0.05
-Nodes (35): Any, date, float, Path, PathLike, str, estimate_cost(), plan_baltussen_bars() (+27 more)
+Cohesion: 0.06
+Nodes (27): Any, date, float, Path, PathLike, str, estimate_cost(), plan_baltussen_bars() (+19 more)
 
 ### Community 142 - "Community 142"
 Cohesion: 0.09
@@ -17514,16 +17551,16 @@ Cohesion: 0.04
 Nodes (45): signal_sample, 1, 10, 11, 12, 13, 14, 15 (+37 more)
 
 ### Community 150 - "Community 150"
-Cohesion: 0.12
-Nodes (14): c_void_p, CDLL, _candidate_so_paths(), _load_library(), locate_library(), ctypes wrapper around ``librithmic_gateway_shared.so``.      Not thread-safe:, _repo_root(), RithmicApiBridge (+6 more)
+Cohesion: 0.07
+Nodes (33): c_void_p, CDLL, ConnectorInterface, _candidate_so_paths(), ConnectionConfig, _load_library(), locate_library(), MarketDataEvent (+25 more)
 
 ### Community 151 - "Community 151"
 Cohesion: 0.13
 Nodes (43): catalog_coverage_detail(), _catalog_path_keys(), check(), _coverage_invalid(), _dbn_sample_valid(), _file_sha256(), _fixing_gap_diagnostics(), _fixing_window_specs() (+35 more)
 
 ### Community 152 - "Community 152"
-Cohesion: 0.15
-Nodes (39): _context(), _FakeAdapter, _manager_with_intent(), _promotion(), AccountState, bool, float, Path (+31 more)
+Cohesion: 0.18
+Nodes (33): _context(), _FakeAdapter, _manager_with_intent(), _promotion(), Path, str, _risk_layer(), _signal() (+25 more)
 
 ### Community 153 - "Community 153"
 Cohesion: 0.04
@@ -17538,24 +17575,24 @@ Cohesion: 0.04
 Nodes (45): $ref, $ref, $ref, $ref, enum, type, $ref, enum (+37 more)
 
 ### Community 156 - "Community 156"
-Cohesion: 0.14
-Nodes (53): _arrays_from_store(), _arrays_from_vix_options_store(), _build_symbol_arrays(), _build_vix_options_symbol_arrays(), _campaign_source_family(), _campaign_status(), _command_line(), _decision_time_boundary() (+45 more)
+Cohesion: 0.17
+Nodes (44): _arrays_from_vix_options_store(), _build_symbol_arrays(), _build_vix_options_symbol_arrays(), _campaign_source_family(), _campaign_status(), _command_line(), _decision_time_boundary(), _eval_fraction() (+36 more)
 
 ### Community 157 - "Community 157"
-Cohesion: 0.13
-Nodes (28): annotate_accelerated_replay(), classify_accelerated_result(), Non-certifying accelerated replay mode., commit_scenario_success(), Atomic per-scenario artifact writes and resumability checks., scenario_artifact_dir(), validate_cached_scenario(), write_failure_artifact() (+20 more)
+Cohesion: 0.12
+Nodes (29): annotate_accelerated_replay(), classify_accelerated_result(), Non-certifying accelerated replay mode., commit_scenario_success(), Atomic per-scenario artifact writes and resumability checks., scenario_artifact_dir(), validate_cached_scenario(), write_failure_artifact() (+21 more)
 
 ### Community 158 - "Community 158"
-Cohesion: 0.10
-Nodes (48): Any, bool, float, ParsedHypothesis, Path, str, _add_unique(), _canonicalize_instrument() (+40 more)
+Cohesion: 0.06
+Nodes (44): _read_universe_stage(), _robustness_with_dsr_cell(), test_universe_aborted_artifact_is_fail(), test_universe_all_empty_or_skip_only_artifact_is_stale(), test_universe_bare_dsr_pass_without_cdf_or_signed_alias_fails_closed(), test_universe_bounded_smoke_with_evaluated_model_is_stale(), test_universe_declared_skip_reason_counts_prevent_runtime_double_count(), test_universe_dsr_cdf_above_probability_range_fails_closed() (+36 more)
 
 ### Community 159 - "Community 159"
 Cohesion: 0.14
 Nodes (40): int, object, Path, build_promotion_record(), defined_sources_for_context(), _gdelt_cache_record_errors(), mark_validated(), propose_relationship() (+32 more)
 
 ### Community 160 - "Community 160"
-Cohesion: 0.11
-Nodes (42): _apply_closed_claim_postprocess(), _base_aar_response(), _clamp_promote_recommendation(), _classify_connector_error(), _connector_gate(), _ensure_aar_response(), _hypothesis_error_response(), _idea_set_error_response() (+34 more)
+Cohesion: 0.12
+Nodes (40): _apply_closed_claim_postprocess(), _base_aar_response(), _clamp_promote_recommendation(), _classify_connector_error(), _connector_gate(), _ensure_aar_response(), _hypothesis_error_response(), _idea_set_error_response() (+32 more)
 
 ### Community 161 - "Community 161"
 Cohesion: 0.05
@@ -17570,8 +17607,8 @@ Cohesion: 0.08
 Nodes (29): bool, DataFrame, float, int, ndarray, str, build_forward_returns(), build_labels_frame() (+21 more)
 
 ### Community 164 - "Community 164"
-Cohesion: 0.20
-Nodes (41): Any, DataFrame, float, int, Path, RunEvidenceSnapshot, str, Chart (+33 more)
+Cohesion: 0.21
+Nodes (40): Any, DataFrame, float, int, Path, RunEvidenceSnapshot, str, Chart (+32 more)
 
 ### Community 165 - "Community 165"
 Cohesion: 0.05
@@ -17738,8 +17775,8 @@ Cohesion: 0.08
 Nodes (25): fee_stress_for_cell(), R6 — Fee/slippage stress test (post-hoc, no re-replay).      Analytically reco, _make_records(), Tests for fee_stress_for_cell (R6).  Covers:   - analytic recompute matches h, Per-event fee_per_rt may differ (different products / tiers)., slip_p5t penalty = tick_value * 0.5 per round trip., stress_pass flips between True and False at the boundary., gross > 2 × fee → fee_x2_expectancy > 0 → stress_pass True. (+17 more)
 
 ### Community 206 - "Community 206"
-Cohesion: 0.15
-Nodes (42): Any, bool, CandidateModel, EvaluationResult, float, GateThresholds, int, Path (+34 more)
+Cohesion: 0.17
+Nodes (39): Any, bool, CandidateModel, EvaluationResult, float, GateThresholds, int, Path (+31 more)
 
 ### Community 207 - "Community 207"
 Cohesion: 0.10
@@ -17750,8 +17787,8 @@ Cohesion: 0.14
 Nodes (39): CtDateTime, deque, string, time_t, vector, close_capture_file(), compute_desired(), default_rithmic_config() (+31 more)
 
 ### Community 209 - "Community 209"
-Cohesion: 0.18
-Nodes (25): Any, int, Path, str, Any, Tests for analyst chat helper., test_chat_reply_uses_openai_compatible_client(), test_workbench_console_reply_reports_llm_error() (+17 more)
+Cohesion: 0.11
+Nodes (36): Any, int, Path, str, _api_key(), _chat_completions_url(), _extract_content(), generate() (+28 more)
 
 ### Community 210 - "Community 210"
 Cohesion: 0.11
@@ -17782,8 +17819,8 @@ Cohesion: 0.15
 Nodes (30): _bar_stub_payload(), _bar_stub_payload_raw(), Tests for VectorBT feature-plane contract enforcement., TestFeaturePlaneValidation, TestFeatureUsageManifest, Any, bool, str (+22 more)
 
 ### Community 217 - "Community 217"
-Cohesion: 0.11
-Nodes (34): _pilot_artifact(), Phase 9: feature-family paid-screen gate tests., test_load_feature_family_status_manifest(), test_paid_gate_fails_when_manifest_disallows(), test_paid_gate_missing_recipe_hash(), test_paid_gate_resolves_family_status_fields(), test_paid_gate_resolves_paid_compute_gate_evaluation(), Phase 6: VectorBT ↔ HftBacktest feature_recipe_hash gate tests. (+26 more)
+Cohesion: 0.23
+Nodes (21): _pilot_artifact(), Phase 9: feature-family paid-screen gate tests., test_load_feature_family_status_manifest(), test_paid_gate_fails_when_manifest_disallows(), test_paid_gate_missing_recipe_hash(), test_paid_gate_resolves_family_status_fields(), test_paid_gate_resolves_paid_compute_gate_evaluation(), Any (+13 more)
 
 ### Community 218 - "Community 218"
 Cohesion: 0.09
@@ -17814,8 +17851,8 @@ Cohesion: 0.05
 Nodes (37): actual_verdict, issues, severity, valid, clean, detected_patterns, severity, expected_until (+29 more)
 
 ### Community 225 - "Community 225"
-Cohesion: 0.13
-Nodes (36): Any, bool, str, evaluate_manifest_gate(), _final_status_for_gate(), normalize_gate_receipt(), passes_gates_before_hft(), Strict runtime gate-chain contract for autoresearch generations.  Evaluates ga (+28 more)
+Cohesion: 0.12
+Nodes (41): Any, bool, Path, str, bool, Path, str, build_priority_lane_coverage() (+33 more)
 
 ### Community 226 - "Community 226"
 Cohesion: 0.09
@@ -17850,8 +17887,8 @@ Cohesion: 0.05
 Nodes (37): $ref, $ref, $ref, additionalProperties, $ref, $ref, properties, required (+29 more)
 
 ### Community 234 - "Community 234"
-Cohesion: 0.08
-Nodes (58): bool, DataFrame, float, int, Path, str, _budget_attempt_recorded(), _budget_costs_by_request() (+50 more)
+Cohesion: 0.14
+Nodes (39): str, _budget_attempt_recorded(), _budget_costs_by_request(), _budget_entry_covers_request(), _budget_entry_overlap_conflict(), _budget_request_covered(), _budget_request_overlap_conflict(), _budget_symbol_set() (+31 more)
 
 ### Community 235 - "Community 235"
 Cohesion: 0.12
@@ -17878,8 +17915,8 @@ Cohesion: 0.07
 Nodes (30): RiskLimits, daily_loss_limit, max_cancel_rate_per_sec, max_order_rate_per_sec, max_position, RiskManager, check_cancel, check_order (+22 more)
 
 ### Community 241 - "Community 241"
-Cohesion: 0.07
-Nodes (54): _build_ssl_context(), _coerce_order_id(), _coerce_timestamp_ns(), _connect_rithmic(), _credentials_present(), derive_npz_from_rithmic_release(), fetch_event_window(), _fetch_ticks_async() (+46 more)
+Cohesion: 0.12
+Nodes (34): _build_ssl_context(), _coerce_order_id(), _coerce_timestamp_ns(), _connect_rithmic(), _credentials_present(), derive_npz_from_rithmic_release(), fetch_event_window(), _fetch_ticks_async() (+26 more)
 
 ### Community 242 - "Community 242"
 Cohesion: 0.06
@@ -17922,8 +17959,8 @@ Cohesion: 0.06
 Nodes (34): Acceptance Gate, Architecture Decision, code:text (feature_plane_status=feature_complete_pit_declared|scheduled), code:bash (bash scripts/run_hbt_realism_verify.sh), code:bash (bash scripts/run_vbt_hbt_handoff_verify.sh), code:text (ontology/literature/config), code:text (parameter_space_id), code:text (run_budget_id) (+26 more)
 
 ### Community 252 - "Community 252"
-Cohesion: 0.12
-Nodes (13): int, str, all_slugs(), get_hyp_id_for_slug(), get_slug_for_hyp_id(), legacy_to_slug(), _models(), Unified canonical model slug registry; legacy IDs are provenance aliases. (+5 more)
+Cohesion: 0.11
+Nodes (20): test_canonical_slug_resolution_accepts_descriptive_slugs(), int, str, all_slugs(), get_hyp_id_for_slug(), legacy_to_slug(), _models(), Unified canonical model slug registry; legacy IDs are provenance aliases. (+12 more)
 
 ### Community 253 - "Community 253"
 Cohesion: 0.06
@@ -17975,27 +18012,27 @@ Nodes (33): errors, evaluated_at_utc, feature_family_gate, manifest_path, paid_s
 
 ### Community 265 - "Community 265"
 Cohesion: 0.08
-Nodes (25): _make_client(), Unit tests for DatabentoResearchClient options-on-futures extensions.  Covers:, definition schema + parent stype: cost-check, download, manifest all run., A cost above HARD_LIMIT with definition schema must be blocked., Accumulated spend near OPERATING_CAP blocks new statistics pull., override_hard_limit=True lets an expensive definition pull proceed., Existing mbo/continuous path still works identically., estimate_cost with no schema/stype args uses mbo/continuous defaults. (+17 more)
+Nodes (23): _make_client(), Unit tests for DatabentoResearchClient options-on-futures extensions.  Covers:, definition schema + parent stype: cost-check, download, manifest all run., A cost above HARD_LIMIT with definition schema must be blocked., Accumulated spend near OPERATING_CAP blocks new statistics pull., override_hard_limit=True lets an expensive definition pull proceed., Existing mbo/continuous path still works identically., estimate_cost with no schema/stype args uses mbo/continuous defaults. (+15 more)
 
 ### Community 266 - "Community 266"
 Cohesion: 0.12
 Nodes (32): _has_current_review_surface(), _has_waived_review_surface(), main(), parse_status_block(), bool, int, str, validate_status_block() (+24 more)
 
 ### Community 267 - "Community 267"
-Cohesion: 0.05
-Nodes (95): Any, bool, float, int, str, _clean_string(), _clean_unique_strings(), _coerce_manifest_rows() (+87 more)
+Cohesion: 0.18
+Nodes (33): Any, bool, float, int, str, _clean_string(), _clean_unique_strings(), _coerce_manifest_rows() (+25 more)
 
 ### Community 268 - "Community 268"
-Cohesion: 0.03
-Nodes (75): FixingWindow, _largest_remainder(), make_schedule(), Fixing-VWAP replication engine — WS-3.4.  ZERO-ALPHA hedge utility.  Schedules, Return window duration in seconds (always 30.0)., One time-bucket in the replication schedule.      Parameters     ----------, Time-bucketed schedule for replicating the fixing VWAP.      Carries complianc, Build a ReplicationSchedule for fixing VWAP replication.      v0 volume profil (+67 more)
+Cohesion: 0.08
+Nodes (19): make_schedule(), Build a ReplicationSchedule for fixing VWAP replication.      v0 volume profil, Build a FixingWindow from an expiry date.          Parameters         -------, object, target_qty=0 → empty slices tuple, sum invariant trivially satisfied., Positive target: sum of slice quantities == target_qty., Negative target: quantities are negative, sum == target_qty., abs(qty) distribution for -N mirrors that for +N. (+11 more)
 
 ### Community 269 - "Community 269"
 Cohesion: 0.11
 Nodes (18): measure_file_from_arrays(), _pa_first_price(), _pa_imbalance(), _pa_last_price(), _pa_vwap(), Volume-weighted average price over trades with ts_ns in [ts_lo, ts_hi)., Price of the last trade with ts_ns in [ts_lo, ts_hi); nan when none., Price of the first trade with ts_ns in [ts_lo, ts_hi); nan when none. (+10 more)
 
 ### Community 270 - "Community 270"
-Cohesion: 0.23
-Nodes (39): _config(), _event_contract(), _install_fake_hftbacktest(), test_active_hftbacktest_only_run_records_passive_fill_after_later_elapse(), test_active_hftbacktest_only_run_writes_outputs_without_vectorbt(), test_hbt_loop_uses_holding_period_bars_after_explicit_step_params(), test_hypothesis_limit_order_evaluates_canonical_model_signal(), test_hypothesis_limit_order_requires_event_window_for_entry_scan() (+31 more)
+Cohesion: 0.25
+Nodes (34): _config(), _event_contract(), _install_fake_hftbacktest(), test_active_hftbacktest_only_run_records_passive_fill_after_later_elapse(), test_active_hftbacktest_only_run_writes_outputs_without_vectorbt(), test_entry_scan_diagnostic_uses_hbt_clock_not_global_signal_stats(), test_hbt_loop_uses_holding_period_bars_after_explicit_step_params(), test_hypothesis_limit_order_evaluates_canonical_model_signal() (+26 more)
 
 ### Community 271 - "Community 271"
 Cohesion: 0.23
@@ -18006,8 +18043,8 @@ Cohesion: 0.06
 Nodes (33): infrastructure_meets_lane_1, lane, lane_name, note, partial, authoritative_source, pass_criteria_path, raw_dir (+25 more)
 
 ### Community 273 - "Community 273"
-Cohesion: 0.09
-Nodes (33): Any, str, _context(), _FakeAdapter, _manager_with_intent(), _promotion(), ModelSignal, MonkeyPatch (+25 more)
+Cohesion: 0.10
+Nodes (31): build_events_csv(), _events_fieldnames(), _load_existing(), main(), print_inventory(), CLI: validate and build the unified economic event universe., _registry_path(), validate() (+23 more)
 
 ### Community 274 - "Community 274"
 Cohesion: 0.06
@@ -18038,12 +18075,12 @@ Cohesion: 0.15
 Nodes (30): biz_days_before(), days_in_month(), eligible_contracts(), first_day_of_month_wday(), gold_eligible(), is_leap_year(), month_code(), monthly_energy_eligible() (+22 more)
 
 ### Community 281 - "Community 281"
-Cohesion: 0.07
-Nodes (45): AbstractEventLoop, int, str, WebSocket, int, Path, str, WebSocket (+37 more)
+Cohesion: 0.10
+Nodes (17): AbstractEventLoop, int, str, WebSocket, int, WebSocket, str, Hub (+9 more)
 
 ### Community 282 - "Community 282"
-Cohesion: 0.06
-Nodes (52): Resolve replay NPZ paths for Rithmic trial vs Databento event windows., Return Databento MBO NPZ path for a macro event_id from events.csv., Return quarantined Rithmic trial replay NPZ for a capture session date., resolve_event_npz(), resolve_trial_npz(), FileNotFoundError, Integration: PDF_MODEL_4 hybrid replay on real Databento NPZ (skip if missing)., test_pdf_hybrid_replay_on_real_npz() (+44 more)
+Cohesion: 0.33
+Nodes (18): _after_action_allowed(), _load_ablation_writer(), _load_pdf_hybrid_replay_module(), main(), preflight(), Any, bool, float (+10 more)
 
 ### Community 283 - "Community 283"
 Cohesion: 0.06
@@ -18062,8 +18099,8 @@ Cohesion: 0.21
 Nodes (31): backfill_model_metrics(), _best_candidate(), discover_run_dirs(), _first(), _first_spec(), _folds_from_campaign_periods(), _folds_from_status(), generate_bundle_for_run_dir() (+23 more)
 
 ### Community 287 - "Community 287"
-Cohesion: 0.16
-Nodes (30): Any, float, int, str, int, apply_continuous_session_to_recipe_family(), apply_latency_to_recipe_family(), apply_macro_to_recipe_family() (+22 more)
+Cohesion: 0.17
+Nodes (27): Any, float, int, str, apply_continuous_session_to_recipe_family(), apply_latency_to_recipe_family(), apply_macro_to_recipe_family(), ContinuousSessionValidation (+19 more)
 
 ### Community 288 - "Community 288"
 Cohesion: 0.10
@@ -18078,8 +18115,8 @@ Cohesion: 0.10
 Nodes (30): str, extract_equations(), extract_tables(), _extract_variables(), _find_equation_context(), _find_table_caption(), _md_split_row(), Heuristic equation and table extractors (Phase 3 follow-up).  These are simple (+22 more)
 
 ### Community 291 - "Community 291"
-Cohesion: 0.08
-Nodes (45): Any, str, Phase 10 tests for the double-WF correlator.  Covers: - test_double_wf_agreem, <3 shared params fails., Zero variance in WF1 or WF2 fails., Unknown correlation method fails., The double-WF result can be converted to a Phase 8 GateResult     with correct, The double-WF result can be converted to a Phase 8 GateResult     with BLOCKING (+37 more)
+Cohesion: 0.12
+Nodes (31): Phase 10 tests for the double-WF correlator.  Covers: - test_double_wf_agreem, <3 shared params fails., Zero variance in WF1 or WF2 fails., Unknown correlation method fails., The double-WF result can be converted to a Phase 8 GateResult     with correct, The double-WF result can be converted to a Phase 8 GateResult     with BLOCKING, The walk_forward_correlation.json artifact is written (Phase 12)., Helper to build a matrix row with parameter_hash and oos_metrics. (+23 more)
 
 ### Community 292 - "Community 292"
 Cohesion: 0.06
@@ -18130,8 +18167,8 @@ Cohesion: 0.07
 Nodes (30): condition_variable, ConnectionConfig, app_name, app_version, env_vars, environment, ih_connect_point, log_file_path (+22 more)
 
 ### Community 304 - "Community 304"
-Cohesion: 0.11
-Nodes (29): Artifact bundle validation (Phase 12).  The Phase 12 spec requires every exper, Convert an ArtifactBundleResult to a Phase 8 GateResult.      The gate is BLOC, Validate that all 17 required artifacts are present in `bundle_dir`.      Retu, to_gate_result(), validate_bundle(), _config(), Path, Phase 12 tests for the artifact bundle validator.  Covers: - test_required_ar (+21 more)
+Cohesion: 0.10
+Nodes (32): ArtifactBundleResult, Artifact bundle validation (Phase 12).  The Phase 12 spec requires every exper, Convert an ArtifactBundleResult to a Phase 8 GateResult.      The gate is BLOC, Result of validating an artifact bundle., Validate that all 17 required artifacts are present in `bundle_dir`.      Retu, to_gate_result(), validate_bundle(), _config() (+24 more)
 
 ### Community 305 - "Community 305"
 Cohesion: 0.20
@@ -19606,8 +19643,8 @@ Cohesion: 0.07
 Nodes (30): backtest_injection_authority, n, p50_ms, p99_ms, source, live_placement, account, baseline_artifact (+22 more)
 
 ### Community 673 - "Community 673"
-Cohesion: 0.17
-Nodes (30): _context(), _FakeAdapter, _manager_with_intent(), _promotion(), Path, str, _risk_layer(), _signal() (+22 more)
+Cohesion: 0.15
+Nodes (31): _context(), _FakeAdapter, _manager_with_intent(), _promotion(), Path, str, _risk_layer(), _signal() (+23 more)
 
 ### Community 674 - "Community 674"
 Cohesion: 0.07
@@ -19687,11 +19724,11 @@ Nodes (29): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_avai
 
 ### Community 693 - "Community 693"
 Cohesion: 0.04
-Nodes (66): Tests for vendor/hftbacktest/VENDOR.lock and install helpers., main(), Run all propose-only fetchers., setup_repo_paths(), int, str, float, str (+58 more)
+Nodes (63): Tests for vendor/hftbacktest/VENDOR.lock and install helpers., main(), Run all propose-only fetchers., setup_repo_paths(), int, str, int, Any (+55 more)
 
 ### Community 694 - "Community 694"
-Cohesion: 0.09
-Nodes (52): CorrectionMethod, Any, bool, float, int, str, float, int (+44 more)
+Cohesion: 0.17
+Nodes (28): CorrectionMethod, float, int, adjusted_p_value(), deflated_sharpe_ratio(), expected_maximum_sharpe(), _finite_values(), mean() (+20 more)
 
 ### Community 695 - "Community 695"
 Cohesion: 0.13
@@ -19970,8 +20007,8 @@ Cohesion: 0.09
 Nodes (15): implied_event_variance(), Extract an event-variance lump from two ATM total variances straddling an event., Calendar-clock (clock=None) synthetic round-trip.      Construction:       si, Extract v_e using calendar clock; recover within 1e-12., event_time == t_long is valid (<=)., event_time == t_short is invalid (not strictly inside)., event_time < t_short raises ValueError., event_time > t_long raises ValueError. (+7 more)
 
 ### Community 764 - "Community 764"
-Cohesion: 0.10
-Nodes (20): Any, bool, float, int, LaneScorecard, Path, str, certification_result() (+12 more)
+Cohesion: 0.09
+Nodes (21): Any, bool, float, int, LaneScorecard, Path, str, certification_result() (+13 more)
 
 ### Community 765 - "Community 765"
 Cohesion: 0.07
@@ -20050,16 +20087,16 @@ Cohesion: 0.07
 Nodes (28): additionalProperties, type, type, items, minItems, type, type, minimum (+20 more)
 
 ### Community 784 - "Community 784"
-Cohesion: 0.11
-Nodes (18): __getattr__(), Checkout-local shim for `python -m economic_event_universe...`.  The implement, str, CrossAssetSnapshotProvider, DefaultSnapshotProvider, Cross-asset L3 snapshot provider delegating to hfc3 tensor builder., Offline research provider; not on CHI404 hot path (BLUEPRINT §4)., _sensor_symbols() (+10 more)
+Cohesion: 0.10
+Nodes (21): __getattr__(), Checkout-local shim for `python -m economic_event_universe...`.  The implement, str, CrossAssetSnapshotProvider, DefaultSnapshotProvider, Cross-asset L3 snapshot provider delegating to hfc3 tensor builder., Offline research provider; not on CHI404 hot path (BLUEPRINT §4)., _sensor_symbols() (+13 more)
 
 ### Community 785 - "Community 785"
-Cohesion: 0.05
-Nodes (65): _arrival_accel(), _bipower_series(), _bipower_var(), _build_grid(), build_vix_feature_file(), _depth_imbalance(), derive_event_id(), _ffill_sensor_onto_grid() (+57 more)
+Cohesion: 0.12
+Nodes (28): _arrival_accel(), _bipower_series(), _bipower_var(), _build_grid(), _depth_imbalance(), _ffill_sensor_onto_grid(), _log_mid_returns_trailing(), _most_quoted_instrument() (+20 more)
 
 ### Community 786 - "Community 786"
-Cohesion: 0.28
-Nodes (28): Any, float, int, ndarray, Path, str, _array_value(), build_rl_training_data() (+20 more)
+Cohesion: 0.17
+Nodes (39): Any, float, int, ndarray, Path, str, _array_value(), build_rl_training_data() (+31 more)
 
 ### Community 787 - "Community 787"
 Cohesion: 0.07
@@ -20970,12 +21007,12 @@ Cohesion: 0.14
 Nodes (26): _make_probe_sample(), _make_repo_skeleton(), bool, float, int, Path, str, Unit tests for CHI404 latency probe summarize logic. (+18 more)
 
 ### Community 1014 - "Community 1014"
-Cohesion: 0.14
-Nodes (25): Any, int, str, _manager_with_active_model(), _promotion(), ModelSignal, MonkeyPatch, Path (+17 more)
+Cohesion: 0.16
+Nodes (24): Any, int, str, _manager_with_active_model(), _promotion(), ModelSignal, MonkeyPatch, Path (+16 more)
 
 ### Community 1015 - "Community 1015"
-Cohesion: 0.12
-Nodes (26): Any, bool, float, int, Path, str, _c(), _chain_tolerance_us() (+18 more)
+Cohesion: 0.07
+Nodes (41): Any, bool, float, int, Path, str, validate_aar_packet_out(), _c() (+33 more)
 
 ### Community 1016 - "Community 1016"
 Cohesion: 0.08
@@ -21010,8 +21047,8 @@ Cohesion: 0.22
 Nodes (27): _budget_plan_receipt(), build_parser(), _build_symbol_rows(), _build_worker_count(), _campaign_status(), _campaign_training_budget_receipt(), _command_line(), _event_ids_by_symbol() (+19 more)
 
 ### Community 1024 - "Community 1024"
-Cohesion: 0.09
-Nodes (16): CMEOptionsConfig, CME options lane LaneConfig.      research_only=True while execution is in Pha, Any, Lane governance tests: Lane.CME_OPTIONS registration and routing.  Golden deri, _reset_registry(), test_cme_options_capability_profile_dma_true(), test_cme_options_capability_profile_hft_proof_not_required(), test_cme_options_capability_profile_is_hft_false() (+8 more)
+Cohesion: 0.07
+Nodes (25): CMEOptionsBacktester, CMEOptionsConfig, load_cme_options_config(), CME options lane LaneConfig.      research_only=True while execution is in Pha, Load CME options lane config. Returns defaults (no external config file yet)., Backtester Protocol implementation for CME options.      research_only=True fo, _cme_options_validator(), Any (+17 more)
 
 ### Community 1025 - "Community 1025"
 Cohesion: 0.18
@@ -21798,8 +21835,8 @@ Cohesion: 0.07
 Nodes (27): definitions, event_ref, market_instrument, non_empty_string, nullable_number, nullable_string, research_question, string_array (+19 more)
 
 ### Community 1221 - "Community 1221"
-Cohesion: 0.20
-Nodes (19): ndarray, int, ndarray, _classify_events(), _event_constants(), _event_type(), _filter_replay_added_orders_only(), _future_data_cutoff_ns() (+11 more)
+Cohesion: 0.07
+Nodes (20): Tests for holm_bh_correction and null_strategy_battery (R6 robustness layer)., All-positive expectancies -> observed_mean far from the null mass -> pass., Symmetric / zero-mean expectancies -> high p_value -> fail., A random zero-centred sample should have a high p_value., The null distribution is centred near zero regardless of the data., Same seed -> same result; different seed -> (likely) different null., Different seeds produce (almost certainly) different null_mean., Fail-closed on empty / insufficient input. (+12 more)
 
 ### Community 1222 - "Community 1222"
 Cohesion: 0.07
@@ -22014,8 +22051,8 @@ Cohesion: 0.14
 Nodes (25): feed_path(), _find_target_npz(), _get_engine(), bool, CompletedProcess, int, Path, str (+17 more)
 
 ### Community 1276 - "Community 1276"
-Cohesion: 0.09
-Nodes (39): _assert_chi404_only(), _handle_signal(), main(), PaperLatencyDaemon, CHI404 paper order latency daemon — monotonic waterfall audit (colo only).  Ti, _read_manifest(), _run_id(), _utc_now() (+31 more)
+Cohesion: 0.08
+Nodes (41): _assert_chi404_only(), _handle_signal(), main(), PaperLatencyDaemon, CHI404 paper order latency daemon — monotonic waterfall audit (colo only).  Ti, _read_manifest(), _run_id(), _utc_now() (+33 more)
 
 ### Community 1277 - "Community 1277"
 Cohesion: 0.08
@@ -22043,15 +22080,15 @@ Nodes (16): _prepare_passing_paper_shadow_summary(), PDF_MODEL_5 / DEALER_HEDGIN
 
 ### Community 1284 - "Community 1284"
 Cohesion: 0.03
-Nodes (76): Tests for the Ontology Gate Agent (ontology_gate.py).  Every test exercises a, Docs area has no applicable invariants — all should be na/pass., Unknown area defaults to full B1-B8 per charter., Pilot scope is allowed to use numba engine., Artifact claiming feature_complete without consumption proof fails., Drift patterns can be flagged via structured artifact mapping., Patterns can be passed directly (for tests/direct flagging)., Minimal valid screening artifact for schema validation tests. (+68 more)
+Nodes (79): Tests for the Ontology Gate Agent (ontology_gate.py).  Every test exercises a, Docs area has no applicable invariants — all should be na/pass., Unknown area defaults to full B1-B8 per charter., Pilot scope is allowed to use numba engine., Artifact claiming feature_complete without consumption proof fails., Drift patterns can be flagged via structured artifact mapping., Patterns can be passed directly (for tests/direct flagging)., Minimal valid screening artifact for schema validation tests. (+71 more)
 
 ### Community 1285 - "Community 1285"
 Cohesion: 0.17
 Nodes (20): action_enabled(), AutonomyConfig, can_arm_live(), env_enabled(), kill_engaged(), load_config(), master_enabled(), Two-key master enable for autonomy. Fail-closed by construction.  Both keys ar (+12 more)
 
 ### Community 1286 - "Community 1286"
-Cohesion: 0.22
-Nodes (24): bool, float, ndarray, str, chain_greeks(), _d1d2(), _discount(), gamma() (+16 more)
+Cohesion: 0.08
+Nodes (37): bool, float, ndarray, str, chain_greeks(), _d1d2(), delta(), _discount() (+29 more)
 
 ### Community 1287 - "Community 1287"
 Cohesion: 0.18
@@ -22178,8 +22215,8 @@ Cohesion: 0.09
 Nodes (22): RiskLimits, string, EngineMode, assert_live_config(), EngineConfig, daily_loss_limit, feed_path, latency_ns (+14 more)
 
 ### Community 1318 - "Community 1318"
-Cohesion: 0.13
-Nodes (12): Tests for closed three-category research_clock enum (Gate 8)., TestCanonicalValues, TestFailClosed, object, str, canonicalize_research_clock(), Closed three-category research clock taxonomy (VectorBT Gate 8).  Authority:, Return the canonical enum member for a research_clock label. (+4 more)
+Cohesion: 0.07
+Nodes (25): float, int, ModelOutput, bvc_buy_volume(), compute_vpin(), Add trade/bar volume; flush bucket when target reached., CDF of Student-t with df degrees of freedom., Bulk Volume Classification: V_τ^B = V_τ * Z(ΔP/σ) with Student-t CDF. (+17 more)
 
 ### Community 1319 - "Community 1319"
 Cohesion: 0.26
@@ -22218,16 +22255,16 @@ Cohesion: 0.08
 Nodes (23): Already shipped (re-verify, do not re-implement blindly), Merge-ready gates (all must pass), P0-1 Pipeline LLM is not packet-strict today, P0-2 Every persisted response must validate, P0-3 jsonschema in all install paths, P0-4 OpenFoundry gate must fail closed, P0 — Blockers (financial / contract correctness), P1-1 Disk packet vs LLM input (Option B audit) (+15 more)
 
 ### Community 1328 - "Community 1328"
-Cohesion: 0.21
-Nodes (23): Any, bool, float, int, Path, str, append_generation_memory(), _autoresearch_memory_path() (+15 more)
+Cohesion: 0.20
+Nodes (24): Any, bool, float, int, Path, str, append_generation_memory(), _autoresearch_memory_path() (+16 more)
 
 ### Community 1329 - "Community 1329"
 Cohesion: 0.18
 Nodes (21): Any, int, str, apply_vix_to_recipe_families(), enrich_sensor_leg(), _leg_source_ts(), VIX/VVIX sensor and VIX-options feature assembly with PIT provenance., Validate VIX/VVIX vs VIX-options legs separately; never treat NaN as zero. (+13 more)
 
 ### Community 1330 - "Community 1330"
-Cohesion: 0.07
-Nodes (41): assert_campaign_ontology_prerequisites(), load_vault_gate_receipt(), Vault ontology gates for HftBacktest campaign (fail-closed)., Return (runnable, skipped) scenarios based on configured stages., Fail-closed campaign prerequisites from vault ontology., resolve_certification_status(), scenarios_for_config_stages(), validate_feature_plane_status() (+33 more)
+Cohesion: 0.09
+Nodes (35): assert_campaign_ontology_prerequisites(), load_vault_gate_receipt(), Vault ontology gates for HftBacktest campaign (fail-closed)., Return (runnable, skipped) scenarios based on configured stages., Fail-closed campaign prerequisites from vault ontology., resolve_certification_status(), scenarios_for_config_stages(), validate_feature_plane_status() (+27 more)
 
 ### Community 1331 - "Community 1331"
 Cohesion: 0.08
@@ -22710,8 +22747,8 @@ Cohesion: 0.09
 Nodes (21): Backups, Bitcoin Core Operational Wallet Setup - 2026-06-04, code:ini (server=1), code:mermaid (flowchart LR), code:text (bc1q4cxt4wpxy0wgcan68ry7pfa98wg0y4mdcychxl), code:text (/secure/offline_backups/), code:text (C:\Users\MSI\Desktop\qx_wallet_setup), code:text (/secure/offline_backups/qx_ops_hot_wallet_20260604.dat) (+13 more)
 
 ### Community 1451 - "Community 1451"
-Cohesion: 0.21
-Nodes (11): bool, date, datetime, int, object, str, _as_utc(), _effective_date_active() (+3 more)
+Cohesion: 0.18
+Nodes (29): EventSpec, ImportResult, _apply_slot_result(), _as_datetime(), download_catalog_slot(), _download_slot_task(), DownloadReport, _event_spec() (+21 more)
 
 ### Community 1452 - "Community 1452"
 Cohesion: 0.16
@@ -23066,8 +23103,8 @@ Cohesion: 0.30
 Nodes (15): _allowed_for_phase(), _deprecated_violation(), _git_changed_files(), _git_diff_files(), main(), _normalize_path(), _parse_plan_todos(), _path_allowed() (+7 more)
 
 ### Community 1540 - "Community 1540"
-Cohesion: 0.10
-Nodes (38): percentile_us(), Percentile helpers for paper order latency reports., stats_by_key(), stats_us(), load_records(), main(), promote_from_records(), Promote paper_latency daemon NDJSON into trial latency reports. (+30 more)
+Cohesion: 0.25
+Nodes (19): percentile_us(), Percentile helpers for paper order latency reports., stats_by_key(), stats_us(), Any, float, int, str (+11 more)
 
 ### Community 1541 - "Community 1541"
 Cohesion: 0.10
@@ -23114,8 +23151,8 @@ Cohesion: 0.20
 Nodes (18): _e2e_filter(), _e2e_hft_fn(), _e2e_persist(), _e2e_robustness_fn(), _E2eFilterResult, _parsed_hypothesis(), _passing_surface_metrics(), Phase 8: end-to-end feature-family research smoke (no paid compute).  Chains a (+10 more)
 
 ### Community 1552 - "Community 1552"
-Cohesion: 0.17
-Nodes (9): _FakeCaptureConnector, Path, TrialConfig, test_capture_allows_windows_rithmic_api(), test_capture_refuses_windows_rtrader(), test_parse_log_line_rejects_bad_price(), test_rtrader_bridge_refuses_windows(), test_unattended_refuses_windows() (+1 more)
+Cohesion: 0.15
+Nodes (26): Any, bool, float, int, ModelComposition, Path, str, Any (+18 more)
 
 ### Community 1553 - "Community 1553"
 Cohesion: 0.17
@@ -23238,8 +23275,8 @@ Cohesion: 0.12
 Nodes (15): Any, float, int, str, BandViolation, CalendarViolation, LegQuote, LegSpec (+7 more)
 
 ### Community 1583 - "Community 1583"
-Cohesion: 0.13
-Nodes (21): bytes, int, object, str, Stage-A survivor authority keys must be explicit, even when empty., Positive row count is not runnable unless the member has the declared payload by, Malformed negative dimensions fail closed., Only exact NPY versions 1.0, 2.0, and 3.0 are accepted. (+13 more)
+Cohesion: 0.11
+Nodes (25): make_tag(), Convenience constructor with auto-derived impact fields.      Derivation rules, _config_with_data(), Path, Phase 6 tests for the HFT3 data-resolution tagging.  Covers: - test_data_clas, The reason codes are stable UPPER_SNAKE_CASE identifiers., The legacy single `resolution` field still works: both requested     and resolv, L3_MBO > L3_ORDERBOOK_SNAPSHOT > TRADES_ONLY > AGGREGATED_BARS > SYNTHETIC. (+17 more)
 
 ### Community 1584 - "Community 1584"
 Cohesion: 0.19
@@ -23250,8 +23287,8 @@ Cohesion: 0.20
 Nodes (18): EngineConfig, string, TestAdapter, TestLoop, EngineBundle, adapter, engine, main() (+10 more)
 
 ### Community 1586 - "Community 1586"
-Cohesion: 0.25
-Nodes (13): _api_key(), _chat_completions_url(), _extract_content(), generate(), GenerateResult, llm_available(), OpenAI-compatible GPT-5.5 client for HFT3 packet-strict LLM calls., Return whether the OpenAI-compatible endpoint is configured for calls. (+5 more)
+Cohesion: 0.17
+Nodes (26): Any, bool, float, GateResult, Path, str, Reason codes must be UPPER_SNAKE_CASE., test_reason_code_naming_convention() (+18 more)
 
 ### Community 1587 - "Community 1587"
 Cohesion: 0.10
@@ -23462,8 +23499,8 @@ Cohesion: 0.21
 Nodes (17): Any, float, int, str, apply_costs(), bid_ask_spread_cost(), _broadcast(), commission_cost() (+9 more)
 
 ### Community 1639 - "Community 1639"
-Cohesion: 0.43
-Nodes (13): isolated_script(), CaptureFixture, MonkeyPatch, Path, str, test_download_passes_override_flag_and_output_path(), test_dry_run_default_does_not_instantiate_client_or_write_log(), test_estimate_cost_prices_only_missing_windows_without_download() (+5 more)
+Cohesion: 0.12
+Nodes (28): available_rl_feature_names(), _normalise_feature_name(), Build an RL policy artifact or a CUDA handoff block., Build a fail-closed preflight artifact for GPU RL training., _reward_metadata_for_rows(), rl_gpu_training_readiness_artifact(), train_rl_policy_artifact(), training_data_receipt() (+20 more)
 
 ### Community 1640 - "Community 1640"
 Cohesion: 0.10
@@ -23499,7 +23536,7 @@ Nodes (20): const, type, const, type, const, type, const, type (+12 more)
 
 ### Community 1648 - "Community 1648"
 Cohesion: 0.11
-Nodes (14): ReplaySessionConfig, Tests for ReplaySessionConfig.feature_latency_ms:   - Adapter is synced to ts -, feature_latency_ms=None → adapter synced to ts - latency_ms ticks., feature_latency_ms=0.5 → adapter synced to ts - 500_000 ns., feature_latency_ms=0.0 → adapter synced to ts (no delay)., When ts < feat_latency_ns, adapter is synced to 0 (not negative)., feature_latency_ms < 0 raises ValueError during run().          The ValueError, All steps across the run receive the delayed timestamp. (+6 more)
+Nodes (15): ReplaySessionConfig, int, Tests for ReplaySessionConfig.feature_latency_ms:   - Adapter is synced to ts -, feature_latency_ms=None → adapter synced to ts - latency_ms ticks., feature_latency_ms=0.5 → adapter synced to ts - 500_000 ns., feature_latency_ms=0.0 → adapter synced to ts (no delay)., When ts < feat_latency_ns, adapter is synced to 0 (not negative)., feature_latency_ms < 0 raises ValueError during run().          The ValueError (+7 more)
 
 ### Community 1649 - "Community 1649"
 Cohesion: 0.10
@@ -23822,8 +23859,8 @@ Cohesion: 0.11
 Nodes (18): campaign_id, events_ran, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note (+10 more)
 
 ### Community 1729 - "Community 1729"
-Cohesion: 0.30
-Nodes (21): _authority_refs(), _load_instrument_metadata(), _load_lake_manifest(), main(), _manifest_path(), _numeric_metadata(), prepare_from_lake_manifest(), _prepare_one() (+13 more)
+Cohesion: 0.27
+Nodes (24): dtype, HftBacktestOnlyRunConfig, object, _authority_refs(), _load_instrument_metadata(), _load_lake_manifest(), main(), _manifest_path() (+16 more)
 
 ### Community 1730 - "Community 1730"
 Cohesion: 0.11
@@ -24286,8 +24323,8 @@ Cohesion: 0.36
 Nodes (9): Any, bool, str, build_certification_stamp(), format_stamp_footer(), Build certification stamp metadata for research runs (T1)., Return certification_stamp dict for embedding in result JSON / reports., _resolve_promotion_label() (+1 more)
 
 ### Community 1845 - "Community 1845"
-Cohesion: 0.32
-Nodes (17): _config(), MonkeyPatch, Path, test_atomic_writes_leave_no_temp_on_replace_failure(), test_autonomous_runner_has_no_live_or_routing_imports(), test_checkpoint_identity_mismatch_requires_manual_review_and_run_fails(), test_checkpoint_timestamp_regression_requires_manual_review_and_run_fails(), test_completed_registry_update_mismatched_decision_requires_manual_review_without_rewrite() (+9 more)
+Cohesion: 0.09
+Nodes (16): No-edge expectancies should not produce a false planted_pass via the     baseli, The demeaned baseline of any series has mean exactly 0, so the null         bat, Across varied inputs the demeaned baseline (mean==0) yields a high         base, Same seed -> same result; independent of global RNG state., Different seeds produce (very likely) different planted_p_value., Required keys present with correct types., A strong observed edge should be detectable after planting alpha., A tiny alpha planted into a high-variance baseline is indistinguishable (+8 more)
 
 ### Community 1846 - "Community 1846"
 Cohesion: 0.14
@@ -24526,8 +24563,8 @@ Cohesion: 0.12
 Nodes (16): accepted_as_baseline_at_utc, baseline_reason, baseline_role, baseline_status, generated_at_utc, paired_cancel_submit_count, paired_new_ack_count, paper_baseline_reference (+8 more)
 
 ### Community 1905 - "Community 1905"
-Cohesion: 0.27
-Nodes (8): Any, int, TradeManagerRiskDecision, test_phase18_validate_order_state_transition_is_inert_and_explicit(), make_order_transition(), Phase 18 inert Trade Manager order-state machine., transition_from_risk_decision(), validate_order_state_transition()
+Cohesion: 0.12
+Nodes (22): Any, DataFrame, float, int, str, audit_records_to_dataframe(), build_audit_timestamps_ns(), phase5_latency_chain_ns() (+14 more)
 
 ### Community 1906 - "Community 1906"
 Cohesion: 0.16
@@ -24546,12 +24583,12 @@ Cohesion: 0.12
 Nodes (17): additionalProperties, properties, required, type, $ref, $ref, $ref, $ref (+9 more)
 
 ### Community 1910 - "Community 1910"
-Cohesion: 0.21
-Nodes (16): int, Path, str, candidate_paths(), load_keys(), _load_plain_env(), master_keys_path(), Single-source credential loader for the data system.  All API keys live in ONE (+8 more)
+Cohesion: 0.12
+Nodes (27): int, Path, str, all_present(), main(), parse_args(), bool, Namespace (+19 more)
 
 ### Community 1911 - "Community 1911"
-Cohesion: 0.31
-Nodes (9): Path, Governance unit tests for tiered backtester certification., test_certification_runner_main_exit_code(), test_promotion_gate_fails_on_missing_green(), test_promotion_gate_fails_on_red(), test_registry_round_trip(), test_staleness_missing_registry(), test_stamp_green_core_change_stale() (+1 more)
+Cohesion: 0.29
+Nodes (10): Path, Governance unit tests for tiered backtester certification., test_certification_runner_main_exit_code(), test_fast_gate_report_writer(), test_promotion_gate_fails_on_missing_green(), test_promotion_gate_fails_on_red(), test_registry_round_trip(), test_staleness_missing_registry() (+2 more)
 
 ### Community 1912 - "Community 1912"
 Cohesion: 0.32
@@ -24822,8 +24859,8 @@ Cohesion: 0.18
 Nodes (14): SurfaceActions(), apiGet(), apiPost(), artifactUrl(), authHeaders(), ChatEvent, CockpitState, openArtifact() (+6 more)
 
 ### Community 1979 - "Community 1979"
-Cohesion: 0.18
-Nodes (8): delta(), Black-76 delta: dV/dF., _fd_greek(), Analytic Greeks match central finite differences to rel tol 1e-5., delta_call - delta_put = exp(-rT) (Black-76 identity)., Analytic delta matches FD at rel 1e-5 across 10 strikes., Central finite difference on args[param_idx]., TestGreeksFiniteDiff
+Cohesion: 0.16
+Nodes (27): _fixture_x(), _load_fast_module(), _load_vix_manifest_module(), test_fast_runner_allows_fs_budget_feature_order_compatibility(), test_fast_runner_builds_vix_options_clue_arrays_from_manifest(), test_fast_runner_launch_gate_records_duration_stop_rule_and_max_events(), test_fast_runner_masks_noncausal_vix_source_row_under_latency(), test_fast_runner_rejects_budget_feature_order_drift() (+19 more)
 
 ### Community 1980 - "Community 1980"
 Cohesion: 0.16
@@ -24842,8 +24879,8 @@ Cohesion: 0.12
 Nodes (15): code:text (VaultGate -> GraphGate/GraphPre when active -> Plan -> Code ), code:powershell (rg -n "<forbidden-term>|<old-field>|<stale-label>" <changed-), code:powershell (gh pr view --json number,headRefName,headRefOid), code:powershell (git push), code:powershell (gh pr view <PR_NUMBER> --json body,reviews,comments,statusCh), code:powershell (git diff --stat), code:text (local-preflight: run | waived-by-user), Grep Loop Workflow (+7 more)
 
 ### Community 1984 - "Community 1984"
-Cohesion: 0.44
-Nodes (8): Path, TrialConfig, R|Trader bridge ingests live .cur.txt logs from VM SMB watch., test_rtrader_bridge_ingests_comma_log(), test_rtrader_bridge_ingests_cur_txt(), test_rtrader_bridge_skips_probe_txt(), test_rtrader_bridge_skips_trace_noise(), trial_cfg()
+Cohesion: 0.15
+Nodes (23): bool, DataFrame, float, int, Path, str, main(), int (+15 more)
 
 ### Community 1985 - "Community 1985"
 Cohesion: 0.13
@@ -28710,8 +28747,8 @@ Cohesion: 0.13
 Nodes (15): pnl_by_latency, 0.0, 0.05, 0.1, 0.25, 0.5, 1000.0, 100.0 (+7 more)
 
 ### Community 2952 - "Community 2952"
-Cohesion: 0.16
-Nodes (25): bool, str, int, Path, str, _bearer(), _control_token(), _eq() (+17 more)
+Cohesion: 0.33
+Nodes (14): bool, str, _bearer(), _control_token(), _eq(), _is_loopback(), _is_proxied(), Auth — two scopes, with control hard-pinned to local origin.  - ``view``    : (+6 more)
 
 ### Community 2953 - "Community 2953"
 Cohesion: 0.13
@@ -28842,8 +28879,8 @@ Cohesion: 0.13
 Nodes (15): offensive_capability, competitor_relation, decision_to_send_trigger_us, decision_to_send_us, operating_band, opportunity_window_compatible, placement_trigger_kpi, rithmic_send_call_us (+7 more)
 
 ### Community 2985 - "Community 2985"
-Cohesion: 0.47
-Nodes (5): _fable(), main(), int, object, _run_scenario()
+Cohesion: 0.09
+Nodes (27): _json_roundtrip(), _point_options_zone_ok(), A synthetic data_doctor report with options-* checks (incl. one FAIL) and an, test_lanes_synthetic_data_doctor_report(), test_options_context_coverage_absent_summary_preserves_not_measured(), test_options_context_coverage_claim_missing_proof_fails_closed(), test_options_context_coverage_explicit_not_measured_contract(), test_options_context_coverage_future_source_timestamp_fails_closed() (+19 more)
 
 ### Community 2986 - "Community 2986"
 Cohesion: 0.15
@@ -29026,8 +29063,8 @@ Cohesion: 0.13
 Nodes (15): pnl_by_latency, 0.0, 0.05, 0.1, 0.25, 0.5, 1000.0, 100.0 (+7 more)
 
 ### Community 3031 - "Community 3031"
-Cohesion: 0.40
-Nodes (14): Any, bool, Path, str, check_dependencies(), check_env(), check_graphify(), check_python() (+6 more)
+Cohesion: 0.17
+Nodes (23): int, str, Any, str, Any, bool, Path, str (+15 more)
 
 ### Community 3032 - "Community 3032"
 Cohesion: 0.13
@@ -29062,12 +29099,12 @@ Cohesion: 0.13
 Nodes (15): formula_ref, $ref, $ref, additionalProperties, properties, required, type, expression (+7 more)
 
 ### Community 3040 - "Community 3040"
-Cohesion: 0.30
-Nodes (14): _as_datetime(), _destinations(), _load_windows(), log(), main(), _make_client(), parse_args(), _partition_missing() (+6 more)
+Cohesion: 0.05
+Nodes (56): collect_download_specs(), discover_groups(), download_leg_window(), Budget-gated Databento download for options parity legs., Return unique download jobs from parity universe (no hardcoded symbols)., Download one leg via DatabentoResearchClient budget gate.     Requires DATABENT, LegSpec, bool (+48 more)
 
 ### Community 3041 - "Community 3041"
-Cohesion: 0.15
-Nodes (15): _sha256(), _utc_date(), normalize_event(), normalize_file(), _parse_exchange_ts(), Any, int, Path (+7 more)
+Cohesion: 0.29
+Nodes (7): _sha256(), _utc_date(), Any, int, Path, str, TrialConfig
 
 ### Community 3042 - "Community 3042"
 Cohesion: 0.13
@@ -32638,16 +32675,16 @@ Cohesion: 0.11
 Nodes (30): generate_scenario_manifest(), _git_commit(), _hash_file(), _infer_symbol(), ManifestGenerationConfig, _package_version(), Scenario manifest generation from validated VectorBT screening artifacts., select_replay_eligible_candidates() (+22 more)
 
 ### Community 3935 - "Community 3935"
-Cohesion: 0.20
-Nodes (11): Any, bool, float, int, ModelSignal, str, _finite(), order_intent_from_signal() (+3 more)
+Cohesion: 0.18
+Nodes (24): Any, bool, float, int, str, _chronological_subset_means(), _column_means(), combinatorial_symmetric_cross_validation() (+16 more)
 
 ### Community 3936 - "Community 3936"
-Cohesion: 0.23
-Nodes (10): Any, str, TradeManagerOrderIntent, SafetyResult, _decision_from_safety_result(), _execution_intent_from_trade_manager(), load_risk_config(), Phase 17 Trade Manager risk layer.  The risk layer evaluates inert Trade Manag (+2 more)
+Cohesion: 0.16
+Nodes (23): _days(), _install_fixture_dbn_sampler(), Valid-trading-day coverage checks before robustness., _sha256(), test_catalog_fallback_npz_does_not_count_as_requested_symbol_coverage(), test_coverage_status_boundaries(), test_data_type_for_model_fixing_mbo_returns_expiry_day_label(), test_named_pair_models_do_not_inherit_wrong_anchor_symbol() (+15 more)
 
 ### Community 3938 - "Community 3938"
-Cohesion: 0.67
-Nodes (3): Return adapter availability from the active HBT runner, not registry metadata., Return adapter availability from the active HBT runner, not registry metadata., uniform_hbt_order_adapter_status()
+Cohesion: 0.15
+Nodes (20): assert_rithmic_topology_ok(), is_windows(), Topology guard for the Rithmic MBO fill source.  Mirrors ``data_system.rithmic, Raised when a Rithmic fill-source operation violates the topology rule., Raise RithmicTopologyError when called on Windows.      Use as the first call, RithmicTopologyError, attempt_rithmic_fill(), Source priority resolver for the MBO release lane.  The lane supports two prod (+12 more)
 
 ### Community 3939 - "Community 3939"
 Cohesion: 0.14
@@ -32700,6 +32737,10 @@ Nodes (14): const, type, additionalProperties, properties, required, type, data_
 ### Community 3951 - "Community 3951"
 Cohesion: 0.14
 Nodes (14): const, type, additionalProperties, properties, required, type, data_class, instrument (+6 more)
+
+### Community 3952 - "Community 3952"
+Cohesion: 0.16
+Nodes (22): plan_rl_campaign_budget(), Build a read-only RL campaign budget plan.      ``feature_manifest_rows`` must, test_rl_campaign_budget_accepts_tuple_key_manifest_mapping(), test_rl_campaign_budget_blocks_full_training_on_ambiguous_top_level_row_count(), test_rl_campaign_budget_blocks_full_training_when_budget_cannot_cover_inventory(), test_rl_campaign_budget_blocks_full_training_when_source_rows_are_missing(), test_rl_campaign_budget_blocks_full_training_without_measured_throughput(), test_rl_campaign_budget_blocks_malformed_vix_row_in_combined_manifest() (+14 more)
 
 ### Community 3953 - "Community 3953"
 Cohesion: 0.14
@@ -36785,6 +36826,10 @@ Nodes (13): type, type, $ref, type, baseline_comparison_passed, leakage_tests_pa
 Cohesion: 0.36
 Nodes (10): Ensure-Tunnel(), Get-MarkedTunnelProcess(), Get-PortListeners(), Get-SshExe(), Get-TunnelListenerInfo(), Get-TunnelMarkerPath(), Start-SshTunnel(), Stop-TunnelOnPort() (+2 more)
 
+### Community 4974 - "Community 4974"
+Cohesion: 0.11
+Nodes (13): Any, object, str, ContextSetError, Stable hash of the execution-critical fields., Content-addressed cache key for the compatible data batch., Cache key for the feature plane., Cache key for raw signals from a specific model. (+5 more)
+
 ### Community 4975 - "Community 4975"
 Cohesion: 0.15
 Nodes (13): cpp_latency_profile, cpp_decision_compute_p50_us, cpp_decision_compute_p95_us, cpp_decision_compute_p99_us, gateway_ack_p50_us, gateway_ack_p95_us, gateway_ack_p99_us, measured_production_p99_us (+5 more)
@@ -37321,6 +37366,10 @@ Nodes (9): AX, ModelDetail(), surfaceLabel(), surfacePath(), ModelConstruction, 
 Cohesion: 0.22
 Nodes (7): forward_vol(), Standard forward implied volatility between two expiries.      Definition, Golden value derivation:       w_short = 0.04 * 0.5 = 0.02   (sigma=0.2, t=0.5), w_short=0.02, t_short=0.5, w_long=0.04, t_long=1.0:           fwd_var = (0.04 -, w_long < w_short is a calendar arbitrage; raises ValueError., w_long == w_short → fwd_var = 0 → fwd_vol = 0., TestForwardVol
 
+### Community 5109 - "Community 5109"
+Cohesion: 0.11
+Nodes (22): _full_universe_cli_args(), _point_non_universe_pipeline_paths(), test_latest_screening_artifact_stale_when_active_run_mismatch(), test_latest_screening_scoped_run_id_ignores_active_run_mismatch(), test_pipeline_active_run_guard_allows_matching_universe_artifact(), test_pipeline_active_run_guard_rejects_mismatched_generated_artifacts(), test_pipeline_active_run_guard_rejects_mismatched_stage_a_survivors(), test_pipeline_active_run_guard_rejects_survivor_list_with_missing_run_id() (+14 more)
+
 ### Community 5110 - "Community 5110"
 Cohesion: 0.18
 Nodes (8): Calculates Expected Shortfall (CVaR) at the given alpha percentile., Calculates post-fill markout (adverse selection) at multiple horizons., Compares sim vs live fills to detect disagreement., Computes required reporting metrics for the dashboard., TelemetryMetrics, DataFrame, float, ndarray
@@ -37777,13 +37826,17 @@ Nodes (12): enum, type, variable_ref, data_type, unit, variable_id, $ref, $ref (
 Cohesion: 0.21
 Nodes (5): _generated_binding_doc(), Tests for per-model event binding., test_generator_adds_default_research_symbol_and_canonical_universe(), test_generator_adds_model_specific_research_symbols(), test_generator_keeps_pdf_structural_models_without_research_symbol()
 
+### Community 5224 - "Community 5224"
+Cohesion: 0.21
+Nodes (19): str, alerts(), all_zones(), autonomy(), chat(), _client_ip_for_rate_limit(), lifecycle(), model_detail() (+11 more)
+
 ### Community 5225 - "Community 5225"
 Cohesion: 0.32
 Nodes (11): cumulative_percentile_us(), load_histogram(), main(), percentiles_us(), Parse cyclictest histogram files into latency percentiles (microseconds)., Match infrastructure/chi404/05_jitter_gate.sh cumulative-bucket walk., summarize_hist_file(), float (+3 more)
 
 ### Community 5226 - "Community 5226"
-Cohesion: 0.33
-Nodes (11): _read_jsonl(), test_rl_training_data_builder_allows_duplicate_global_timestamps(), test_rl_training_data_builder_prefix_is_stable_when_future_truncated(), test_rl_training_data_builder_rejects_features_not_faithful_in_fs_v1(), test_rl_training_data_builder_rejects_leaky_feature_names(), test_rl_training_data_builder_same_timestamp_source_clamps_to_decision_row(), test_rl_training_data_builder_writes_pit_rows_and_manifest(), _write_store() (+3 more)
+Cohesion: 0.20
+Nodes (20): Path, _git_commit(), _load_json(), _path_with_added_suffix(), prepare_hftbacktest_only_l3_from_lake(), Prepare an existing lake L3 NPZ for the active HftBacktest-only runner., Run the active HftBacktest-only slice and write plan-shaped artifacts., Write post-HBT evaluation only after recorder and stats artifacts exist. (+12 more)
 
 ### Community 5227 - "Community 5227"
 Cohesion: 0.17
@@ -38014,8 +38067,8 @@ Cohesion: 0.33
 Nodes (11): bool, int, str, _attempt_recovery_via_rearm(), _decision_summary(), _gate_context_from_observation(), main(), _optional_bool() (+3 more)
 
 ### Community 5284 - "Community 5284"
-Cohesion: 0.17
-Nodes (5): Tests for Black-76 option pricing and Greeks.  Golden values ------------- F, C - P = exp(-rT)*(F - K) across a strike grid., chain_greeks output equals elementwise scalar calls., TestChainGreeks, TestPutCallParity
+Cohesion: 0.15
+Nodes (13): date, Tests for packages/options_lane/src/fixing/vwap_engine.py (WS-3.4).  Conventio, Window is always exactly 30 seconds., 2025-01-17 — CST (UTC-6): 15:00 CT = 21:00 UTC., 2025-06-20 — CDT (UTC-5): 15:00 CT = 20:00 UTC., 2025-01-17 CST: 15:00 CT → 21:00 UTC.          Hand: CST = UTC-6, so 15:00 CT, 2025-01-17: start = end - 30s = 20:59:30 UTC., 2025-06-20 CDT: 15:00 CT → 20:00 UTC.          Hand: CDT = UTC-5, so 15:00 CT (+5 more)
 
 ### Community 5285 - "Community 5285"
 Cohesion: 0.29
@@ -38036,6 +38089,10 @@ Nodes (11): CLI, code:bash (python workbench/scripts/generate_model_event_bindin
 ### Community 5289 - "Community 5289"
 Cohesion: 0.18
 Nodes (11): acpi_irq_nobalance, amd_idle.max_cstate, cpuidle.off, idle, isolcpus, nohz_full, nosmt, processor.max_cstate (+3 more)
+
+### Community 5290 - "Community 5290"
+Cohesion: 0.16
+Nodes (10): Compute VWAP from a sequence of (qty, price) fills.      Consistent with fixin, vwap_from_trades(), Single trade → VWAP equals that trade's price.          Hand: (1 * 5000) / 1 =, Two equal-qty trades → arithmetic average.          Hand: (1*5000 + 1*5010) /, Two unequal-qty trades → weighted average.          Hand: (100*5000 + 200*5010, Negative (sell) quantities use abs value; same result as positive.          Ha, Spot-check: same 3-trade set used in test_fixing_window_study.          fix-wi, A fill with qty=0 contributes nothing.          Hand: only the non-zero fill c (+2 more)
 
 ### Community 5291 - "Community 5291"
 Cohesion: 0.18
@@ -38132,6 +38189,10 @@ Nodes (11): tick_to_decision_us, tick_to_decision_us, count, max_us, mean_us, mi
 ### Community 5314 - "Community 5314"
 Cohesion: 0.18
 Nodes (11): PENDING_CANCEL, PENDING_NEW, PENDING_REPLACE, WORKING, pending_state_model, ack_reconciliation, nonblocking_ack_default, send_transitions (+3 more)
+
+### Community 5315 - "Community 5315"
+Cohesion: 0.16
+Nodes (10): Compute signed replication slippage in ticks.      Slippage = achieved_vwap -, replication_error(), Achieved VWAP == fixing VWAP → error = 0 ticks.          Hand: (5000 - 5000) /, Filled above fixing → positive error.          Setup: 2 fills at 5001, fixing, Filled below fixing → negative error.          Setup: 2 fills at 4999, fixing, Mixed fills against known fixing VWAP — hand-computed golden.          fills:, nan fixing_vwap → nan error., Non-default tick size scales error correctly.          Setup: achieved=5001, f (+2 more)
 
 ### Community 5316 - "Community 5316"
 Cohesion: 0.25
@@ -38337,6 +38398,10 @@ Nodes (10): kernel_runtime, cmdline, cpuidle_states_non_poll, irqbalance, kernel
 Cohesion: 0.20
 Nodes (9): agent_instructions, created_utc, no_market_windows, partial_windows, purpose, repository_root, run_id, schema_version (+1 more)
 
+### Community 5367 - "Community 5367"
+Cohesion: 0.29
+Nodes (17): build_parser(), _chronology_field(), _finite_float(), main(), _parse_rows(), Any, ArgumentParser, float (+9 more)
+
 ### Community 5368 - "Community 5368"
 Cohesion: 0.20
 Nodes (10): event_accurate_mbo, all_hypotheses, description, engine, feature_path, hypotheses_with_trades, hypothesis_count, signal_threshold (+2 more)
@@ -38377,6 +38442,10 @@ Nodes (10): paper_order_latency, authoritative, hot_path_language, measured, mea
 Cohesion: 0.20
 Nodes (9): `C:\Users\MSI\Documents\GitHub\hft3`, `C:\Users\MSI\Documents\New project`, `C:\Users\MSI\Documents\opencode\hft3`, `C:\Users\MSI\repos\hft3-lever2`, Canonical Repo-Managed Worktrees, code:text (C:\Users\MSI\repos\hft3), MANDATORY ONTOLOGY GATE: Before every interaction in this project, operate from the Obsidian vault ontology and the provided mathematics/quantitative-finance/HFT PDFs; do not invent codebases, pipelines, models, or methodology outside that authority., Physical Stub State (+1 more)
 
+### Community 5378 - "Community 5378"
+Cohesion: 0.17
+Nodes (8): Build a list of n dummy window dicts., 10 windows × 0.5 GB × $2.00/GB = $10.00., $10.00 < OPERATING_CAP ($112.50) → requires_budget_uplift = False., 200 windows × 0.5 GB × $2.00 = $200.00 > $112.50 → requires uplift., $112.50 = OPERATING_CAP → requires_budget_uplift = False (not strictly >)., gb_per_window=None → requires_budget_uplift = True (conservative)., TestEstimateCost, int
+
 ### Community 5379 - "Community 5379"
 Cohesion: 0.20
 Nodes (10): evidence_coverage, lane_fit, novelty, prior_failure_overlap, rank_inputs, validation_readiness, additionalProperties, properties (+2 more)
@@ -38392,6 +38461,10 @@ Nodes (9): Acceptance Decision Recorded, code:powershell (python scripts\paid_da
 ### Community 5382 - "Community 5382"
 Cohesion: 0.20
 Nodes (10): commission_per_trade, market_impact_coeff, slippage_bps, spread_cost, edge_evaluation, cost_model, risk, max_cvar_95 (+2 more)
+
+### Community 5383 - "Community 5383"
+Cohesion: 0.18
+Nodes (17): float, _apply_normalizer(), _bucket(), _elapsed(), _eval_fraction(), _finite_float(), _fit_train_prefix_normalizer(), _positive_float() (+9 more)
 
 ### Community 5384 - "Community 5384"
 Cohesion: 0.20
@@ -38424,6 +38497,10 @@ Nodes (9): additionalProperties, definitions, non_empty_string, minLength, type,
 ### Community 5391 - "Community 5391"
 Cohesion: 0.29
 Nodes (9): Any, Path, str, load_manifest(), manifest_path(), Reusable loader for the MBO event-lake manifest.  The manifest at ``<npz_root>, Resolve a manifest npz_path entry: absolute as-is, relative under repo., Return the list of manifest records from the lake root.      Returns an empty (+1 more)
+
+### Community 5392 - "Community 5392"
+Cohesion: 0.17
+Nodes (16): _make_quotes_npz(), _make_sensors_parquet(), Regression tests: VIX feature loader NaN honesty.  Defect ke (specs/CRYPTO_LIV, Normal build: file written; ts strictly increasing; all columns finite-or-NaN., Omit sensors parquet → vix_atm_strike in columns_omitted, absent from file., Placeholder-only parquet + absent quotes npz → VixDataUnavailable, no file., vix_extra_latency_ms=5.0 → ts shifted +5e6 ns vs shift=0 build., Write synthetic quotes npz, 2 instruments, 200 rows, monotonic ts. (+8 more)
 
 ### Community 5393 - "Community 5393"
 Cohesion: 0.40
@@ -39398,8 +39475,8 @@ Cohesion: 0.22
 Nodes (9): CPI, NFP, ES.v.0, MES.v.0, npz_inventory, by_event_type_prefix, by_symbol, count (+1 more)
 
 ### Community 5637 - "Community 5637"
-Cohesion: 0.27
-Nodes (12): _canonical_model_identity(), _default_run_id(), _load_strategy_params(), main(), int, Path, str, _trade_date_from_event_id() (+4 more)
+Cohesion: 0.47
+Nodes (8): _canonical_model_identity(), _default_run_id(), _load_strategy_params(), main(), int, Path, str, _trade_date_from_event_id()
 
 ### Community 5638 - "Community 5638"
 Cohesion: 0.22
@@ -39510,8 +39587,8 @@ Cohesion: 0.25
 Nodes (4): MarketDataAdapter, Any, bool, int
 
 ### Community 5665 - "Community 5665"
-Cohesion: 0.28
-Nodes (7): ndarray, Python feature extractor golden vectors (C++ parity target)., Rolling-window gap must flush _trade_at_level and _reload_at_level.      Pins, _run_sequence(), test_deterministic_replay(), test_golden_agg_imb_and_mid(), test_iceberg_absorption_cleared_on_window_gap()
+Cohesion: 0.32
+Nodes (6): Python feature extractor golden vectors (C++ parity target)., Rolling-window gap must flush _trade_at_level and _reload_at_level.      Pins, _run_sequence(), test_deterministic_replay(), test_golden_agg_imb_and_mid(), test_iceberg_absorption_cleared_on_window_gap()
 
 ### Community 5666 - "Community 5666"
 Cohesion: 0.22
@@ -39625,9 +39702,17 @@ Nodes (9): type, properties, field, source_id, source_type, value, type, enum (+
 Cohesion: 0.22
 Nodes (9): additionalProperties, properties, required, type, type, decision, promote_candidate_recommendation, summary (+1 more)
 
+### Community 5694 - "Community 5694"
+Cohesion: 0.26
+Nodes (15): _event_meta(), _mbo_sequence(), Unit tests for HybridExecutionStrategy (in-memory MBO steps, no NPZ file)., When internal MBO book has BBO, VPIN mid must not follow divergent hbt.depth., TRADE before book BBO: VPIN uses hbt.depth mid fallback., test_cancel_quote_flag_cancels_resting_orders(), test_event_window_end_ns_parses_iso(), test_event_window_start_ns_parses_iso() (+7 more)
+
 ### Community 5695 - "Community 5695"
 Cohesion: 0.36
 Nodes (8): _ev_action(), _ev_side(), export_npz_to_feed(), main(), int, str, scripts/export_replay_feed.py — NPZ → flat binary feed exporter.  Reads an Hft, Convert NPZ to flat binary feed.  Returns record count written.
+
+### Community 5696 - "Community 5696"
+Cohesion: 0.18
+Nodes (13): Phase 6: VectorBT ↔ HftBacktest feature_recipe_hash gate tests., test_extract_hash_from_promoted_row_top_level(), test_extract_hash_from_vectorbt_results(), test_validate_handoff_accepts_matching_hashes(), test_validate_handoff_rejects_mismatch(), test_validate_handoff_skips_when_both_missing(), Any, str (+5 more)
 
 ### Community 5697 - "Community 5697"
 Cohesion: 0.22
@@ -39752,6 +39837,10 @@ Nodes (7): ActionValue, ActionArray, MarketState, string, evaluate_actions(), ge
 ### Community 5727 - "Community 5727"
 Cohesion: 0.25
 Nodes (8): Any, bool, int, str, _in_bounds(), propose_params(), Deterministic parameter proposer (the param-tweak route's generator).  Re-opti, Enumerate the clamped grid. Deterministic (sorted params, sorted values).
+
+### Community 5729 - "Community 5729"
+Cohesion: 0.17
+Nodes (10): _largest_remainder(), Distribute *total* into *n* integer buckets using largest-remainder rounding., int, 6 into 3 buckets → [2, 2, 2]., 7 into 3 buckets → [3, 2, 2] (one extra goes to first bucket).          Hand:, Property: sum always equals total for various inputs., Zero total → all zeros., 1 into 6 buckets → five zeros and one 1. (+2 more)
 
 ### Community 5730 - "Community 5730"
 Cohesion: 0.22
@@ -39937,6 +40026,10 @@ Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_lock
 Cohesion: 0.25
 Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
 
+### Community 5776 - "Community 5776"
+Cohesion: 0.35
+Nodes (15): _backfill_exit_code(), backfill_symbols(), main(), Any, bool, float, int, Path (+7 more)
+
 ### Community 5777 - "Community 5777"
 Cohesion: 0.25
 Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
@@ -40072,6 +40165,10 @@ Nodes (7): balance, fee, num_trades, position, steps, trading_volume, 5.0ms
 ### Community 5812 - "Community 5812"
 Cohesion: 0.29
 Nodes (7): cpi_nfp_focus, cross_asset_placeholder, es_mes_defaults, mbo_canonical, multi_symbol_tensor_gaps, single_order_book, code_path_assumptions
+
+### Community 5813 - "Community 5813"
+Cohesion: 0.21
+Nodes (16): _options_ok_checks(), _silence_alert_sources(), test_alerts_q001_fail_is_crit_and_red(), test_alerts_q001_missing_artifact_warns(), test_alerts_q001_ok_emits_no_q001_alert(), test_alerts_q001_runtime_warning_rolls_up_without_raw_strict_mbo_alert(), test_alerts_quiet_when_healthy(), test_lanes_strict_mbo_warn_is_advisory() (+8 more)
 
 ### Community 5814 - "Community 5814"
 Cohesion: 0.29
@@ -40256,6 +40353,10 @@ Nodes (6): band_ms, feature_version, generated_from, pass_through, survivors, te
 ### Community 5859 - "Community 5859"
 Cohesion: 0.29
 Nodes (4): Total variance must be positive for all k on a wide grid., Hand-computed w and iv at k=0.1 for the reference slice., k=0.1, theta=0.04, rho=-0.3, phi=2.0:           phi*k + rho = 0.2 - 0.3 = -0.1, TestGoldenValues
+
+### Community 5860 - "Community 5860"
+Cohesion: 0.22
+Nodes (13): int, Path, str, lifecycle_action(), lifecycle_receipts(), LifecycleActionRequest, _load_registry_models(), Lifecycle operator action receipts — request-only, no registry mutation. (+5 more)
 
 ### Community 5861 - "Community 5861"
 Cohesion: 0.43
@@ -41889,6 +41990,14 @@ Nodes (5): all_rejected, authority, claims_audited, generated_at_utc, results
 Cohesion: 0.33
 Nodes (5): code:powershell (# Must be empty (active code + docs; exclude .cursor/plans i), LLM migration checklist (packet-strict), Quick grep gates, Shipped file index (for reviewers), Status summary (honest)
 
+### Community 6270 - "Community 6270"
+Cohesion: 0.27
+Nodes (13): _load_cli_module(), test_rl_gpu_campaign_budget_ready_gate(), test_rl_gpu_campaign_budget_ready_gate_rejects_stale_manifest(), test_rl_gpu_campaign_budget_receipt_marks_capped_symbols(), test_rl_gpu_campaign_defaults_worker_count_to_symbol_and_cpu_cap(), test_rl_gpu_campaign_groups_manifest_events_by_symbol(), test_rl_gpu_campaign_launch_gate_blocks_windows_and_missing_ack(), test_rl_gpu_campaign_launch_gate_requires_vast_approval() (+5 more)
+
+### Community 6271 - "Community 6271"
+Cohesion: 0.22
+Nodes (4): _chunk_parameter_trials(), Split the flat parameter trial list into bounded chunks.      Each yielded chu, Results are independent of chunk size — concatenation is identical., TestChunkParameterTrials
+
 ### Community 6272 - "Community 6272"
 Cohesion: 0.33
 Nodes (5): vast_bootstrap_full.sh script, HFT3_FEATURE_BACKEND, HFT3_MANIFEST_PATH, HFT3_NPZ_ROOT, PYTHONPATH
@@ -41926,12 +42035,12 @@ Cohesion: 0.33
 Nodes (5): additionalProperties, required, $schema, title, type
 
 ### Community 6281 - "Community 6281"
-Cohesion: 0.47
-Nodes (5): main(), int, Path, str, sha256()
+Cohesion: 0.16
+Nodes (14): Pointing DATA_DOCTOR_REPORT at a nonexistent file -> cme_options_data.status==mi, alerts zone with a failing options-fixing-coverage check -> alert id     'lake-, _stub_q001_ok(), _stub_system_research_replay_ok(), test_alerts_missing_data_doctor_report(), test_alerts_missing_mandatory_options_checks(), test_alerts_options_defect_ledger_open_is_not_runtime_alert(), test_alerts_options_fixing_coverage_alert() (+6 more)
 
 ### Community 6282 - "Community 6282"
-Cohesion: 0.05
-Nodes (80): derive_npz_from_release(), derive_npz_from_vix_release(), has_deriveable_mbo(), is_release_valid(), Derive HftBacktest NPZ from validated MBO release paths — downstream only.  Al, Convert VIX.OPT cmbp-1 DBN to NPZ quote array. Returns None if empty., True when raw DBN exists with a non-empty parsed event stream., Convert raw DBN to HftBacktest NPZ. Returns None if no deriveable events. (+72 more)
+Cohesion: 0.06
+Nodes (42): derive_npz_from_release(), derive_npz_from_vix_release(), has_deriveable_mbo(), is_release_valid(), Derive HftBacktest NPZ from validated MBO release paths — downstream only.  Al, Convert VIX.OPT cmbp-1 DBN to NPZ quote array. Returns None if empty., True when raw DBN exists with a non-empty parsed event stream., Convert raw DBN to HftBacktest NPZ. Returns None if no deriveable events. (+34 more)
 
 ### Community 6283 - "Community 6283"
 Cohesion: 0.33
@@ -41944,6 +42053,10 @@ Nodes (5): main(), int, str, Drop legacy v1/v2 selector; warn if v1 was requeste
 ### Community 6285 - "Community 6285"
 Cohesion: 0.10
 Nodes (32): _feature_index_hash_value(), _make_feature_store_npz(), Phase 5: VectorBT fs_v1 row-loop path tests., test_build_manifest_marks_primary_fs_v1_row_loop(), test_feature_plane_fs_v1_not_bar_stub(), test_filter_candidates_selects_fs_v1_path(), test_ohlcv_from_feature_store_has_timestamp_column(), test_resolve_fs_v1_context() (+24 more)
+
+### Community 6286 - "Community 6286"
+Cohesion: 0.26
+Nodes (11): Any, float, str, WFC metrics aggregation., test_max_drawdown_adj_return_matches_adj_curve(), aggregate_event_metrics(), cagr(), max_drawdown() (+3 more)
 
 ### Community 6287 - "Community 6287"
 Cohesion: 0.53
@@ -43061,6 +43174,10 @@ Nodes (5): send_to_ack_us, count, max_us, p50_us, p99_us
 Cohesion: 0.40
 Nodes (5): llm_ideas, max_ideas, review_memory_limit, temperature, top_p
 
+### Community 6567 - "Community 6567"
+Cohesion: 0.17
+Nodes (9): Fixing-VWAP replication engine — WS-3.4.  ZERO-ALPHA hedge utility.  Schedules, One time-bucket in the replication schedule.      Parameters     ----------, Time-bucketed schedule for replicating the fixing VWAP.      Carries complianc, ReplicationSchedule, Slice, If fills equal fixing VWAP exactly, error is 0.          A perfectly executed, Total executed volume from schedule matches target_qty., Sell-side: filled above fixing → positive error (same sign convention). (+1 more)
+
 ### Community 6568 - "Community 6568"
 Cohesion: 0.40
 Nodes (4): vast_d3_preflight.sh script, HFT3_FEATURE_BACKEND, HFT3_MANIFEST_PATH, HFT3_NPZ_ROOT
@@ -43260,6 +43377,10 @@ Nodes (5): phase_budgets_us, after, before, continuous, during
 ### Community 6618 - "Community 6618"
 Cohesion: 0.40
 Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 6622 - "Community 6622"
+Cohesion: 0.26
+Nodes (12): build_parser(), _derive_source_row_throughput(), _load_effective_jsonl_manifest(), main(), ArgumentParser, float, int, object (+4 more)
 
 ### Community 6623 - "Community 6623"
 Cohesion: 0.40
@@ -76521,6 +76642,10 @@ Nodes (3): ZQ, data_delay_status, last_update_age_ms
 Cohesion: 0.67
 Nodes (3): ZS, data_delay_status, last_update_age_ms
 
+### Community 15093 - "Community 15093"
+Cohesion: 0.15
+Nodes (12): Honesty guards for the autonomous runner (Phase 2 follow-up).  These tests enf, The runner module must explicitly disclose that it is a scaffold     awaiting W, The example config file must document that the runner is in     scaffolded mode, In scaffolded mode, every gate in robustness_gates.json must     have pass_fail, Without real backtest integration, the runner MUST default to     QUARANTINE (o, The scoring stage must produce a decision of QUARANTINE or REJECT     when the, test_config_discloses_scaffold(), test_runner_default_decision_is_quarantine() (+4 more)
+
 ### Community 15094 - "Community 15094"
 Cohesion: 0.67
 Nodes (3): M2K, data_delay_status, last_update_age_ms
@@ -76532,6 +76657,10 @@ Nodes (3): MNQ, data_delay_status, last_update_age_ms
 ### Community 15096 - "Community 15096"
 Cohesion: 0.67
 Nodes (3): MYM, data_delay_status, last_update_age_ms
+
+### Community 15097 - "Community 15097"
+Cohesion: 0.23
+Nodes (12): build_vix_feature_file(), derive_event_id(), _load_quotes(), _load_sensor_atm(), Build and write VIX options feature npz for one event window.      Parameters, Strip ``VIX.OPT_`` prefix and ``_quotes.npz`` suffix from filename.      Examp, Load structured quotes array; raise VixDataUnavailable if empty/missing., Return VIX_ATM_STRIKE rows, or None when absent/placeholder-only.      Placeho (+4 more)
 
 ### Community 15098 - "Community 15098"
 Cohesion: 0.67
@@ -81869,6 +81998,62 @@ Nodes (3): composition, defensive_stubs, primary_model_id
 Cohesion: 0.67
 Nodes (3): walk_forward, periods, status
 
+### Community 16443 - "Community 16443"
+Cohesion: 0.24
+Nodes (11): Path, _point_latency_paths(), test_pipeline_latency_evidence_preserves_unmeasured_defensive_ack(), test_pipeline_latency_gate_is_non_green_when_defensive_ack_required(), test_pipeline_view_meta_includes_vbt5_keys(), test_portfolio_uses_newest_session_artifact_over_directory_mtime(), test_run_hbt_promoted_batch_safe_relative_path_accepts_relative(), test_run_hbt_promoted_batch_safe_relative_path_rejects_absolute() (+3 more)
+
+### Community 17001 - "Community 17001"
+Cohesion: 0.22
+Nodes (8): _cleanup_artifact(), Campaign integration with WFC gate blocking promotion., WFC PASS but selected plateau has negative OOS → promotion blocked., WFC PASS but plateau OOS negative → skip_periods blocks period loop even with ru, Remove the artifact directory created by a campaign run., test_confirmation_uses_default_params_when_tune_disallowed(), test_wfc_oos_fail_skips_period_loop(), test_wfc_pass_negative_plateau_oos_blocks_promotion()
+
+### Community 17002 - "Community 17002"
+Cohesion: 0.31
+Nodes (9): Raised when source data is missing or entirely placeholder., VixDataUnavailable, _build_one(), _event_date(), main(), date, int, str (+1 more)
+
+### Community 17003 - "Community 17003"
+Cohesion: 0.39
+Nodes (5): _fake_persist(), _minimal_parsed(), _one_candidate(), Phase 5 — autoresearch VectorBT must use optimized in-process matrix path., TestAutoresearchVectorBTPerformance
+
+### Community 17004 - "Community 17004"
+Cohesion: 0.58
+Nodes (9): _arrays_from_store(), _depth_pair_array(), _feature_array(), _micro_price_array(), _mid_array(), ndarray, _safe_imbalance(), _slot() (+1 more)
+
+### Community 17005 - "Community 17005"
+Cohesion: 0.39
+Nodes (8): _event_metadata(), load_chi404_speed(), main(), Any, int, Path, str, _relative_npz()
+
+### Community 17006 - "Community 17006"
+Cohesion: 0.44
+Nodes (8): _available_catalog_event(), _fail(), main(), bool, int, str, trial_campaign(), trial_single_event()
+
+### Community 17007 - "Community 17007"
+Cohesion: 0.43
+Nodes (7): Path, artifact(), _artifact_file_response(), _artifact_listing(), _artifact_roots(), _safe_artifact_path(), FileResponse
+
+### Community 17008 - "Community 17008"
+Cohesion: 0.38
+Nodes (6): backtest_year_range(), Backtest year range from apps/workbench/config/walk_forward.yaml., Min/max calendar years across all walk-forward periods., _walk_forward_path(), int, Path
+
+### Community 17009 - "Community 17009"
+Cohesion: 0.33
+Nodes (5): dry_run_fixtures(), _fixture_coverage(), Campaign runner hot-memory telemetry hook., CoverageSummary, MonkeyPatch
+
+### Community 17010 - "Community 17010"
+Cohesion: 0.40
+Nodes (5): build_parser(), main(), ArgumentParser, int, str
+
+### Community 17011 - "Community 17011"
+Cohesion: 0.60
+Nodes (4): T0: MBO book reconstruction golden vectors., _run_sequence(), test_deterministic_replay(), test_golden_agg_imb_and_mid()
+
+### Community 17012 - "Community 17012"
+Cohesion: 0.40
+Nodes (4): FixingWindow, Return window duration in seconds (always 30.0)., UTC start/end of the 15:00 CT 30-second fixing window for one expiry.      The, float
+
+### Community 17013 - "Community 17013"
+Cohesion: 0.60
+Nodes (5): _accepted_owner_decision(), _accepted_q001_values(), test_system_q001_owner_acceptance_rejects_options_fail_checks_despite_summary_ok(), test_system_q001_owner_acceptance_rejects_unknown_gap_evidence(), test_system_q001_owner_acceptance_requires_explicit_gap_evidence()
+
 ## Knowledge Gaps
 - **104620 isolated node(s):** `int`, `int`, `Path`, `Any`, `bool` (+104615 more)
   These have ≤1 connection - possible missing edges or undocumented components.
@@ -81877,14 +82062,14 @@ Nodes (3): walk_forward, periods, status
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `datetime` connect `Community 7` to `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 1542`, `Community 5637`, `Community 1539`, `Community 9`, `Community 11`, `Community 13`, `Community 14`, `Community 16`, `Community 19`, `Community 21`, `Community 22`, `Community 23`, `Community 24`, `Community 25`, `Community 26`, `Community 30`, `Community 31`, `Community 33`, `Community 34`, `Community 35`, `Community 37`, `Community 41`, `Community 43`, `Community 44`, `Community 46`, `Community 48`, `Community 49`, `Community 50`, `Community 51`, `Community 52`, `Community 56`, `Community 57`, `Community 60`, `Community 62`, `Community 64`, `Community 68`, `Community 71`, `Community 74`, `Community 81`, `Community 82`, `Community 83`, `Community 85`, `Community 90`, `Community 2140`, `Community 97`, `Community 99`, `Community 101`, `Community 102`, `Community 116`, `Community 120`, `Community 121`, `Community 122`, `Community 125`, `Community 126`, `Community 131`, `Community 6282`, `Community 141`, `Community 151`, `Community 156`, `Community 162`, `Community 5299`, `Community 693`, `Community 1729`, `Community 1221`, `Community 210`, `Community 213`, `Community 225`, `Community 5857`, `Community 1255`, `Community 1257`, `Community 234`, `Community 235`, `Community 5357`, `Community 241`, `Community 247`, `Community 1787`, `Community 764`, `Community 1276`, `Community 763`, `Community 1789`, `Community 1284`, `Community 265`, `Community 268`, `Community 269`, `Community 270`, `Community 271`, `Community 1808`, `Community 785`, `Community 786`, `Community 281`, `Community 282`, `Community 1819`, `Community 288`, `Community 1826`, `Community 294`, `Community 1321`, `Community 1838`, `Community 1330`, `Community 1843`, `Community 1846`, `Community 1410`, `Community 1431`, `Community 1434`, `Community 2985`, `Community 1451`, `Community 1452`, `Community 1453`, `Community 6623`, `Community 3041`, `Community 5108`, `Community 5111`, `Community 1019`, `Community 1023`?**
-  _High betweenness centrality (0.004) - this node is a cross-community bridge._
+- **Why does `datetime` connect `Community 7` to `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 1542`, `Community 5637`, `Community 1539`, `Community 11`, `Community 13`, `Community 14`, `Community 16`, `Community 19`, `Community 21`, `Community 22`, `Community 23`, `Community 24`, `Community 25`, `Community 26`, `Community 30`, `Community 31`, `Community 33`, `Community 34`, `Community 35`, `Community 37`, `Community 41`, `Community 43`, `Community 44`, `Community 46`, `Community 48`, `Community 49`, `Community 50`, `Community 1586`, `Community 51`, `Community 52`, `Community 56`, `Community 57`, `Community 60`, `Community 64`, `Community 68`, `Community 71`, `Community 74`, `Community 81`, `Community 82`, `Community 85`, `Community 90`, `Community 2140`, `Community 97`, `Community 5729`, `Community 99`, `Community 101`, `Community 102`, `Community 5224`, `Community 5226`, `Community 17002`, `Community 17004`, `Community 17005`, `Community 17007`, `Community 17012`, `Community 116`, `Community 120`, `Community 121`, `Community 122`, `Community 125`, `Community 126`, `Community 131`, `Community 132`, `Community 141`, `Community 151`, `Community 156`, `Community 162`, `Community 5284`, `Community 5290`, `Community 5299`, `Community 693`, `Community 1729`, `Community 5315`, `Community 210`, `Community 213`, `Community 225`, `Community 5857`, `Community 5860`, `Community 1255`, `Community 1257`, `Community 234`, `Community 235`, `Community 5357`, `Community 241`, `Community 247`, `Community 1787`, `Community 764`, `Community 1276`, `Community 763`, `Community 1789`, `Community 5378`, `Community 1284`, `Community 268`, `Community 269`, `Community 270`, `Community 271`, `Community 1808`, `Community 786`, `Community 281`, `Community 282`, `Community 1819`, `Community 288`, `Community 1826`, `Community 294`, `Community 1321`, `Community 1838`, `Community 1330`, `Community 1843`, `Community 1846`, `Community 3938`, `Community 1910`, `Community 1410`, `Community 1431`, `Community 1434`, `Community 6567`, `Community 1451`, `Community 1452`, `Community 1453`, `Community 1984`, `Community 6623`, `Community 3040`, `Community 3041`, `Community 5108`, `Community 5111`, `Community 1019`, `Community 1023`?**
+  _High betweenness centrality (0.007) - this node is a cross-community bridge._
 - **Why does `SlowTierConfig` connect `Community 81` to `Community 68`, `Community 70`, `Community 71`, `Community 1256`, `Community 44`, `Community 1392`, `Community 82`, `Community 56`, `Community 31`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
-- **Why does `load_config()` connect `Community 1786` to `Community 282`?**
+- **Why does `load_config()` connect `Community 1786` to `Community 46`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
-- **Are the 928 inferred relationships involving `datetime` (e.g. with `AblationResult` and `Any`) actually correct?**
-  _`datetime` has 928 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 922 inferred relationships involving `datetime` (e.g. with `AblationResult` and `Any`) actually correct?**
+  _`datetime` has 922 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 116 inferred relationships involving `MarketState` (e.g. with `DailyLossLimitDefenseComplete` and `PanicMarketOrderSpreadTaxComplete`) actually correct?**
   _`MarketState` has 116 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 137 inferred relationships involving `MBOEvent` (e.g. with `MBOEvent` and `ndarray`) actually correct?**
