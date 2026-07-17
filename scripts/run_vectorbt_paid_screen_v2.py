@@ -440,6 +440,31 @@ def _load_skip_bad_units_file(path: Path) -> set[str]:
     return ids
 
 
+def _filter_bad_units(
+    units: List[PaidScreenUnit],
+    skip_bad_units_file: Path | None,
+) -> Tuple[List[PaidScreenUnit], List[str]]:
+    """Drop data-quality failures declared by check_lake_data.py."""
+    if not skip_bad_units_file:
+        return units, []
+    bad_ids = _load_skip_bad_units_file(skip_bad_units_file)
+    if not bad_ids:
+        return units, []
+
+    kept: List[PaidScreenUnit] = []
+    dropped_ids: List[str] = []
+    for unit in units:
+        if any(bad_id in unit.unit_id for bad_id in bad_ids):
+            dropped_ids.append(unit.unit_id)
+        else:
+            kept.append(unit)
+    print(
+        f"[skip-bad-units] skipped {len(dropped_ids)} units from {skip_bad_units_file}",
+        flush=True,
+    )
+    return kept, dropped_ids
+
+
 def _write_run_manifest(
     manifest_path: Path,
     *,
@@ -1414,6 +1439,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"ERROR: invalid unit row {exc}: {row}", file=sys.stderr)
             return 1
 
+    skipped_unit_ids: List[str] = []
+    units, bad_unit_ids = _filter_bad_units(units, args.skip_bad_units_file)
+    skipped_unit_ids.extend(bad_unit_ids)
+
     if args.dry_run and not args.resume:
         try:
             derive_run_research_split(units_raw)
@@ -1464,7 +1493,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     # Resume: filter out units whose artifact validates and matches run context
-    skipped_unit_ids: List[str] = []
     if args.resume:
         kept: List[PaidScreenUnit] = []
         for unit in units:
@@ -1484,28 +1512,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         units = kept
         if skipped_unit_ids:
             print(f"[resume] skipping {len(skipped_unit_ids)} units with valid artifacts",
-                  flush=True)
-
-    # Skip bad units from a pre-check file (check_lake_data.py output).
-    # These are data-quality failures known before dispatch — they are
-    # skipped without counting as failures.
-    if args.skip_bad_units_file:
-        bad_ids = _load_skip_bad_units_file(args.skip_bad_units_file)
-        if bad_ids:
-            before = len(units)
-            # NPZ stems (e.g. "ZN.v.0_EIA_NATGAS_2019_11_28_TIGHT") are
-            # substrings of full unit IDs (e.g. "MODEL_ZN.v.0_..._TIGHT").
-            # Match by substring, not exact equality.
-            kept = []
-            dropped_ids: List[str] = []
-            for u in units:
-                if any(b in u.unit_id for b in bad_ids):
-                    dropped_ids.append(u.unit_id)
-                else:
-                    kept.append(u)
-            units = kept
-            skipped_unit_ids.extend(dropped_ids)
-            print(f"[skip-bad-units] skipped {len(dropped_ids)} units from {args.skip_bad_units_file}",
                   flush=True)
 
     if args.dry_run:

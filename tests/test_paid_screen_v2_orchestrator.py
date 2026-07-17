@@ -1039,6 +1039,62 @@ class TestV2RunHashResolution:
         out = capsys.readouterr().out
         assert "after_resume=1 resume_check=no_run" in out
 
+    def test_main_dry_run_applies_skip_bad_units_file(self, tmp_path, capsys):
+        v2 = _load_v2_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        units_path = repo / "units.jsonl"
+        rows = [
+            {
+                "unit_id": "HYP_5_MES.v.0_CPI_2024_09_11_TIGHT",
+                "model_id": "HYP_5",
+                "hyp_id": 5,
+                "symbol": "MES.v.0",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "event_type": "CPI",
+            },
+            {
+                "unit_id": "HYP_5_MES.v.0_CPI_2024_10_10_TIGHT",
+                "model_id": "HYP_5",
+                "hyp_id": 5,
+                "symbol": "MES.v.0",
+                "event_id": "CPI_2024_10_10_TIGHT",
+                "event_type": "CPI",
+            },
+        ]
+        units_path.write_text(
+            "\n".join(json.dumps(row) for row in rows) + "\n",
+            encoding="utf-8",
+        )
+        skip_file = repo / "skip_bad_units.json"
+        skip_file.write_text(
+            json.dumps(["MES.v.0_CPI_2024_09_11_TIGHT"]),
+            encoding="utf-8",
+        )
+        out_dir = repo / "out"
+
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--skip-bad-units-file",
+                str(skip_file),
+                "--dry-run",
+            ],
+        )
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "[skip-bad-units] skipped 1 units" in out
+        assert "DRY_RUN units=2 after_resume=1 resume_check=no_run" in out
+        assert "CPI_2024_09_11_TIGHT" not in out
+        assert "CPI_2024_10_10_TIGHT" in out
+
     def test_main_dry_run_resume_reports_filtered_count(self, tmp_path, capsys):
         v2 = _load_v2_module()
         unit = _matching_paid_batch_unit()
