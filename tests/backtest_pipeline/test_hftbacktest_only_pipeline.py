@@ -428,8 +428,67 @@ def test_hypothesis_limit_order_scans_event_window_before_holding_period(
     assert replay["holding_period_bars"] == 1
     assert replay["strategy_surface_version"] == pipeline.HYPOTHESIS_LIMIT_ORDER_SURFACE_VERSION
     assert replay["signal_abs_max"] == 1.0
+    assert replay["entry_scan_signal_cross_count"] >= 1
+    assert replay["entry_scan_first_cross_step"] == submitted[0]["step"]
+    assert replay["entry_scan_price_available_count"] >= 1
     assert submitted
     assert submitted[0]["step"] >= 3
+
+
+def test_entry_scan_diagnostic_uses_hbt_clock_not_global_signal_stats(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import backtest_pipeline.src.hftbacktest_only_pipeline as pipeline
+
+    _install_fake_hftbacktest(monkeypatch, successful_elapses=2)
+    data_path = _write_valid_l3_npz(tmp_path / "event_l3.npz", include_trade_event=True)
+    snapshot_path = _write_valid_l3_npz(tmp_path / "initial_snapshot.npz")
+    out_dir = tmp_path / "artifacts" / "hbt_runs" / "event_scan_signal_after_feed"
+
+    def late_signal_lookup(_config: object, _params: object):
+        def lookup(timestamp_ns: int | None) -> float:
+            return 1.0 if int(timestamp_ns or 0) >= 4_000_000_000 else 0.0
+
+        return lookup, {
+            "adapter_status": "available",
+            "signal_observations": 8,
+            "signal_source": "test_late_signal",
+            "signal_field": "hypothesis.evaluate",
+            "feature_backend": "cpp",
+            "signal_min": 0.0,
+            "signal_max": 1.0,
+            "signal_abs_max": 1.0,
+        }, []
+
+    monkeypatch.setattr(pipeline, "_build_model_signal_lookup", late_signal_lookup)
+    config = _config(
+        tmp_path,
+        data_path,
+        snapshot_path,
+        strategy_id="hypothesis_limit_order",
+        strategy_params={
+            "model_id": "SECOND_WAVE_CONTINUATION",
+            "quantity": 1.0,
+            "holding_period_bars": 1,
+            "signal_threshold": 0.5,
+        },
+        canonical_model_id="SECOND_WAVE_CONTINUATION",
+        legacy_aliases=("HYP_1",),
+        event_window={"cutoff_ts_ns": 0, "end_ts_ns": 8_000_000_000},
+    )
+
+    result = run_hftbacktest_only(config, out_dir=out_dir)
+
+    assert result["status"] == "pipeline_blocker"
+    replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
+    assert replay["signal_abs_max"] == 1.0
+    assert replay["entry_scan_signal_abs_max"] == 0.0
+    assert replay["entry_scan_signal_cross_count"] == 0
+    assert replay["entry_scan_signal_observations"] == 2
+    assert replay["entry_scan_hbt_terminal_ret"] == 1
+    assert replay["no_order_observation"] == "entry_scan_signal_below_threshold"
+    assert replay["orders_submitted"] == 0
 
 
 def test_hypothesis_limit_order_evaluates_canonical_model_signal(
@@ -465,6 +524,8 @@ def test_hypothesis_limit_order_evaluates_canonical_model_signal(
     assert replay["strategy_adapter_status"] == "available"
     assert replay["signal_source"] == "hbt_normalized_mbo_market_state_pipeline"
     assert replay["signal_observations"] > 0
+    assert replay["entry_scan_signal_cross_count"] >= 1
+    assert replay["entry_scan_price_available_count"] >= 1
     assert submitted
     assert submitted[0]["side"] in {"BUY", "SELL"}
     assert isinstance(submitted[0]["signal"], float)
@@ -501,7 +562,10 @@ def test_signal_below_threshold_fails_closed_without_promotion(
     assert "pipeline_blocker:no_hbt_order_submitted" in result["fail_closed_reasons"]
     replay = json.loads((out_dir / "official_replay.json").read_text(encoding="utf-8"))
     assert replay["orders_submitted"] == 0
-    assert replay["no_order_observation"] == "strategy_signal_below_threshold_or_no_directional_order"
+    assert replay["no_order_observation"] == "entry_scan_signal_below_threshold"
+    assert replay["entry_scan_signal_cross_count"] == 0
+    assert replay["entry_scan_below_threshold_count"] == replay["entry_scan_signal_observations"]
+    assert replay["entry_scan_depth_checks"] == 0
     assert not (out_dir / "recorder_result.npz").exists()
     assert not (out_dir / "stats_summary.json").exists()
     assert not (out_dir / "promotion_decision.json").exists()

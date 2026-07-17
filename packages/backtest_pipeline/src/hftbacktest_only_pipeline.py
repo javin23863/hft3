@@ -565,6 +565,24 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
     order_snapshot: dict[str, Any] = {}
     last_recorded_exec_qty = 0.0
     submitted_step: int | None = None
+    hbt_terminal_ret: int | None = None
+    entry_scan_elapsed_steps = 0
+    entry_scan_signal_observations = 0
+    entry_scan_signal_min: float | None = None
+    entry_scan_signal_max: float | None = None
+    entry_scan_signal_abs_max: float | None = None
+    entry_scan_nonfinite_signal_count = 0
+    entry_scan_first_nonfinite_step: int | None = None
+    entry_scan_first_nonfinite_timestamp_ns: int | None = None
+    entry_scan_signal_cross_count = 0
+    entry_scan_below_threshold_count = 0
+    entry_scan_depth_checks = 0
+    entry_scan_price_available_count = 0
+    entry_scan_price_unavailable_count = 0
+    entry_scan_first_cross_step: int | None = None
+    entry_scan_first_cross_timestamp_ns: int | None = None
+    entry_scan_first_cross_side = ""
+    entry_scan_last_timestamp_ns: int | None = None
 
     def record_order_state(event_type: str, state: Any, step: int) -> None:
         nonlocal last_recorded_exec_qty, order_snapshot
@@ -592,11 +610,33 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             }
         )
 
+    def record_entry_scan_signal(step: int, timestamp_ns: int | None, signal_value: float) -> None:
+        nonlocal entry_scan_signal_observations
+        nonlocal entry_scan_signal_min, entry_scan_signal_max, entry_scan_signal_abs_max
+        nonlocal entry_scan_signal_cross_count, entry_scan_below_threshold_count
+        nonlocal entry_scan_first_cross_step, entry_scan_first_cross_timestamp_ns, entry_scan_first_cross_side
+        nonlocal entry_scan_last_timestamp_ns
+        entry_scan_signal_observations += 1
+        entry_scan_last_timestamp_ns = timestamp_ns
+        entry_scan_signal_min = signal_value if entry_scan_signal_min is None else min(entry_scan_signal_min, signal_value)
+        entry_scan_signal_max = signal_value if entry_scan_signal_max is None else max(entry_scan_signal_max, signal_value)
+        abs_signal = abs(signal_value)
+        entry_scan_signal_abs_max = abs_signal if entry_scan_signal_abs_max is None else max(entry_scan_signal_abs_max, abs_signal)
+        if abs_signal < signal_threshold:
+            entry_scan_below_threshold_count += 1
+            return
+        entry_scan_signal_cross_count += 1
+        if entry_scan_first_cross_step is None:
+            entry_scan_first_cross_step = step
+            entry_scan_first_cross_timestamp_ns = timestamp_ns
+            entry_scan_first_cross_side = "BUY" if signal_value > 0 else "SELL"
+
     try:
         for step in range(max_loop_steps):
             ret, api_name = _advance_hbt(hbt, interval_ns)
             api_calls.append(api_name)
             if ret != 0:
+                hbt_terminal_ret = ret
                 break
             state = _state_values(hbt)
             api_calls.append("HashMapMarketDepthBacktest.state_values")
@@ -613,7 +653,16 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             if signal_lookup is not None:
                 if step >= entry_scan_steps:
                     continue
-                signal_value = signal_lookup(_hbt_current_timestamp(hbt))
+                entry_scan_elapsed_steps += 1
+                timestamp_ns = _hbt_current_timestamp(hbt)
+                signal_value = float(signal_lookup(timestamp_ns))
+                if not math.isfinite(signal_value):
+                    entry_scan_nonfinite_signal_count += 1
+                    if entry_scan_first_nonfinite_step is None:
+                        entry_scan_first_nonfinite_step = step
+                        entry_scan_first_nonfinite_timestamp_ns = timestamp_ns
+                    break
+                record_entry_scan_signal(step, timestamp_ns, signal_value)
                 if abs(signal_value) < signal_threshold:
                     continue
                 side = "BUY" if signal_value > 0 else "SELL"
@@ -621,9 +670,12 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
             api_calls.append("HashMapMarketDepthBacktest.clear_inactive_orders")
             depth = hbt.depth(0)
             api_calls.append("HashMapMarketDepthBacktest.depth")
+            entry_scan_depth_checks += 1
             price = _price_from_depth(depth, side, price_mode)
             if price is None:
+                entry_scan_price_unavailable_count += 1
                 continue
+            entry_scan_price_available_count += 1
             if side == "BUY":
                 submit_ret = int(hbt.submit_buy_order(0, order_id, price, quantity, GTC, LIMIT, False))
                 api_calls.append("HashMapMarketDepthBacktest.submit_buy_order")
@@ -676,9 +728,21 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
 
     reasons: list[str] = []
     no_order_observation = ""
-    if not submitted:
+    if entry_scan_nonfinite_signal_count > 0:
+        no_order_observation = "entry_scan_nonfinite_signal"
+        reasons.append("pipeline_blocker:feature_surface_mismatch:nonfinite_signal")
+    elif not submitted:
         if signal_lookup is not None and signal_meta.get("adapter_status") == "available":
-            no_order_observation = "strategy_signal_below_threshold_or_no_directional_order"
+            if hbt_terminal_ret is not None and entry_scan_elapsed_steps < entry_scan_steps:
+                no_order_observation = "entry_scan_truncated_by_hbt_feed_end"
+            elif entry_scan_signal_observations == 0:
+                no_order_observation = "entry_scan_no_signal_observations"
+            elif entry_scan_signal_cross_count == 0:
+                no_order_observation = "entry_scan_signal_below_threshold"
+            elif entry_scan_depth_checks > 0 and entry_scan_price_available_count == 0:
+                no_order_observation = "entry_scan_price_unavailable_after_signal"
+            else:
+                no_order_observation = "entry_scan_order_not_submitted_after_signal"
             reasons.append("pipeline_blocker:no_hbt_order_submitted")
         else:
             reasons.append("pipeline_blocker:no_hbt_order_submitted")
@@ -711,6 +775,24 @@ def _run_minimal_strategy(config: HftBacktestOnlyRunConfig) -> tuple[dict[str, A
         "strategy_surface_version": _strategy_surface_version(config.strategy_id),
         "strategy_params": params,
         "entry_scan_steps": entry_scan_steps,
+        "entry_scan_elapsed_steps": entry_scan_elapsed_steps,
+        "entry_scan_hbt_terminal_ret": hbt_terminal_ret,
+        "entry_scan_signal_observations": entry_scan_signal_observations,
+        "entry_scan_signal_min": entry_scan_signal_min,
+        "entry_scan_signal_max": entry_scan_signal_max,
+        "entry_scan_signal_abs_max": entry_scan_signal_abs_max,
+        "entry_scan_nonfinite_signal_count": entry_scan_nonfinite_signal_count,
+        "entry_scan_first_nonfinite_step": entry_scan_first_nonfinite_step,
+        "entry_scan_first_nonfinite_timestamp_ns": entry_scan_first_nonfinite_timestamp_ns,
+        "entry_scan_signal_cross_count": entry_scan_signal_cross_count,
+        "entry_scan_below_threshold_count": entry_scan_below_threshold_count,
+        "entry_scan_depth_checks": entry_scan_depth_checks,
+        "entry_scan_price_available_count": entry_scan_price_available_count,
+        "entry_scan_price_unavailable_count": entry_scan_price_unavailable_count,
+        "entry_scan_first_cross_step": entry_scan_first_cross_step,
+        "entry_scan_first_cross_timestamp_ns": entry_scan_first_cross_timestamp_ns,
+        "entry_scan_first_cross_side": entry_scan_first_cross_side,
+        "entry_scan_last_timestamp_ns": entry_scan_last_timestamp_ns,
         "max_loop_steps": max_loop_steps,
         "holding_period_bars": holding_steps,
         "legacy_aliases": list(config.legacy_aliases),
